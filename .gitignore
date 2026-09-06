@@ -1,0 +1,31 @@
+# Directorio de compilacion local (lo crea el hook pre-commit)
+build/
+
+# Auxiliares de LaTeX / LuaLaTeX
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.luac
+*.pytxcode
+
+# biblatex / biber
+*.bcf
+*.bbl
+*.blg
+*.run.xml
+
+
+# Basura que venia en el ZIP original del profesor
+poster - copia.pdf
+poster.pdf
+imgs/modelo/modelo.rar
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

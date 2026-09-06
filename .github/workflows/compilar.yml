@@ -1,0 +1,47 @@
+name: Compilar poster
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: latex-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compilar main.tex con LuaLaTeX
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: main.tex
+          args: -pdflua -file-line-error -interaction=nonstopmode
+
+      - name: Guardar PDF como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-pdf
+          path: main.pdf
+          if-no-files-found: warn
+
+      - name: Guardar log si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-log
+          path: main.log
+          if-no-files-found: ignore
+
+      - name: Publicar main.pdf en el repo
+        if: success() && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: actualizar main.pdf [skip ci]"
+          file_pattern: main.pdf

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -u
+
+RAIZ="$(git rev-parse --show-toplevel)"
+cd "$RAIZ" || exit 1
+
+if ! command -v latexmk >/dev/null 2>&1; then
+  echo "latexmk no esta instalado; se omite la verificacion local."
+  echo "El commit sera validado igual en GitHub Actions."
+  exit 0
+fi
+
+LOG="$(mktemp)"
+echo "Compilando main.tex con LuaLaTeX (la primera vez tarda ~1 min)..."
+
+if latexmk -pdflua -file-line-error -interaction=nonstopmode \
+           -outdir=build main.tex >"$LOG" 2>&1; then
+  echo "OK: el poster compila."
+  rm -f "$LOG"
+  exit 0
+fi
+
+echo
+echo "ERROR: el poster NO compila. Commit cancelado."
+echo "-------------------- errores --------------------"
+grep -m 8 -E "^(\./)?[^ ]+\.tex:[0-9]+:|^! " "$LOG" || tail -40 "$LOG"
+echo "-------------------------------------------------"
+echo "Log completo: $LOG"
+echo
+echo "Para saltarte el hook (no recomendado): git commit --no-verify"
+exit 1

@@ -1,0 +1,23 @@
+\begin{NuevoParrafo}{55}{68}[26][9]
+		\begin{Marco}[\LineaSupC][\LineaInfC][\LineaIzqC][\LineaDerC][CBlanco]	
+		 {\Large\centering \textbf{Referencias}}	
+		 \vspace{-30pt} 
+		 \renewcommand{\bibfont}{\normalfont\small}
+		 \printbibliography[title={Libros/Artículos}]
+		 \let\oldthebibliography=\thebibliography
+		 \let\oldendthebibliography=\endthebibliography
+		 \renewenvironment{thebibliography}[1]{
+		 	\oldthebibliography{#1}
+		 	\setcounter{enumiv}{0}
+		 }{\oldendthebibliography}
+		 \definecolor{CURL}{HTML}{0000ff}
+		 \begin{thebibliography}{9}		 	
+		 	\bibitem{OG24}
+		 	{OG}, Archimate, {\color{CURL}\underline{\url{www.opengroup.org/archimate-forum}}}, 2024, 
+		 	Online, accessed \today	
+		 	\bibitem{Col}
+		 	{Coloso}, {\color{CURL}\underline{\url{www.colosoft.com.co}}}, Online, accessed \today,\\Autor: Ph.D, M.Sc, Ing. Sistemas  Sandro Bolaños, 2025. 
+		 		 	
+		 \end{thebibliography}		
+		\end{Marco}
+	\end{NuevoParrafo}

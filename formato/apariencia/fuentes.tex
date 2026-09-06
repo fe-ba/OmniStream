@@ -1,0 +1,23 @@
+\usepackage{fontspec}
+\usepackage[outline]{contour}
+\newcommand{\FuenteTSG}{\fontsize{50}{50}}
+\newcommand{\FuenteTG}{\fontsize{40}{40}}  
+\newcommand{\FuenteTM}{\large}
+\newcommand{\FuenteTP}{\normalsize} 
+
+\newcommand{\RutaFuentes}{formato/apariencia/familias/}
+\newcommand{\FuenteEstudiante}{JustaMoment}
+\newcommand{\FuenteComic}{KaBlam}
+
+\newcommand{\FUENTE}{\setmainfont[Path=\RutaFuentes,Extension=.ttf]{\FuenteEstudiante}}
+
+\newcommand{\ConfigurarFuentes}{
+  \ifthenelse{\equal{\MODO}{ModoE}}
+             {
+              \renewcommand{\FUENTE}{\setmainfont[Path=\RutaFuentes,Extension=.ttf]{\FuenteEstudiante}}           
+             }{}
+    \ifthenelse{\equal{\MODO}{ModoC}}
+             {
+              \renewcommand{\FUENTE}{\sffamily}            
+             }{}    
+}

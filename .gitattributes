@@ -1,0 +1,12 @@
+*.tex   text eol=lf
+*.bib   text eol=lf
+*.yml   text eol=lf
+.githooks/pre-commit text eol=lf
+
+*.pdf   binary
+*.ttf   binary
+*.png   binary
+
+*.svg   text eol=lf -merge
+
+main.pdf binary merge=ours

@@ -1,0 +1,56 @@
+\documentclass[12pt]{article}
+\usepackage[paperwidth=58.8cm,voffset=-11pt,paperheight=33cm,margin=1cm]{geometry}
+\usepackage[backend=biber,sorting=none]{biblatex}
+\addbibresource{referencias/Textos.bib}
+\addbibresource{referencias/Articulos.bib}
+\addbibresource{referencias/Libros.bib}
+
+\input{formato/programa}
+\input{constantes}
+\input{secciones/01-portada}
+
+\definecolor{CTLookingfor}{RGB}{245, 234, 230}
+\definecolor{CCLookingfor}{RGB}{72, 201, 176}
+\setlength\parindent{0pt}
+
+\newcommand{\looking}[2]{
+	\setcounter{section}{#1}
+	\begin{NuevaPagina}{34}{63}{show1}
+		\CabeceraDeSeccion[63]{PROYECTO BOX-MAN}{CTLookingfor}{CCLookingfor}
+		\begin{NuevoParrafo}{2}{0}[50][31]
+			\centering\includegraphics[scale=.90]{#2}
+		\end{NuevoParrafo}
+	\end{NuevaPagina}
+}
+
+\begin{document}
+\Configuracion{ModoE}
+
+\pgfmathsetseed{2024}
+
+\begin{NuevaPagina}{64}{94}{show1}
+	\definecolor{CCDiario}{HTML}{e3e8ff}
+	\CabeceraComun
+	\Portada
+	\input{secciones/02-motivacion}
+\end{NuevaPagina}
+
+\begin{NuevaPagina}{64}{94}{show1}
+	\definecolor{CCDiario}{HTML}{fffec4}
+	\CabeceraComun
+	\input{secciones/03-estrategia}
+	\input{secciones/04-negocio}
+\end{NuevaPagina}
+
+\begin{NuevaPagina}{64}{94}{show1}
+	\definecolor{CCDiario}{HTML}{e9fced}
+	\CabeceraComun
+	\input{secciones/05-aplicacion}
+	\input{secciones/06-tecnologia}
+	\input{secciones/07-proyecto}
+	\input{secciones/08-referencias}
+\end{NuevaPagina}
+
+\looking{12}{posterBoxMan}
+
+\end{document}
