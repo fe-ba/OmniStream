@@ -1,4 +1,4 @@
-# Póster de Arquitectura Empresarial — Box-Man
+# Póster de Arquitectura Empresarial — OmniStream
 
 El PDF final (`main.pdf`) lo genera GitHub automáticamente en cada push a `main`.
 Cada uno solo sube `.tex` e imágenes.
