@@ -1,4 +1,5 @@
 $pdf_mode  = 4;
+$pdflatex  = 'lualatex -file-line-error -interaction=nonstopmode %O %S';
 $lualatex  = 'lualatex -file-line-error -interaction=nonstopmode %O %S';
 $bibtex_use = 2;
 @default_files = ('main.tex');

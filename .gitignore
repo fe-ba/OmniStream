@@ -20,7 +20,6 @@ build/
 *.blg
 *.run.xml
 
-
 # Basura que venia en el ZIP original del profesor
 poster - copia.pdf
 poster.pdf
@@ -29,3 +28,6 @@ imgs/modelo/modelo.rar
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# VS Code
+.vscode/
