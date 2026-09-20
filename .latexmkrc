@@ -31,6 +31,15 @@ sub convertir_svg {
     );
     return unless @svg;
 
+    # Solo lo que falta o quedo viejo. Si no hay nada pendiente se sale sin
+    # mas: en GitHub Actions la conversion ya la hizo el workflow y aqui no
+    # hay conversor instalado, asi que no debe quejarse.
+    my @pendientes = grep {
+        my ($pdf) = ("build/svg/$_" =~ s/\.svg$/.pdf/ir);
+        !-e $pdf || (stat $pdf)[9] < (stat $_)[9];
+    } @svg;
+    return unless @pendientes;
+
     my $conversor;
     if    (!system 'command -v rsvg-convert >/dev/null 2>&1') { $conversor = 'rsvg' }
     elsif (!system 'command -v inkscape     >/dev/null 2>&1') { $conversor = 'inkscape' }
@@ -38,17 +47,15 @@ sub convertir_svg {
     else {
         warn "\n"
            . "!! No hay conversor de SVG instalado, los diagramas saldran en blanco.\n"
-           . "!! Instala uno:  sudo pacman -S librsvg      (Arch)\n"
-           . "!!                sudo apt install librsvg2-bin  (Debian/Ubuntu)\n"
-           . "!!                sudo pacman -S inkscape / apt install inkscape\n\n";
+           . "!! Instala uno:  sudo pacman -S librsvg          (Arch)\n"
+           . "!!               sudo apt install librsvg2-bin   (Debian/Ubuntu)\n"
+           . "!!               o inkscape, o cairosvg\n\n";
         return;
     }
 
     my $hechos = 0;
-    for my $svg (@svg) {
+    for my $svg (@pendientes) {
         (my $pdf = "build/svg/$svg") =~ s/\.svg$/.pdf/i;
-        next if -e $pdf && (stat $pdf)[9] >= (stat $svg)[9];
-
         File::Path::make_path(File::Basename::dirname($pdf));
 
         my $cmd = $conversor eq 'rsvg'     ? "rsvg-convert -f pdf -o '$pdf' '$svg'"

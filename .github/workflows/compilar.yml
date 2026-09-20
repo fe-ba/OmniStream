@@ -17,13 +17,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # LuaLaTeX no lee SVG. En local de esto se encarga .latexmkrc, pero aqui
+      # latexmk corre dentro del contenedor de latex-action, que no trae
+      # conversor, asi que los diagramas se convierten antes, en el runner.
+      # .latexmkrc detecta que build/svg/ ya esta al dia y no hace nada.
+      - name: Instalar conversor SVG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+
+      - name: Convertir diagramas SVG a PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r -d '' svg; do
+            pdf="build/svg/${svg%.svg}.pdf"
+            mkdir -p "$(dirname "$pdf")"
+            rsvg-convert --format=pdf --output="$pdf" "$svg"
+          done < <(find imgs -type f -name '*.svg' -print0)
+
+          svgs=$(find imgs -type f -name '*.svg' | wc -l)
+          pdfs=$(find build/svg -type f -name '*.pdf' | wc -l)
+          echo "Diagramas convertidos: $pdfs de $svgs"
+          test "$pdfs" -eq "$svgs"
+
       - name: Compilar main.tex con LuaLaTeX
         uses: xu-cheng/latex-action@v3
         with:
           root_file: main.tex
           args: -pdflua -file-line-error -interaction=nonstopmode
-          # rsvg-convert: lo usa .latexmkrc para pasar los diagramas .svg a PDF
-          pre_compile: "(apt-get update && apt-get install -y librsvg2-bin) || apk add --no-cache librsvg"
 
       - name: Guardar PDF como artefacto
         if: always()

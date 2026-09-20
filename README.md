@@ -14,8 +14,11 @@ Cada uno solo sube `.tex` e imágenes.
 - **latexmk** y **biber** (también vienen incluidos)
 - **rsvg-convert** (`sudo pacman -S librsvg` / `sudo apt install librsvg2-bin`):
   los diagramas se versionan como `.svg` y LuaLaTeX no sabe leerlos, así que
-  `.latexmkrc` los pasa a PDF vectorial antes de compilar. Si prefieres,
-  también sirve `inkscape` o `cairosvg`: se usa el primero que encuentre.
+  `.latexmkrc` los pasa a PDF vectorial (a `build/svg/`) antes de compilar. Si
+  prefieres, también sirve `inkscape` o `cairosvg`: se usa el primero que
+  encuentre. En GitHub Actions la conversión la hace un paso propio del
+  workflow, porque `latexmk` corre dentro de un contenedor que no trae
+  conversor; al llegar a `.latexmkrc` ya no queda nada pendiente.
 
 No hace falta instalar ninguna fuente: Montserrat y Lato vienen con TeX Live.
 
