@@ -1,30 +1,297 @@
 \documentclass[12pt]{article}
 \usepackage[paperwidth=58.8cm,voffset=-11pt,paperheight=33cm,margin=1cm]{geometry}
+
+%======================================================================
+% PAQUETES
+%======================================================================
+\usepackage[spanish]{babel}
+\usepackage{anyfontsize}
+\usepackage{enumitem}
+\usepackage{ifthen}
+\usepackage{multido}
+\usepackage[]{textpos}
+\usepackage{xcolor}
+\usepackage[most]{tcolorbox}
+\usetikzlibrary{calc,patterns,decorations.pathmorphing}
+\usepackage[explicit]{titlesec}
+\usepackage{graphicx}
+
+%======================================================================
+% IMAGENES
+% Los diagramas viven en imgs/ como .svg. LuaLaTeX no lee SVG, asi que
+% latexmk (ver .latexmkrc) los convierte a PDF vectorial en build/svg/
+% manteniendo la misma estructura de carpetas. Por eso las secciones
+% escriben la ruta del .svg sin extension y graphicx la resuelve aqui.
+%======================================================================
+\graphicspath{{build/svg/}}
+
+%======================================================================
+% TIPOGRAFIA
+% Montserrat para titulos (geometrica, pesa bien en formato poster),
+% Lato para el texto corrido (humanista, comoda de leer en parrafo).
+% Ambas vienen con TeX Live: no hay que instalar nada en el sistema.
+%======================================================================
+\usepackage{fontspec}
+\setmainfont{Lato}[
+  Extension      = .ttf,
+  UprightFont    = *-Regular,
+  BoldFont       = *-Bold,
+  ItalicFont     = *-Italic,
+  BoldItalicFont = *-BoldItalic,
+]
+\newfontfamily\FuenteTitulos{Montserrat}[
+  Extension      = .otf,
+  UprightFont    = *-SemiBold,
+  BoldFont       = *-Bold,
+  ItalicFont     = *-SemiBoldItalic,
+  BoldItalicFont = *-BoldItalic,
+]
+
 \usepackage[backend=biber,sorting=none]{biblatex}
 \addbibresource{referencias/Textos.bib}
 \addbibresource{referencias/Articulos.bib}
 \addbibresource{referencias/Libros.bib}
 
-\input{formato/programa}
-\input{constantes}
-\input{secciones/01-portada}
+%======================================================================
+% PALETA
+%======================================================================
+\colorlet{CLinea}{gray!70!white}
+\colorlet{CFondo}{gray!5!white}
+\colorlet{CBlanco}{white}
+\colorlet{CTSeccion}{blue!30}
+\definecolor{CTDiario}{RGB}{133, 193, 233}
+\definecolor{CCDiario}{RGB}{253, 242, 233}
+\definecolor{CCPoster}{RGB}{253, 254, 254}
 
-\definecolor{CTLookingfor}{RGB}{245, 234, 230}
-\definecolor{CCLookingfor}{RGB}{72, 201, 176}
+% Trazo "a mano alzada" de los marcos
+\tikzset{decoration={random steps,segment length=5mm,amplitude=0.3pt}}
+
+%======================================================================
+% DATOS DEL POSTER
+%======================================================================
+\newcommand{\MATERIA}{ARQUITECTURA OmniStream}
+\newcommand{\Ciudad}{Bogotá D.C.}
+\newcommand{\Escudo}{imgs/stjCartoon}
+
 \setlength\parindent{0pt}
 
-\newcommand{\looking}[2]{
-	\setcounter{section}{#1}
-	\begin{NuevaPagina}{34}{63}{show1}
-		\CabeceraDeSeccion[63]{PROYECTO OmniStream}{CTLookingfor}{CCLookingfor}
-		\begin{NuevoParrafo}{2}{0}[50][31]
-			\centering\includegraphics[scale=.90]{#2}
-		\end{NuevoParrafo}
-	\end{NuevaPagina}
+%======================================================================
+% GRILLA DE MAQUETACION
+% La pagina se divide en filas x columnas; textpos posiciona cada bloque
+% en coordenadas de esa grilla.
+%======================================================================
+\NewDocumentCommand{\DibujarLinea}{m m m m m}{
+  \setlength{\parindent}{0cm}
+  \setlength{\parskip}{0cm}
+  \count3=#1
+  \advance\count3 by 1
+  \multido{\i=0+1}{\count3}{
+    \ifthenelse{\equal{#5}{horizontal}}{
+      \begin{textblock}{#2}(0,\i)
+        \rule[0pt]{#3}{#4}
+      \end{textblock}
+    }{
+      \begin{textblock}{#2}(\i,0)
+        \rule[0pt]{#3}{#4}
+      \end{textblock}
+    }
+  }
 }
 
+\newdimen\CeldaW
+\newdimen\CeldaH
+\newcount\nFilas
+\newcount\nColus
+
+\NewDocumentCommand{\CalcularGrilla}{m m O{\textwidth} O{\textheight} O{show}}{
+  \nFilas=#1
+  \nColus=#2
+
+  \CeldaW=#3
+  \CeldaH=#4
+  \divide\CeldaH by \nFilas
+  \divide\CeldaW by \nColus
+
+  \setlength{\TPHorizModule}{\CeldaW}
+  \setlength{\TPVertModule}{\CeldaH}
+
+  \ifthenelse{\equal{#5}{show}}{
+    \DibujarLinea{\nFilas}{\nColus}{\textwidth}{.1pt}{horizontal}
+    \DibujarLinea{\nColus}{\nFilas}{.1pt}{\textheight}{vertical}
+  }{}
+}
+
+\NewDocumentEnvironment{NuevaPagina}{m m m}
+{
+  \thispagestyle{empty}
+  \clearpage
+  \CalcularGrilla{#1}{#2}[\textwidth][\textheight][#3]
+}
+{
+  \newpage
+}
+
+\newdimen\Margen
+\setlength{\Margen}{2pt}
+\newdimen\AltoP
+\NewDocumentEnvironment{NuevoParrafo}{m m O{1} O{1}}
+{
+  \setlength{\AltoP}{\dimexpr#4\TPVertModule-2\Margen\relax}
+  \TPMargin{\Margen}
+  \begin{textblock}{#3}(#2,#1)
+}
+{
+  \end{textblock}
+}
+
+%======================================================================
+% MARCOS
+% Los cuatro primeros argumentos son el grosor (en pt) de cada borde;
+% 0 = sin borde. El quinto es el color de fondo.
+%======================================================================
+\newcommand{\LineaIzqC}{0}
+\newcommand{\LineaIzqU}{1}
+
+\newcommand{\LineaDerC}{0}
+\newcommand{\LineaDerU}{1}
+\newcommand{\LineaDerD}{2}
+
+\newcommand{\LineaSupC}{0}
+\newcommand{\LineaSupU}{1}
+
+\newcommand{\LineaInfC}{0}
+\newcommand{\LineaInfU}{1}
+\newcommand{\LineaInfD}{2}
+
+\tcbset{
+  codigoMarco/.style n args={5}{
+    empty,
+    height=\AltoP,
+    frame code={\path[fill=#5](frame.south west) rectangle (frame.north east);};
+    \ifthenelse{\equal{#1}{0}}{}{\draw[decorate,color=CLinea,line width =#1 pt](frame.north east) -- (frame.north west);};
+    \ifthenelse{\equal{#2}{0}}{}{\draw[decorate,color=CLinea,line width =#2 pt](frame.south east) -- (frame.south west);};
+    \ifthenelse{\equal{#3}{0}}{}{\draw[decorate,color=CLinea,line width =#3 pt](frame.north west) -- (frame.south west);};
+    \ifthenelse{\equal{#4}{0}}{}{\draw[decorate,color=CLinea,line width =#4 pt](frame.north east) -- (frame.south east);};
+  }
+}
+\tcbset{
+  codigoLinea/.style n args={1}{
+    empty,
+    height=\AltoP,
+    frame code={\path[fill=white](frame.south west) rectangle (frame.north east);};
+    {\draw[decorate,color=#1,line width =10pt]([yshift=-12pt]frame.north east) -- ([yshift=-12pt]frame.north west);};
+  }
+}
+
+\newtcolorbox{Linea}[1]{codigoLinea={#1}}
+
+\newtcolorbox{MarcoSinTitulo}[5]{codigoMarco={#1}{#2}{#3}{#4}{#5}}
+\NewDocumentEnvironment{Marco}{O{1} O{1} O{1} O{1} O{CFondo}}
+{
+  \begin{MarcoSinTitulo}{#1}{#2}{#3}{#4}{#5}
+}
+{
+  \end{MarcoSinTitulo}
+}
+
+%======================================================================
+% TITULOS
+%======================================================================
+\newcommand{\COLORSS}{\color{white}}
+\titleformat{\subsection}{\centering\bf\LARGE\COLORSS}{\filcenter\LARGE\bf\FuenteTitulos\Alph{subsection}.#1}{0.0em}{}
+
+\newcommand{\subseccionC}[1]{
+  {\centering\FuenteTitulos\large\color{CTSeccion} \textbf{#1} \\ \vspace*{3pt} }
+}
+
+% Un diagrama dentro de un Marco. Se escala al maximo que quepa en la
+% celda sin deformarse, descontando lo que ocupa el titulo. Asi no hay
+% que calibrar un scale= a mano por figura ni se sale del recuadro si
+% alguien reexporta el .svg con otro tamano.
+\newcommand{\AltoTitulo}{34pt}
+\newcommand{\Diagrama}[1]{%
+  \centering\includegraphics[
+    width=\linewidth,
+    height=\dimexpr\AltoP-\AltoTitulo\relax,
+    keepaspectratio]{#1}%
+}
+
+\newcommand{\CabeceraDeSubSeccionConAnchoN}[7]{
+  \begin{NuevoParrafo}{#1}{#2}[16][2]
+    \begin{Marco}[\LineaSupC][\LineaInfC][\LineaIzqC][\LineaDerC][CBlanco]
+      \begin{center}
+        \vspace{-5pt}
+        \renewcommand{\COLORSS}{\color{#6}}
+        \subsection{\textbf{#5}}
+      \end{center}
+    \end{Marco}
+  \end{NuevoParrafo}
+  \begin{NuevoParrafo}{#1}{\the\numexpr #2 + #3 \relax}[#4][1]
+    \begin{Linea}{#7}
+    \end{Linea}
+  \end{NuevoParrafo}
+}
+
+%======================================================================
+% CABECERA COMUN DEL POSTER
+%======================================================================
+\newcommand{\CabeceraDePoster}[1]{
+  \begin{NuevoParrafo}{0}{0}[8][6]
+    \begin{Marco}[\LineaSupC][\LineaInfC][\LineaIzqC][\LineaDerC][CCDiario]
+      \includegraphics[width=65pt]{\Escudo}
+    \end{Marco}
+  \end{NuevoParrafo}
+  \begin{NuevoParrafo}{0}{8}[72][6]
+    \begin{Marco}[\LineaSupC][\LineaInfC][\LineaIzqC][\LineaDerC][CCDiario]
+      \vspace{15pt}
+      \centering\FuenteTitulos\fontsize{50}{50}\selectfont\color{CTDiario}\textbf{#1}
+    \end{Marco}
+  \end{NuevoParrafo}
+}
+
+\newcommand{\CiudadFechaVolumen}{
+  \begin{NuevoParrafo}{6}{0}[94][2]
+    \begin{Marco}[\LineaSupU][\LineaInfU][\LineaIzqC][\LineaDerC][CBlanco]
+      \centering\textbf{--- \Ciudad\ \today\ ---}
+    \end{Marco}
+  \end{NuevoParrafo}
+}
+
+\newcommand{\autores}[2]{
+  \vspace{-5pt}
+  \large \centering{\FuenteTitulos STJ}
+  \vspace{5pt}
+  \hrule
+  \vspace{5pt}
+  OmniStream Team:\\ #1\\#2
+}
+
+\newenvironment{MisionVision}[1][Mision]{
+  \begin{minipage}[t][.20\textheight]{\textwidth}
+    \begin{center}
+      \color{gray}\FuenteTitulos\bfseries{\fontsize{20}{10}\selectfont #1}
+      \vspace{-10pt}
+    \end{center}
+}
+{
+  \end{minipage}\\[1cm]
+}
+
+\newenvironment{Objetivos}[1][Objetivos]{
+  \begin{minipage}[t][.20\textheight]{\textwidth}
+    \begin{center}
+      \color{gray}\FuenteTitulos\bfseries{\fontsize{20}{10}\selectfont #1}
+      \vspace{-10pt}
+    \end{center}
+}
+{
+  \end{minipage}\\[1cm]
+}
+
+\input{secciones/01-portada}
+
+%======================================================================
 \begin{document}
-\Configuracion{ModoE}
 
 \pgfmathsetseed{2024}
 

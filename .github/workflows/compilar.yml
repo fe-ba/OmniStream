@@ -22,6 +22,8 @@ jobs:
         with:
           root_file: main.tex
           args: -pdflua -file-line-error -interaction=nonstopmode
+          # rsvg-convert: lo usa .latexmkrc para pasar los diagramas .svg a PDF
+          pre_compile: "(apt-get update && apt-get install -y librsvg2-bin) || apk add --no-cache librsvg"
 
       - name: Guardar PDF como artefacto
         if: always()

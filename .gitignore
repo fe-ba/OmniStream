@@ -1,4 +1,5 @@
-# Directorio de compilacion local (lo crea el hook pre-commit)
+# Directorio de compilacion: auxiliares, PDF y los diagramas .svg
+# convertidos a PDF (build/svg/). Todo regenerable.
 build/
 
 # Auxiliares de LaTeX / LuaLaTeX
