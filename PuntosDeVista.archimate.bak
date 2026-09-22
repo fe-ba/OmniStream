@@ -1242,7 +1242,7 @@
         <sourceConnection xsi:type="archimate:Connection" id="id-0a7ffced6ba540abae12c970187f6e7f" source="id-5323d1fe1def495c985eab13a19a6eef" target="id-c01db6a2166a418b9798f1a40e27f987" archimateRelationship="id-70c638008e984869a7845d6c599e86e1"/>
       </child>
       <child xsi:type="archimate:DiagramObject" id="id-1c6c2e23e5ea46ceabb4d47ed929f344" targetConnections="id-616d86ea58e24c4e8abbb58bccd81735" archimateElement="id-b8e0b81503734e2197eca9cf837c442e">
-        <bounds x="504" y="408" width="230" height="55"/>
+        <bounds x="504" y="418" width="230" height="55"/>
         <sourceConnection xsi:type="archimate:Connection" id="id-9b6b3f52cabe460199d3cbd53541af9c" source="id-1c6c2e23e5ea46ceabb4d47ed929f344" target="id-c01db6a2166a418b9798f1a40e27f987" archimateRelationship="id-f3d714e5132d49c2930a2fec0e89e1db"/>
       </child>
       <child xsi:type="archimate:DiagramObject" id="id-d914201417674c239f1299adf753ef11" targetConnections="id-c19b813229a944e29a556c1b5ed7fd6f" archimateElement="id-3f8a2996f1a74576ad8e35303e97eab3">
@@ -1255,7 +1255,7 @@
         <sourceConnection xsi:type="archimate:Connection" id="id-c19b813229a944e29a556c1b5ed7fd6f" source="id-144a14516211499c830f36d437006b86" target="id-d914201417674c239f1299adf753ef11" archimateRelationship="id-f62c4dc13db54a69807108bbdd8e8409"/>
       </child>
       <child xsi:type="archimate:DiagramObject" id="id-c01db6a2166a418b9798f1a40e27f987" targetConnections="id-0a7ffced6ba540abae12c970187f6e7f id-9b6b3f52cabe460199d3cbd53541af9c" archimateElement="id-e033793b9dc047b786f60a26c677801f">
-        <bounds x="792" y="280" width="220" height="55"/>
+        <bounds x="792" y="300" width="220" height="55"/>
       </child>
     </element>
     <element xsi:type="archimate:ArchimateDiagramModel" name="D6. Producto" id="id-bfbdb588ea354c5e9c963d3273dd6bb0">
