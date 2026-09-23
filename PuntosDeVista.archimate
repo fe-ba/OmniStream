@@ -203,10 +203,10 @@
     <element xsi:type="archimate:Principle" name="Escalabilidad" id="id-aa9fa73f0f394ac5b6e8a8b8806e030e"/>
     <element xsi:type="archimate:Principle" name="Seguridad y privacidad" id="id-ad2472c568314d68bbeb3e99d98829b7"/>
     <element xsi:type="archimate:Principle" name="Eficiencia de recursos" id="id-ad71afde8b3a4f70bec0b83110b62ddd"/>
-    <element xsi:type="archimate:Requirement" name="Clasificación automática de archivos multimedia" id="id-85a1077859364af2b10160d6a2922d44"/>
-    <element xsi:type="archimate:Requirement" name="Gestión unificada de múltiples formatos" id="id-4c400bb308af4b41baf44e6a5aa9374e"/>
-    <element xsi:type="archimate:Requirement" name="Organización y control por parte del usuario" id="id-458184dad0214e74a90294111638f41c"/>
-    <element xsi:type="archimate:Requirement" name="Gestión escalable de contenido" id="id-576f875e198f47848c400066e02dfa12"/>
+    <element xsi:type="archimate:Requirement" name="Se debera clasificar automaticamente los archivos multimedia" id="id-85a1077859364af2b10160d6a2922d44"/>
+    <element xsi:type="archimate:Requirement" name="Se necesitara la gestión unificada de múltiples formatos" id="id-4c400bb308af4b41baf44e6a5aa9374e"/>
+    <element xsi:type="archimate:Requirement" name="Se necesitara organización y control por parte del usuario" id="id-458184dad0214e74a90294111638f41c"/>
+    <element xsi:type="archimate:Requirement" name="Debera gestionar de forma escalable de contenido" id="id-576f875e198f47848c400066e02dfa12"/>
     <element xsi:type="archimate:Requirement" name="Se debe proporcionar una gestión inteligente de archivos multimedia" id="id-1c0d05a528cb4eafaab007d41c309f7a"/>
     <element xsi:type="archimate:Requirement" name="Organización eficiente" id="id-53c7583b5f0b47f3bc57b9cbb41c8053"/>
     <element xsi:type="archimate:Requirement" name="Accesibilidad" id="id-956d1208022a4107a815a572d08dc6fa"/>
