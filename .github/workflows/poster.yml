@@ -1,0 +1,95 @@
+name: Build poster
+
+# Runs only when something that affects the poster PDF changes (or this
+# workflow itself). Commits to src/ or the rest of docs/ don't trigger it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/architecture/empresarial/**/*.tex'
+      - 'docs/architecture/empresarial/**/*.bib'
+      - 'docs/architecture/empresarial/**/*.svg'
+      - 'docs/architecture/empresarial/.latexmkrc'
+      - '.github/workflows/poster.yml'
+  pull_request:
+    paths:
+      - 'docs/architecture/empresarial/**/*.tex'
+      - 'docs/architecture/empresarial/**/*.bib'
+      - 'docs/architecture/empresarial/**/*.svg'
+      - 'docs/architecture/empresarial/.latexmkrc'
+      - '.github/workflows/poster.yml'
+
+concurrency:
+  group: latex-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTER: docs/architecture/empresarial
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Applies to "run:" steps. "uses:" steps don't inherit it, which is why
+    # latex-action gets its own working_directory.
+    defaults:
+      run:
+        working-directory: docs/architecture/empresarial
+    steps:
+      - uses: actions/checkout@v4
+
+      # LuaLaTeX can't read SVG. Locally .latexmkrc takes care of that, but
+      # here latexmk runs inside the latex-action container, which ships no
+      # converter, so the diagrams are converted first, on the runner.
+      # .latexmkrc then sees build/svg/ is up to date and does nothing.
+      - name: Install SVG converter
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+
+      - name: Convert SVG diagrams to PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r -d '' svg; do
+            pdf="build/svg/${svg%.svg}.pdf"
+            mkdir -p "$(dirname "$pdf")"
+            rsvg-convert --format=pdf --output="$pdf" "$svg"
+          done < <(find imgs -type f -name '*.svg' -print0)
+
+          svgs=$(find imgs -type f -name '*.svg' | wc -l)
+          pdfs=$(find build/svg -type f -name '*.pdf' | wc -l)
+          echo "Diagrams converted: $pdfs of $svgs"
+          test "$pdfs" -eq "$svgs"
+
+      - name: Build main.tex with LuaLaTeX
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: docs/architecture/empresarial
+          root_file: main.tex
+          args: -pdflua -file-line-error -interaction=nonstopmode
+
+      - name: Upload PDF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-pdf
+          path: ${{ env.POSTER }}/main.pdf
+          if-no-files-found: warn
+
+      - name: Upload log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-log
+          path: ${{ env.POSTER }}/main.log
+          if-no-files-found: ignore
+
+      - name: Commit main.pdf to the repo
+        if: success() && github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update main.pdf [skip ci]"
+          file_pattern: ${{ env.POSTER }}/main.pdf

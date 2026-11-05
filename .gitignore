@@ -1,8 +1,13 @@
-# Directorio de compilacion: auxiliares, PDF y los diagramas .svg
-# convertidos a PDF (build/svg/). Todo regenerable.
+# =====================================================================
+# Poster (docs/architecture/empresarial)
+# =====================================================================
+
+# Build directory: auxiliary files, hook PDF and the .svg diagrams
+# converted to PDF (build/svg/). All of it can be regenerated.
+# Also covers Gradle's build/ output in src/.
 build/
 
-# Auxiliares de LaTeX / LuaLaTeX
+# LaTeX / LuaLaTeX auxiliary files
 *.aux
 *.log
 *.out
@@ -12,6 +17,8 @@ build/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+*.synctex(busy)
+*.xdv
 *.luac
 *.pytxcode
 
@@ -20,15 +27,76 @@ build/
 *.bbl
 *.blg
 *.run.xml
+*-SAVE-ERROR
 
-# Basura que venia en el ZIP original del profesor
+# Only .svg diagrams are versioned; their PDFs are regenerated in build/svg/
+docs/architecture/empresarial/imgs/**/*.pdf
+
+# Leftovers from the professor's original template ZIP
 poster - copia.pdf
 poster.pdf
-imgs/modelo/modelo.rar
+docs/architecture/empresarial/imgs/modelo/modelo.rar
 
-# Sistema operativo
-.DS_Store
-Thumbs.db
+# Modeling tool backups and temp files (draw.io, Archi)
+*.bkp
+*.bak
+*.dtmp
+
+# =====================================================================
+# Java (src/)
+# =====================================================================
+
+# Compiled classes and packages
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+
+# JVM crash logs
+hs_err_pid*
+replay_pid*
+
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Gradle (build/ is already ignored above)
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration and secrets
+.env
+*.env.local
+
+# =====================================================================
+# IDEs and editors
+# =====================================================================
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# NetBeans
+nbproject/private/
 
 # VS Code
 .vscode/
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+
+# =====================================================================
+# Operating system
+# =====================================================================
+.DS_Store
+Thumbs.db
+desktop.ini
