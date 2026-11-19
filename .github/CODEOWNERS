@@ -1,0 +1,28 @@
+# Owners of each area (ADR 0019). GitHub requests their review automatically
+# on every pull request that touches their files. Later rules win.
+
+# Everything not listed below: build, CI, documentation, presentation and
+# bootstrap until they get their own owner.
+*                                                          @fe-ba
+
+# Domain model
+/src/domain/src/main/java/co/omnistream/domain/model/      @fe-ba
+/src/domain/src/main/java/co/omnistream/domain/event/      @fe-ba
+/src/domain/src/main/java/co/omnistream/domain/snapshot/   @fe-ba
+/src/domain/src/main/java/co/omnistream/domain/exception/  @fe-ba
+/src/domain/src/main/java/co/omnistream/domain/policy/     @fe-ba
+/src/domain/src/test/java/co/omnistream/domain/model/      @fe-ba
+/src/domain/src/test/java/co/omnistream/domain/event/      @fe-ba
+/src/domain/src/test/java/co/omnistream/domain/snapshot/   @fe-ba
+/src/domain/src/test/java/co/omnistream/domain/exception/  @fe-ba
+/src/domain/src/test/java/co/omnistream/domain/policy/     @fe-ba
+
+# Ports and adapters (interfaces in the domain, in-memory implementations and
+# contracts in the domain tests, real implementations in infrastructure)
+/src/domain/src/main/java/co/omnistream/domain/port/       @HelberthGM
+/src/domain/src/test/java/co/omnistream/domain/port/       @HelberthGM
+/src/infrastructure/                                       @HelberthGM
+
+# Domain services
+/src/domain/src/main/java/co/omnistream/domain/service/    @YoshiK13
+/src/domain/src/test/java/co/omnistream/domain/service/    @YoshiK13

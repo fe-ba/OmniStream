@@ -10,32 +10,38 @@ architecture, to the implementation.
 
 ## Team
 
-- Helberth Alejandro Garcia Melo
-- Joshoa Alarcón Sánchez
-- Ferney Eduardo Ballesta Avila
+- Helberth Alejandro Garcia Melo ([@HelberthGM](https://github.com/HelberthGM)): ports and adapters
+- Joshoa Alarcón Sánchez ([@YoshiK13](https://github.com/YoshiK13)): domain services
+- Ferney Eduardo Ballesta Avila ([@fe-ba](https://github.com/fe-ba)): domain model
 
 ## Status
 
 | Stage                    | Status      | Location                         |
 |--------------------------|-------------|----------------------------------|
 | Enterprise architecture  | Done        | `docs/architecture/empresarial/` |
-| Software architecture    | In progress | `docs/architecture/software/`    |
-| Implementation (Java)    | Not started | `src/`                           |
+| Software architecture    | Done        | `docs/architecture/software/`    |
+| Implementation (Java)    | In progress | `src/`                           |
 
 ## Repository structure
 
 ```
 .
 ├── README.md
-├── src/                         application source code
+├── CONTRIBUTING.md              how the team works: setup, branches, reviews
+├── src/                         Java code: Maven project, one module per layer
+│   ├── domain/                  model, events, snapshots, services, ports
+│   ├── infrastructure/          secondary adapters (persistence, files, tools)
+│   ├── presentation/            primary adapters (REST API, web UI, CLI)
+│   └── bootstrap/               composition root and configuration
 ├── docs/
 │   ├── architecture/
-│   │   └── empresarial/         enterprise architecture poster (LaTeX + ArchiMate)
-│   ├── reference/               technical reference: data model, APIs, glossary
+│   │   ├── empresarial/         enterprise architecture poster (LaTeX + ArchiMate)
+│   │   └── software/            software diagrams (PlantUML), Spanish originals in es/
+│   ├── reference/               glossary and coding conventions
 │   ├── explanation/             background and design rationale
 │   └── decisions/               architecture decision records (ADRs)
 ├── .githooks/                   local git hooks
-└── .github/workflows/           CI pipelines
+└── .github/                     CI pipelines, code owners, pull request template
 ```
 
 ## Enterprise architecture poster
@@ -53,6 +59,20 @@ latexmk -pdflua main.tex
 Requirements, Overleaf setup and how to add diagrams are described in the
 [poster README](docs/architecture/empresarial/README.md).
 
+## Building the code
+
+Requires JDK 25; Maven comes with the wrapper. From `src/`:
+
+```bash
+./mvnw verify            # format check, layer rules, compile and test
+./mvnw spotless:apply    # format the code
+```
+
+The design behind the code is in the
+[software diagrams](docs/architecture/software/) and the
+[ADRs](docs/decisions/); the rules for writing it are in the
+[coding conventions](docs/reference/coding-conventions.md).
+
 ## Getting started
 
 Run once after cloning:
@@ -64,8 +84,12 @@ git config merge.ours.driver true        # auto-resolve conflicts on the CI-gene
 
 ## Contributing
 
-- Always `git pull` before you start working.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first pull request. In
+short:
+
+- Every change goes through a pull request to `main`, reviewed by the owner of
+  the area it touches.
 - Commits, branches and repository files are written in English, following
   [Conventional Commits](https://www.conventionalcommits.org/):
-  `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`.
+  `feat(model): ...`, `fix(services): ...`, `docs: ...`.
 - Significant decisions are recorded as ADRs in [`docs/decisions/`](docs/decisions/).
