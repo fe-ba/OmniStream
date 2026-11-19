@@ -18,6 +18,9 @@
 '   - "(via X)" on a dependency means it is used by an
 '     internal collaborator of the service (chain step or
 '     strategy), not by the service directly.
+'   - The HTTP adapters use Javalin (ADR 0014); Javalin and
+'     Context are types from that library.
+'   - Dashed border: outside the scope of version 1.0 (ADR 0009).
 ' ============================================================
 
 left to right direction
@@ -86,28 +89,20 @@ package "Primary adapters (presentation)" #EAF3F8 {
      + execute(args : List<String>) : int
      - printHelp() : void
    }
-   class DesktopAdapter <<primary adapter>> {
-     - catalogManagement : ICatalogManagement
-     - sync : ISync
-     + handleIpc(message : String) : String
-     + startSync(u : UserId) : void
-   }
-   class MobileAdapter <<primary adapter>> {
-     - sync : ISync
-     + handleSyncRequest(req : HttpRequest) : HttpResponse
-   }
    class WebUiAdapter <<primary adapter>> {
-     + serveInterface(path : String) : HttpResponse
+     - staticDirectory : Path
+     + registerRoutes(app : Javalin) : void
    }
    class RestApiAdapter <<primary adapter>> {
      - catalogManagement : ICatalogManagement
      - playback : IPlayback
      - search : ISearch
      - accessControl : IAccessControl
-     + route(req : HttpRequest) : HttpResponse
-     - authenticateRequest(req : HttpRequest) : SessionToken
-     - serialize(target : Object) : String
-     - mapError(e : Exception) : HttpResponse
+     - sync : ISync
+     + registerRoutes(app : Javalin) : void
+     - authenticateRequest(ctx : Context) : SessionToken
+     - sendStream(ctx : Context, f : MediaStream) : void
+     - mapError(e : DomainException, ctx : Context) : void
    }
    class SchedulerAdapter <<primary adapter>> {
      - tasks : Map<String,ScheduledTask>
@@ -116,17 +111,6 @@ package "Primary adapters (presentation)" #EAF3F8 {
      + start() : void
      + stop() : void
      - fire(t : ScheduledTask) : void
-   }
-   class HttpRequest <<dto>> {
-     - method : String
-     - path : String
-     - headers : Map<String,String>
-     - body : String
-   }
-   class HttpResponse <<dto>> {
-     - statusCode : int
-     - headers : Map<String,String>
-     - body : String
    }
    interface ScheduledTask <<command>> {
      + name() : String
@@ -168,7 +152,7 @@ package "Driving ports (domain)" #E8F5E9 {
      + ingestFile(u : UserId, path : Path) : IngestionResult
      + uploadFile(u : UserId, fileName : String, data : InputStream) : IngestionResult
      + reindexLibrary(u : UserId, root : Path) : int
-     + detectDuplicates(u : UserId) : List<MediaFile>
+     + detectDuplicates(u : UserId) : List<MediaFileSnapshot>
      + editMetadata(u : UserId, id : ItemId, key : String, value : String) : void
      + deleteFile(u : UserId, id : ItemId) : void
      + backupCatalog(admin : UserId, destination : Path) : Path
@@ -176,15 +160,15 @@ package "Driving ports (domain)" #E8F5E9 {
      + monitorServerStatus(admin : UserId) : ServerStatus
    }
    interface ISearch <<driving port>> {
-     + searchContent(u : UserId, txt : String) : List<CatalogItem>
-     + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFile>
-     + browseLibrary(u : UserId, col : ItemId) : List<CatalogItem>
-     + manageCollections(u : UserId, cmd : CollectionCommand) : Collection
+     + searchContent(u : UserId, txt : String) : List<CatalogItemSnapshot>
+     + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFileSnapshot>
+     + browseLibrary(u : UserId, col : ItemId) : List<CatalogItemSnapshot>
+     + manageCollections(u : UserId, cmd : CollectionCommand) : CollectionSnapshot
      + tagFile(u : UserId, id : ItemId, e : Tag) : void
    }
    interface IPlayback <<driving port>> {
-     + openSession(u : UserId, id : ItemId) : PlaybackSession
-     + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSession
+     + openSession(u : UserId, id : ItemId) : PlaybackSessionSnapshot
+     + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSessionSnapshot
      + requestStream(s : SessionId, p : StreamProfile) : MediaStream
      + recordProgress(s : SessionId, pos : Duration) : void
      + pauseSession(s : SessionId) : void
@@ -196,7 +180,7 @@ package "Driving ports (domain)" #E8F5E9 {
      + logout(value : String) : void
      + accessWithLink(link : String) : SessionToken
      + authorizeResource(u : UserId, r : ItemId, acc : AccessType) : boolean
-     + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLink
+     + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLinkSnapshot
      + createUser(admin : UserId, username : String, password : String, role : Role) : UserId
      + manageRoles(admin : UserId, target : UserId, role : Role) : void
      + grantPermission(admin : UserId, u : UserId, p : Permission) : void
@@ -239,13 +223,11 @@ package "Domain services (see services diagram)" #FFF8E1 {
  IEventDispatch <|.. EventDispatchService
 
  CliAdapter --> ICatalogManagement : invokes
- DesktopAdapter --> ICatalogManagement : invokes
- DesktopAdapter --> ISync : invokes
- MobileAdapter --> ISync : invokes
  RestApiAdapter --> ICatalogManagement : invokes
  RestApiAdapter --> ISearch : invokes
  RestApiAdapter --> IPlayback : invokes
  RestApiAdapter --> IAccessControl : invokes
+ RestApiAdapter --> ISync : invokes
  SchedulerAdapter ..> ScheduledTask : fires
  ReindexTask --> ICatalogManagement : invokes
  BackupTask --> ICatalogManagement : invokes
@@ -258,10 +240,10 @@ package "Driven ports (domain)" #F3E5F5 {
    interface ICatalogRepository <<driven port>> {
      + getCatalog() : CatalogIndex
      + save(c : CatalogIndex) : void
-     + findFile(id : ItemId) : Optional<MediaFile>
-     + findByFingerprint(h : Fingerprint) : Optional<MediaFile>
-     + findByText(txt : String) : List<MediaFile>
-     + findByCriteria(c : SearchCriteria) : List<MediaFile>
+     + findFile(id : ItemId) : Optional<MediaFileSnapshot>
+     + findByFingerprint(h : Fingerprint) : Optional<MediaFileSnapshot>
+     + findByText(txt : String) : List<MediaFileSnapshot>
+     + findByCriteria(c : SearchCriteria) : List<MediaFileSnapshot>
    }
    interface ISessionRepository <<driven port>> {
      + save(s : PlaybackSession) : void
@@ -322,6 +304,13 @@ package "Driven ports (domain)" #F3E5F5 {
      + register(username : String, password : String) : LinkedIdentity
      + changePassword(i : LinkedIdentity, newPassword : String) : void
    }
+   interface IDataBackup <<driven port>> {
+     + backup(destination : Path) : Path
+   }
+   interface IConfigurationRepository <<driven port>> {
+     + getLibraryPath() : Path
+     + saveLibraryPath(path : Path) : void
+   }
    interface IEventPublisher <<driven port>> {
      + publish(e : DomainEvent) : void
    }
@@ -337,7 +326,9 @@ package "Driven ports (domain)" #F3E5F5 {
  AuthorizedService ..> IUserRepository : loads user to authorize
  CatalogService ..> ICatalogRepository : queries / persists
  CatalogService ..> ISessionRepository : counts active sessions
- CatalogService ..> IFileStorage : reads / writes / backs up
+ CatalogService ..> IFileStorage : reads / writes
+ CatalogService ..> IDataBackup : backs up the database
+ CatalogService ..> IConfigurationRepository : saves the library path
  CatalogService ..> IMetadataExtractor : extracts (via ExtractionStep)
  SearchService ..> ICatalogRepository : queries / persists
  PlaybackService ..> ISessionRepository : persists sessions
@@ -362,22 +353,31 @@ package "Driven ports (domain)" #F3E5F5 {
 ' ============================================================
 package "Secondary adapters (infrastructure)" #FCE4D6 {
    abstract class JdbcPersistenceAdapter <<secondary adapter>> {
-     # mediaFileMapper : MediaFileMapper
      # catalogMapper : CatalogIndexMapper
-     # sessionMapper : SessionMapper
+     # mediaFileMapper : MediaFileMapper
+     # metadataMapper : MetadataEntryMapper
+     # collectionMapper : CollectionMapper
      # userMapper : UserMapper
+     # permissionMapper : PermissionMapper
+     # identityMapper : LinkedIdentityMapper
+     # sessionMapper : SessionMapper
      # sharedLinkMapper : SharedLinkMapper
      # eventMapper : EventMapper
      # {abstract} connection() : Connection
+     # {abstract} dumpDatabase(destination : Path) : Path
+     - assembleCatalog(c : Connection) : CatalogSnapshot
+     - writeCatalog(c : Connection, i : CatalogSnapshot, events : List<CatalogEvent>) : void
    }
    class SqlitePersistenceAdapter <<secondary adapter>> {
      - databasePath : Path
      # connection() : Connection
+     # dumpDatabase(destination : Path) : Path
    }
    class PostgreSqlPersistenceAdapter <<secondary adapter>> {
      - url : URI
      - pool : DataSource
      # connection() : Connection
+     # dumpDatabase(destination : Path) : Path
    }
    class LocalFileStorageAdapter <<secondary adapter>> {
      - allowedRoot : Path
@@ -391,7 +391,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      + freeSpace() : long
      - ensureWithinRoot(path : Path) : void
    }
-   class NetworkFileStorageAdapter <<secondary adapter>> {
+   class NetworkFileStorageAdapter <<secondary adapter>> #FCE4D6;line.dashed;line:999999 {
      - mountPoint : URI
      - mountCredentials : String
      + read(path : Path) : InputStream
@@ -428,7 +428,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      - computeHash(password : String, salt : String) : String
      - comparePassword(plain : String, hash : String) : boolean
    }
-   class OidcIdentityAdapter <<secondary adapter>> {
+   class OidcIdentityAdapter <<secondary adapter>> #FCE4D6;line.dashed;line:999999 {
      - issuer : URI
      - clientId : String
      + supports(c : Credentials) : boolean
@@ -449,30 +449,45 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      + unsubscribe(observer : ICatalogObserver) : void
      - dispatchToObservers(e : DomainEvent) : void
    }
-   class MediaFileMapper <<mapper>> {
-     + toEntity(row : ResultSet) : MediaFile
-     + toRow(a : MediaFile) : Map<String,Object>
-     + toMetadata(json : String) : List<MetadataEntry>
-   }
    class CatalogIndexMapper <<mapper>> {
-     + toEntity(row : ResultSet) : CatalogIndex
-     + toRow(c : CatalogIndex) : Map<String,Object>
+     + toSnapshot(row : ResultSet, files : List<MediaFileSnapshot>, collections : List<CollectionSnapshot>) : CatalogSnapshot
+     + bind(statement : PreparedStatement, i : CatalogSnapshot) : void
    }
-   class SessionMapper <<mapper>> {
-     + toEntity(row : ResultSet) : PlaybackSession
-     + toRow(s : PlaybackSession) : Map<String,Object>
+   class MediaFileMapper <<mapper>> {
+     + toSnapshot(row : ResultSet, metadata : List<MetadataEntry>, tags : Set<Tag>) : MediaFileSnapshot
+     + bind(statement : PreparedStatement, i : MediaFileSnapshot) : void
+   }
+   class MetadataEntryMapper <<mapper>> {
+     + toValue(row : ResultSet) : MetadataEntry
+     + bind(statement : PreparedStatement, fileId : ItemId, m : MetadataEntry) : void
+   }
+   class CollectionMapper <<mapper>> {
+     + toSnapshot(row : ResultSet, items : List<ItemId>) : CollectionSnapshot
+     + bind(statement : PreparedStatement, i : CollectionSnapshot) : void
    }
    class UserMapper <<mapper>> {
-     + toEntity(row : ResultSet) : User
-     + toRow(u : User) : Map<String,Object>
+     + toSnapshot(row : ResultSet, permissions : Set<Permission>, identities : Set<LinkedIdentity>) : UserSnapshot
+     + bind(statement : PreparedStatement, i : UserSnapshot) : void
+   }
+   class PermissionMapper <<mapper>> {
+     + toValue(row : ResultSet) : Permission
+     + bind(statement : PreparedStatement, userId : UserId, p : Permission) : void
+   }
+   class LinkedIdentityMapper <<mapper>> {
+     + toValue(row : ResultSet) : LinkedIdentity
+     + bind(statement : PreparedStatement, userId : UserId, i : LinkedIdentity) : void
+   }
+   class SessionMapper <<mapper>> {
+     + toSnapshot(row : ResultSet) : PlaybackSessionSnapshot
+     + bind(statement : PreparedStatement, i : PlaybackSessionSnapshot) : void
    }
    class SharedLinkMapper <<mapper>> {
-     + toEntity(row : ResultSet) : SharedLink
-     + toRow(e : SharedLink) : Map<String,Object>
+     + toSnapshot(row : ResultSet) : SharedLinkSnapshot
+     + bind(statement : PreparedStatement, i : SharedLinkSnapshot) : void
    }
    class EventMapper <<mapper>> {
      + toEvent(row : ResultSet) : DomainEvent
-     + toRow(e : DomainEvent) : Map<String,Object>
+     + bind(statement : PreparedStatement, e : DomainEvent) : void
    }
    class CachedCatalogRepository <<decorator>> {
      - delegate : ICatalogRepository
@@ -481,10 +496,10 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      - ttl : Duration
      + getCatalog() : CatalogIndex
      + save(c : CatalogIndex) : void
-     + findFile(id : ItemId) : Optional<MediaFile>
-     + findByFingerprint(h : Fingerprint) : Optional<MediaFile>
-     + findByText(txt : String) : List<MediaFile>
-     + findByCriteria(c : SearchCriteria) : List<MediaFile>
+     + findFile(id : ItemId) : Optional<MediaFileSnapshot>
+     + findByFingerprint(h : Fingerprint) : Optional<MediaFileSnapshot>
+     + findByText(txt : String) : List<MediaFileSnapshot>
+     + findByCriteria(c : SearchCriteria) : List<MediaFileSnapshot>
      - invalidate() : void
      - isFresh() : boolean
    }
@@ -497,7 +512,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      - cacheKey(path : Path, p : StreamProfile) : String
      - evictOldest() : void
    }
-   class ResilientIdentityProvider <<decorator>> {
+   class ResilientIdentityProvider <<decorator>> #FDEBD0;line.dashed;line:999999 {
      - delegate : IIdentityProvider
      - status : CircuitState
      - failureThreshold : int
@@ -507,7 +522,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      - recordFailure() : void
      - isCircuitOpen() : boolean
    }
-   enum CircuitState {
+   enum CircuitState #F7F7F7;line.dashed;line:999999 {
      CLOSED
      OPEN
      HALF_OPEN
@@ -524,6 +539,8 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
  IChangeLog <|.. JdbcPersistenceAdapter
  IOutboxRepository <|.. JdbcPersistenceAdapter
  IUnitOfWork <|.. JdbcPersistenceAdapter
+ IDataBackup <|.. JdbcPersistenceAdapter
+ IConfigurationRepository <|.. JdbcPersistenceAdapter
  IFileStorage <|.. LocalFileStorageAdapter
  IFileStorage <|.. NetworkFileStorageAdapter
  IMetadataExtractor <|.. MetadataAdapter
@@ -541,10 +558,14 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
  CachedTranscoder --> ITranscoder : delegate
  ResilientIdentityProvider --> IIdentityProvider : delegate
  ResilientIdentityProvider --> CircuitState : keeps state
- JdbcPersistenceAdapter ..> MediaFileMapper : uses
  JdbcPersistenceAdapter ..> CatalogIndexMapper : uses
- JdbcPersistenceAdapter ..> SessionMapper : uses
+ JdbcPersistenceAdapter ..> MediaFileMapper : uses
+ JdbcPersistenceAdapter ..> MetadataEntryMapper : uses
+ JdbcPersistenceAdapter ..> CollectionMapper : uses
  JdbcPersistenceAdapter ..> UserMapper : uses
+ JdbcPersistenceAdapter ..> PermissionMapper : uses
+ JdbcPersistenceAdapter ..> LinkedIdentityMapper : uses
+ JdbcPersistenceAdapter ..> SessionMapper : uses
  JdbcPersistenceAdapter ..> SharedLinkMapper : uses
  JdbcPersistenceAdapter ..> EventMapper : uses
  EventBusAdapter ..> ICatalogObserver : notifies
@@ -573,6 +594,8 @@ package "Composition (bootstrap)" #FFFDE7 {
      + {abstract} createChangeLog() : IChangeLog
      + {abstract} createOutboxRepository() : IOutboxRepository
      + {abstract} createUnitOfWork() : IUnitOfWork
+     + {abstract} createDataBackup() : IDataBackup
+     + {abstract} createConfigurationRepository() : IConfigurationRepository
      + {abstract} createTokenRepository() : ITokenRepository
      + {abstract} createStorage() : IFileStorage
      + {abstract} createIdentityProviders() : List<IIdentityProvider>
@@ -592,6 +615,7 @@ package "Composition (bootstrap)" #FFFDE7 {
      - decoratePorts() : void
      - buildIngestionChain() : IngestionStep
      - createServices() : void
+     - createHttpServer() : Javalin
      - createPrimaryAdapters() : void
      - registerObservers() : void
    }
@@ -633,6 +657,10 @@ package "Composition (bootstrap)" #FFFDE7 {
    implemented by the secondary adapters.
    An installation has a single catalog, so
    getCatalog() takes no identifier.
+   Queries return snapshots (read only);
+   getCatalog() returns the aggregate to change it.
+   save() compares the version (optimistic locking) and
+   throws VersionConflict if someone else saved it first.
  end note
 
  note right of IOutboxRepository
@@ -669,9 +697,29 @@ package "Composition (bootstrap)" #FFFDE7 {
  end note
 
  note bottom of JdbcPersistenceAdapter
-   Implements the 7 persistence ports only once.
-   SQLite and PostgreSQL only change how the connection
-   is obtained (Template Method).
+   Implements the 9 persistence ports only once,
+   with plain JDBC (ADR 0015). SQLite and PostgreSQL only
+   change the connection and how the database is dumped
+   for backups (Template Method).
+   The adapter writes the SQL and assembles each aggregate: it runs
+   one query per table, converts the rows with the
+   mappers and returns fromSnapshot(...). The change log
+   stores events and reuses EventMapper.
+ end note
+
+ note bottom of MediaFileMapper
+   Row mappers: one per snapshot or value, with no
+   state and no SQL. toSnapshot()/toValue() read the current
+   row; bind() fills in the parameters of the INSERT or
+   UPDATE. They are instances the adapter holds as
+   attributes, not static methods.
+ end note
+
+ note bottom of ServerFactory
+   In version 1.0 only the database changes
+   (PostgreSQL): it uses LocalFileStorageAdapter and
+   local identity until the network and OIDC
+   adapters exist (ADR 0009).
  end note
 
  note bottom of SyncTask

@@ -15,6 +15,9 @@
 '   - No getters/setters: every method expresses a rule.
 '   - Every change to the catalog goes through its root, which records
 '     the corresponding domain event.
+'   - State leaves the domain only as immutable snapshots
+'     (Memento, ADR 0011). Methods that timestamp something receive
+'     the instant (now) from the service's clock.
 '   - Zero dependencies on frameworks, persistence or HTTP.
 ' ============================================================
 
@@ -47,6 +50,10 @@ skinparam class {
   BorderColor<<policy>>             #3E8E41
   BackgroundColor<<event>>          #ECE4F8
   BorderColor<<event>>              #9673A6
+  BackgroundColor<<snapshot>>       #EEF7F1
+  BorderColor<<snapshot>>           #5B9A70
+  BackgroundColor<<exception>>      #FBE9E7
+  BorderColor<<exception>>          #C0504D
 }
 skinparam enum {
   BackgroundColor #F7F7F7
@@ -69,18 +76,21 @@ package "Catalog aggregate" {
     - files : Map<Fingerprint, MediaFile>
     - collections : List<Collection>
     - events : List<CatalogEvent>
+    - version : long
     __
-    + ingest(file : MediaFile) : IngestionResult
+    + ingest(file : MediaFile, now : Instant) : IngestionResult
     + findByFingerprint(h : Fingerprint) : Optional<MediaFile>
     + findItem(id : ItemId) : Optional<CatalogItem>
     + hasDuplicate(h : Fingerprint) : boolean
-    + editMetadata(id : ItemId, m : MetadataEntry) : void
-    + tag(id : ItemId, e : Tag) : void
-    + delete(id : ItemId) : void
-    + createCollection(name : String) : Collection
-    + addToCollection(collection : ItemId, item : ItemId) : void
+    + editMetadata(id : ItemId, m : MetadataEntry, now : Instant) : void
+    + tag(id : ItemId, e : Tag, now : Instant) : void
+    + delete(id : ItemId, now : Instant) : void
+    + createCollection(name : String, now : Instant) : Collection
+    + addToCollection(collection : ItemId, item : ItemId, now : Instant) : void
     + totalFiles() : int
     + pullEvents() : List<CatalogEvent>
+    + toSnapshot() : CatalogSnapshot
+    + {static} fromSnapshot(i : CatalogSnapshot) : CatalogIndex
     - register(e : CatalogEvent) : void
   }
 
@@ -91,6 +101,7 @@ package "Catalog aggregate" {
     + {abstract} totalSize() : long
     + {abstract} countFiles() : int
     + {abstract} contains(e : CatalogItem) : boolean
+    + {abstract} toSnapshot() : CatalogItemSnapshot
     + rename(name : String) : void
   }
 
@@ -103,6 +114,7 @@ package "Catalog aggregate" {
     - status : IndexingStatus
     - ingestedAt : Instant
     __
+    + {static} create(name : String, path : Path, fingerprint : Fingerprint, type : MediaType, sizeBytes : long, duration : Duration, now : Instant) : MediaFile
     + isDuplicateOf(other : MediaFile) : boolean
     + addMetadata(m : MetadataEntry) : void
     + metadataEntry(key : String) : Optional<MetadataEntry>
@@ -112,6 +124,7 @@ package "Catalog aggregate" {
     + totalSize() : long
     + countFiles() : int
     + contains(e : CatalogItem) : boolean
+    + toSnapshot() : MediaFileSnapshot
   }
 
   class Collection <<entity>> {
@@ -123,6 +136,7 @@ package "Catalog aggregate" {
     + countFiles() : int
     + contains(e : CatalogItem) : boolean
     + depth() : int
+    + toSnapshot() : CollectionSnapshot
     - wouldCreateCycle(e : CatalogItem) : boolean
   }
 
@@ -187,6 +201,8 @@ package "Access aggregate" {
     + link(i : LinkedIdentity) : void
     + isAdmin() : boolean
     + deactivate() : void
+    + toSnapshot() : UserSnapshot
+    + {static} fromSnapshot(i : UserSnapshot) : User
   }
 
   class Permission <<value object>> {
@@ -224,9 +240,11 @@ package "Shared link aggregate" {
     - expiresAt : Instant
     - revoked : boolean
     __
-    + {static} create(collection : ItemId, guest : UserId, level : PermissionLevel, createdBy : UserId, lifetime : Duration) : SharedLink
+    + {static} create(collection : ItemId, guest : UserId, level : PermissionLevel, createdBy : UserId, lifetime : Duration, now : Instant) : SharedLink
     + isValidAt(now : Instant) : boolean
     + revoke() : void
+    + toSnapshot() : SharedLinkSnapshot
+    + {static} fromSnapshot(i : SharedLinkSnapshot) : SharedLink
   }
 
   class SharedLinkId <<value object>> {
@@ -248,6 +266,7 @@ package "Playback aggregate" {
     - status : SessionStatus
     - startedAt : Instant
     __
+    + {static} start(fileId : ItemId, userId : UserId, totalDuration : Duration, now : Instant) : PlaybackSession
     + advance(delta : Duration) : void
     + pause() : void
     + resume() : void
@@ -255,6 +274,8 @@ package "Playback aggregate" {
     + isCompleted() : boolean
     + canResume() : boolean
     + percentWatched() : double
+    + toSnapshot() : PlaybackSessionSnapshot
+    + {static} fromSnapshot(i : PlaybackSessionSnapshot) : PlaybackSession
   }
 
   class SessionId <<value object>> {
@@ -300,6 +321,90 @@ package "Domain events" {
   class EventId <<value object>> {
     - value : UUID
   }
+}
+
+' ============================================================
+' SNAPSHOTS   (Memento: immutable state of each aggregate)
+' ============================================================
+package "Snapshots (Memento)" {
+
+  class CatalogSnapshot <<snapshot>> {
+    + id : CatalogId
+    + name : String
+    + version : long
+    + files : List<MediaFileSnapshot>
+    + collections : List<CollectionSnapshot>
+  }
+
+  interface CatalogItemSnapshot <<snapshot>> {
+    + id() : ItemId
+    + name() : String
+  }
+
+  class MediaFileSnapshot <<snapshot>> {
+    + id : ItemId
+    + name : String
+    + path : Path
+    + fingerprint : Fingerprint
+    + type : MediaType
+    + sizeBytes : long
+    + duration : Duration
+    + status : IndexingStatus
+    + ingestedAt : Instant
+    + metadata : List<MetadataEntry>
+    + tags : Set<Tag>
+  }
+
+  class CollectionSnapshot <<snapshot>> {
+    + id : ItemId
+    + name : String
+    + description : String
+    + items : List<ItemId>
+  }
+
+  class UserSnapshot <<snapshot>> {
+    + id : UserId
+    + username : String
+    + role : Role
+    + permissions : Set<Permission>
+    + identities : Set<LinkedIdentity>
+    + active : boolean
+  }
+
+  class SharedLinkSnapshot <<snapshot>> {
+    + id : SharedLinkId
+    + token : String
+    + collectionId : ItemId
+    + guestId : UserId
+    + level : PermissionLevel
+    + createdBy : UserId
+    + expiresAt : Instant
+    + revoked : boolean
+  }
+
+  class PlaybackSessionSnapshot <<snapshot>> {
+    + id : SessionId
+    + fileId : ItemId
+    + userId : UserId
+    + position : Duration
+    + totalDuration : Duration
+    + status : SessionStatus
+    + startedAt : Instant
+  }
+}
+
+' ============================================================
+' DOMAIN EXCEPTIONS
+' ============================================================
+package "Domain exceptions" {
+  abstract class DomainException <<exception>>
+  class AccessDenied <<exception>>
+  class ResourceNotFound <<exception>>
+  class InvalidCredentials <<exception>>
+  class ExpiredLink <<exception>>
+  class CyclicCollection <<exception>>
+  class FileRejected <<exception>>
+  class VersionConflict <<exception>>
 }
 
 ' ============================================================
@@ -431,6 +536,29 @@ DomainEvent "1" *-- "1" EventId : id >
 CatalogIndex "1" o-- "0..*" CatalogEvent : records >
 
 ' ============================================================
+' RELATIONS  -  SNAPSHOTS (Memento)
+' ============================================================
+CatalogItemSnapshot <|.. MediaFileSnapshot
+CatalogItemSnapshot <|.. CollectionSnapshot
+CatalogSnapshot "1" *-- "0..*" MediaFileSnapshot : files >
+CatalogSnapshot "1" *-- "0..*" CollectionSnapshot : collections >
+CatalogIndex     ..> CatalogSnapshot : <<memento>>
+User            ..> UserSnapshot  : <<memento>>
+SharedLink   ..> SharedLinkSnapshot   : <<memento>>
+PlaybackSession ..> PlaybackSessionSnapshot   : <<memento>>
+
+' ============================================================
+' RELATIONS  -  EXCEPTIONS
+' ============================================================
+DomainException <|-- AccessDenied
+DomainException <|-- ResourceNotFound
+DomainException <|-- InvalidCredentials
+DomainException <|-- ExpiredLink
+DomainException <|-- CyclicCollection
+DomainException <|-- FileRejected
+DomainException <|-- VersionConflict
+
+' ============================================================
 ' POLICIES
 ' ============================================================
 DeduplicationPolicy ..> CatalogIndex : evaluates
@@ -481,6 +609,24 @@ note bottom of DeduplicationPolicy
   they need to see several objects at once.
   Rules that fit in a single entity live in it
   (e.g. isDuplicateOf, canResume).
+end note
+
+note top of CatalogSnapshot
+  **Memento pattern (ADR 0011)**
+  The aggregate is the originator: toSnapshot() hands over its
+  state and fromSnapshot() rebuilds it without validating or
+  recording events. The snapshot is the memento and the
+  repository the caretaker. They are immutable records used by
+  the mappers, by the driving ports to respond and
+  by the services to read state. Nobody changes an entity
+  through them.
+  version enables optimistic locking: save() fails with
+  VersionConflict if someone else changed it first.
+end note
+
+note bottom of DomainException
+  Extends RuntimeException. The REST API adapter
+  translates each one into an HTTP status code (mapError).
 end note
 
 note bottom of LinkedIdentity

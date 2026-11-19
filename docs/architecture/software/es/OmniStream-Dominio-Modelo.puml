@@ -15,6 +15,9 @@
 '   - No hay getters/setters: cada metodo expresa una regla.
 '   - Todo cambio del catalogo pasa por su raiz, que registra
 '     el evento de dominio correspondiente.
+'   - El estado sale del dominio solo como instantaneas inmutables
+'     (Memento, ADR 0011). Los metodos que fechan algo reciben
+'     el instante (ahora) del reloj del servicio.
 '   - Cero dependencias de frameworks, persistencia o HTTP.
 ' ============================================================
 
@@ -47,6 +50,10 @@ skinparam class {
   BorderColor<<policy>>             #3E8E41
   BackgroundColor<<event>>          #ECE4F8
   BorderColor<<event>>              #9673A6
+  BackgroundColor<<snapshot>>       #EEF7F1
+  BorderColor<<snapshot>>           #5B9A70
+  BackgroundColor<<exception>>      #FBE9E7
+  BorderColor<<exception>>          #C0504D
 }
 skinparam enum {
   BackgroundColor #F7F7F7
@@ -69,18 +76,21 @@ package "Agregado Catalogo" {
     - archivos : Map<HuellaDigital, ArchivoMultimedia>
     - colecciones : List<Coleccion>
     - eventos : List<EventoCatalogo>
+    - version : long
     __
-    + ingestar(archivo : ArchivoMultimedia) : ResultadoIngesta
+    + ingestar(archivo : ArchivoMultimedia, ahora : Instant) : ResultadoIngesta
     + buscarPorHuella(h : HuellaDigital) : Optional<ArchivoMultimedia>
     + buscarElemento(id : ElementoId) : Optional<ElementoCatalogo>
     + existeDuplicado(h : HuellaDigital) : boolean
-    + editarMetadato(id : ElementoId, m : Metadato) : void
-    + etiquetar(id : ElementoId, e : Etiqueta) : void
-    + eliminar(id : ElementoId) : void
-    + crearColeccion(nombre : String) : Coleccion
-    + agregarAColeccion(coleccion : ElementoId, elemento : ElementoId) : void
+    + editarMetadato(id : ElementoId, m : Metadato, ahora : Instant) : void
+    + etiquetar(id : ElementoId, e : Etiqueta, ahora : Instant) : void
+    + eliminar(id : ElementoId, ahora : Instant) : void
+    + crearColeccion(nombre : String, ahora : Instant) : Coleccion
+    + agregarAColeccion(coleccion : ElementoId, elemento : ElementoId, ahora : Instant) : void
     + totalArchivos() : int
     + extraerEventos() : List<EventoCatalogo>
+    + aInstantanea() : InstantaneaCatalogo
+    + {static} desdeInstantanea(i : InstantaneaCatalogo) : CatalogoIndice
     - registrar(e : EventoCatalogo) : void
   }
 
@@ -91,6 +101,7 @@ package "Agregado Catalogo" {
     + {abstract} tamanioTotal() : long
     + {abstract} contarArchivos() : int
     + {abstract} contiene(e : ElementoCatalogo) : boolean
+    + {abstract} aInstantanea() : InstantaneaElemento
     + renombrar(nombre : String) : void
   }
 
@@ -103,6 +114,7 @@ package "Agregado Catalogo" {
     - estado : EstadoIndexacion
     - fechaIngesta : Instant
     __
+    + {static} crear(nombre : String, ruta : Path, huella : HuellaDigital, tipo : TipoMedio, tamanioBytes : long, duracion : Duration, ahora : Instant) : ArchivoMultimedia
     + esDuplicadoDe(otro : ArchivoMultimedia) : boolean
     + agregarMetadato(m : Metadato) : void
     + metadato(clave : String) : Optional<Metadato>
@@ -112,6 +124,7 @@ package "Agregado Catalogo" {
     + tamanioTotal() : long
     + contarArchivos() : int
     + contiene(e : ElementoCatalogo) : boolean
+    + aInstantanea() : InstantaneaArchivo
   }
 
   class Coleccion <<entity>> {
@@ -123,6 +136,7 @@ package "Agregado Catalogo" {
     + contarArchivos() : int
     + contiene(e : ElementoCatalogo) : boolean
     + profundidad() : int
+    + aInstantanea() : InstantaneaColeccion
     - generariaCiclo(e : ElementoCatalogo) : boolean
   }
 
@@ -187,6 +201,8 @@ package "Agregado Acceso" {
     + vincular(i : IdentidadVinculada) : void
     + esAdministrador() : boolean
     + desactivar() : void
+    + aInstantanea() : InstantaneaUsuario
+    + {static} desdeInstantanea(i : InstantaneaUsuario) : Usuario
   }
 
   class Permiso <<value object>> {
@@ -224,9 +240,11 @@ package "Agregado Enlace compartido" {
     - expiraEn : Instant
     - revocado : boolean
     __
-    + {static} crear(coleccion : ElementoId, invitado : UsuarioId, nivel : NivelPermiso, creadoPor : UsuarioId, vigencia : Duration) : EnlaceCompartido
+    + {static} crear(coleccion : ElementoId, invitado : UsuarioId, nivel : NivelPermiso, creadoPor : UsuarioId, vigencia : Duration, ahora : Instant) : EnlaceCompartido
     + estaVigente(ahora : Instant) : boolean
     + revocar() : void
+    + aInstantanea() : InstantaneaEnlace
+    + {static} desdeInstantanea(i : InstantaneaEnlace) : EnlaceCompartido
   }
 
   class EnlaceId <<value object>> {
@@ -248,6 +266,7 @@ package "Agregado Reproduccion" {
     - estado : EstadoSesion
     - iniciadaEn : Instant
     __
+    + {static} iniciar(archivoId : ElementoId, usuarioId : UsuarioId, duracionTotal : Duration, ahora : Instant) : SesionReproduccion
     + avanzar(delta : Duration) : void
     + pausar() : void
     + reanudar() : void
@@ -255,6 +274,8 @@ package "Agregado Reproduccion" {
     + estaCompletada() : boolean
     + puedeReanudarse() : boolean
     + porcentajeVisto() : double
+    + aInstantanea() : InstantaneaSesion
+    + {static} desdeInstantanea(i : InstantaneaSesion) : SesionReproduccion
   }
 
   class SesionId <<value object>> {
@@ -300,6 +321,90 @@ package "Eventos de dominio" {
   class EventoId <<value object>> {
     - valor : UUID
   }
+}
+
+' ============================================================
+' INSTANTANEAS   (Memento: estado inmutable de cada agregado)
+' ============================================================
+package "Instantaneas (Memento)" {
+
+  class InstantaneaCatalogo <<snapshot>> {
+    + id : CatalogoId
+    + nombre : String
+    + version : long
+    + archivos : List<InstantaneaArchivo>
+    + colecciones : List<InstantaneaColeccion>
+  }
+
+  interface InstantaneaElemento <<snapshot>> {
+    + id() : ElementoId
+    + nombre() : String
+  }
+
+  class InstantaneaArchivo <<snapshot>> {
+    + id : ElementoId
+    + nombre : String
+    + ruta : Path
+    + huella : HuellaDigital
+    + tipo : TipoMedio
+    + tamanioBytes : long
+    + duracion : Duration
+    + estado : EstadoIndexacion
+    + fechaIngesta : Instant
+    + metadatos : List<Metadato>
+    + etiquetas : Set<Etiqueta>
+  }
+
+  class InstantaneaColeccion <<snapshot>> {
+    + id : ElementoId
+    + nombre : String
+    + descripcion : String
+    + elementos : List<ElementoId>
+  }
+
+  class InstantaneaUsuario <<snapshot>> {
+    + id : UsuarioId
+    + nombreUsuario : String
+    + rol : Rol
+    + permisos : Set<Permiso>
+    + identidades : Set<IdentidadVinculada>
+    + activo : boolean
+  }
+
+  class InstantaneaEnlace <<snapshot>> {
+    + id : EnlaceId
+    + token : String
+    + coleccionId : ElementoId
+    + invitadoId : UsuarioId
+    + nivel : NivelPermiso
+    + creadoPor : UsuarioId
+    + expiraEn : Instant
+    + revocado : boolean
+  }
+
+  class InstantaneaSesion <<snapshot>> {
+    + id : SesionId
+    + archivoId : ElementoId
+    + usuarioId : UsuarioId
+    + posicion : Duration
+    + duracionTotal : Duration
+    + estado : EstadoSesion
+    + iniciadaEn : Instant
+  }
+}
+
+' ============================================================
+' EXCEPCIONES DE DOMINIO
+' ============================================================
+package "Excepciones de dominio" {
+  abstract class ExcepcionDominio <<exception>>
+  class AccesoDenegado <<exception>>
+  class RecursoNoEncontrado <<exception>>
+  class CredencialesInvalidas <<exception>>
+  class EnlaceVencido <<exception>>
+  class ColeccionCiclica <<exception>>
+  class ArchivoRechazado <<exception>>
+  class ConflictoDeVersion <<exception>>
 }
 
 ' ============================================================
@@ -431,6 +536,29 @@ EventoDominio "1" *-- "1" EventoId : id >
 CatalogoIndice "1" o-- "0..*" EventoCatalogo : registra >
 
 ' ============================================================
+' RELACIONES  -  INSTANTANEAS (Memento)
+' ============================================================
+InstantaneaElemento <|.. InstantaneaArchivo
+InstantaneaElemento <|.. InstantaneaColeccion
+InstantaneaCatalogo "1" *-- "0..*" InstantaneaArchivo : archivos >
+InstantaneaCatalogo "1" *-- "0..*" InstantaneaColeccion : colecciones >
+CatalogoIndice     ..> InstantaneaCatalogo : <<memento>>
+Usuario            ..> InstantaneaUsuario  : <<memento>>
+EnlaceCompartido   ..> InstantaneaEnlace   : <<memento>>
+SesionReproduccion ..> InstantaneaSesion   : <<memento>>
+
+' ============================================================
+' RELACIONES  -  EXCEPCIONES
+' ============================================================
+ExcepcionDominio <|-- AccesoDenegado
+ExcepcionDominio <|-- RecursoNoEncontrado
+ExcepcionDominio <|-- CredencialesInvalidas
+ExcepcionDominio <|-- EnlaceVencido
+ExcepcionDominio <|-- ColeccionCiclica
+ExcepcionDominio <|-- ArchivoRechazado
+ExcepcionDominio <|-- ConflictoDeVersion
+
+' ============================================================
 ' POLITICAS
 ' ============================================================
 PoliticaDeduplicacion ..> CatalogoIndice : evalua
@@ -481,6 +609,24 @@ note bottom of PoliticaDeduplicacion
   necesitan ver varios objetos a la vez.
   Las reglas que caben en una sola entidad viven en ella
   (p. ej. esDuplicadoDe, puedeReanudarse).
+end note
+
+note top of InstantaneaCatalogo
+  **Patron Memento (ADR 0011)**
+  El agregado es el originador: aInstantanea() entrega su
+  estado y desdeInstantanea() lo reconstruye sin validar ni
+  registrar eventos. La instantanea es el memento y el
+  repositorio el cuidador. Son records inmutables: los usan
+  los mapeadores, los puertos de entrada para responder y
+  los servicios para leer estado. Nadie cambia una entidad
+  con ellas.
+  version permite bloqueo optimista: guardar() falla con
+  ConflictoDeVersion si otro la cambio antes.
+end note
+
+note bottom of ExcepcionDominio
+  Extiende RuntimeException. El adaptador del API REST
+  traduce cada una a un codigo HTTP (mapearError).
 end note
 
 note bottom of IdentidadVinculada

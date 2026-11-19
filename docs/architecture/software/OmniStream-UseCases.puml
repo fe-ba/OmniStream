@@ -8,6 +8,8 @@
 '                extension point of the base use case.
 '   generalization: variants of the same purpose.
 '
+'  Dashed border: outside the scope of version 1.0 (ADR 0009).
+'
 '  Note: "Log in" is NOT included in every use case.
 '  Being authenticated is a PRECONDITION; what does always
 '  run is "Authorize resource access".
@@ -95,7 +97,7 @@ package "Playback" {
 package "Access and security" {
   usecase "Log in"                          as UC18
   usecase "Local authentication"            as UC18a
-  usecase "OIDC\nauthentication"            as UC18b
+  usecase "OIDC\nauthentication"            as UC18b #F5F5F5;line.dashed;line:999999
   usecase "Authorize resource\naccess"      as UC19 <<included>>
   usecase "Share collection"                as UC20
   usecase "Manage users\nand roles"         as UC21 <<admin>>
@@ -116,7 +118,7 @@ package "Server administration" {
 actor "Storage\n(NAS / disk)"                     as SysFs
 actor "Metadata extractor\n(FFmpeg / ExifTool)"   as SysMeta
 actor "Transcoder"                                as SysTrans
-actor "Identity provider\n(OIDC)"                 as SysIdp
+actor "Identity provider\n(OIDC)"                 as SysIdp #F5F5F5;line.dashed;line:999999
 actor "Task scheduler"                            as SysTimer
 
 ' ============================================================

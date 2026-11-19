@@ -16,6 +16,7 @@
 '  Convencion de lineas:
 '    linea solida  componente -- puerto : lo PROVEE / lo IMPLEMENTA
 '    flecha ..>    componente -> puerto : lo CONSUME / depende de el
+'    borde punteado: fuera del alcance de la version 1.0 (ADR 0009)
 ' ============================================================
 
 skinparam backgroundColor #FFFFFF
@@ -64,8 +65,7 @@ skinparam interface {
 ' ============================================================
 rectangle "Clientes" <<externo>> {
   component "Navegador"          as CliWeb
-  component "App de escritorio"  as CliDesk
-  component "App movil"          as CliMobile
+  component "App movil"          as CliMobile #FFFFFF;line.dashed;line:999999
   component "Terminal / scripts" as CliCli
 }
 
@@ -73,11 +73,9 @@ rectangle "Clientes" <<externo>> {
 ' 2. CAPA DE PRESENTACION  (adaptadores primarios / driving)
 ' ============================================================
 rectangle "Capa de presentacion\n(adaptadores primarios / driving)" <<present>> {
-  component "Adaptador Web UI\n<<controlador HTTP>>"            as AdWeb
-  component "Adaptador Desktop\n<<controlador local>>"          as AdDesk
-  component "Adaptador Mobile\n<<controlador movil>>"           as AdMobile
+  component "Adaptador Web UI\n<<Javalin>>"                     as AdWeb
   component "Adaptador CLI\n<<controlador>>"                    as AdCli
-  component "Adaptador API REST\n<<controlador>>"               as AdApi
+  component "Adaptador API REST\n<<Javalin>>"                   as AdApi
   component "Adaptador Programador\n<<tareas programadas>>"     as AdProg
 }
 
@@ -140,6 +138,8 @@ rectangle "Puertos de salida" <<dominio>> {
   interface "ITranscodificador"       as POUT_TRANS
   interface "IProveedorIdentidad"     as POUT_IDP
   interface "IRegistroCredenciales"   as POUT_CRED
+  interface "IRespaldoDatos"          as POUT_RESP
+  interface "IRepositorioConfiguracion" as POUT_CONF
   interface "IPublicadorEventos"      as POUT_PUB
   interface "ISuscriptorEventos"      as POUT_SUS
 }
@@ -163,7 +163,7 @@ rectangle "Infraestructura\n(adaptadores secundarios / driven)" <<driven>> {
 rectangle "Recursos externos" <<infra>> {
   database  "Base de datos\ne indice"               as DbIndice
   folder    "Biblioteca de archivos\n(NAS / disco)" as FsBiblioteca
-  component "Proveedor de identidad\nexterno"       as IdpExterno
+  component "Proveedor de identidad\nexterno"       as IdpExterno #FFFFFF;line.dashed;line:999999
 }
 
 ' ============================================================
@@ -177,12 +177,9 @@ rectangle "Arranque" <<arranque>> {
 ' CLIENTES -> PRESENTACION
 ' ============================================================
 CliWeb    --> AdWeb
-CliDesk   --> AdDesk
-CliMobile --> AdMobile
+CliWeb    --> AdApi : HTTP/JSON
+CliMobile ..> AdApi : HTTP/JSON
 CliCli    --> AdCli
-AdWeb     --> AdApi : HTTP/JSON
-AdDesk    --> AdApi : HTTP/IPC
-AdMobile  --> AdApi : HTTP/JSON
 
 ' ============================================================
 ' PRESENTACION -> PUERTOS DE ENTRADA  (consume)
@@ -191,10 +188,8 @@ AdApi    ..> PIN_CAT
 AdApi    ..> PIN_BUS
 AdApi    ..> PIN_REP
 AdApi    ..> PIN_ACC
+AdApi    ..> PIN_SIN
 AdCli    ..> PIN_CAT
-AdDesk   ..> PIN_CAT
-AdDesk   ..> PIN_SIN
-AdMobile ..> PIN_SIN
 AdProg   ..> PIN_CAT : reindexar / respaldar
 AdProg   ..> PIN_DES : sincronizar
 
@@ -238,6 +233,8 @@ SvCat ..> POUT_REPO
 SvCat ..> POUT_SES
 SvCat ..> POUT_FS
 SvCat ..> POUT_META
+SvCat ..> POUT_RESP
+SvCat ..> POUT_CONF
 SvBus ..> POUT_REPO
 SvRep ..> POUT_SES
 SvRep ..> POUT_REPO
@@ -266,6 +263,8 @@ AdRepo  -up- POUT_ENL
 AdRepo  -up- POUT_CAMB
 AdRepo  -up- POUT_OUT
 AdRepo  -up- POUT_UOW
+AdRepo  -up- POUT_RESP
+AdRepo  -up- POUT_CONF
 AdFs    -up- POUT_FS
 AdMeta  -up- POUT_META
 AdTrans -up- POUT_TRANS
@@ -286,7 +285,7 @@ AdIdp   --> DbIndice : credenciales locales
 AdFs    --> FsBiblioteca
 AdMeta  --> FsBiblioteca
 AdTrans --> FsBiblioteca
-AdIdp   --> IdpExterno : opcional (OIDC)
+AdIdp   ..> IdpExterno : opcional (OIDC)
 
 ' ============================================================
 ' ARRANQUE -> CAPAS
@@ -304,6 +303,17 @@ end note
 ' ============================================================
 ' NOTAS
 ' ============================================================
+note right of CliMobile
+  No hay app de escritorio aparte: es el
+  servidor en perfil local, usado desde el
+  navegador (ADR 0010). La app movil queda
+  para despues de la version 1.0 y usara el
+  API REST, que ya expone la sincronizacion.
+  En la 1.0 no entran OIDC ni NAS: el
+  adaptador de identidad es solo local y el
+  de archivos solo disco local (ADR 0009).
+end note
+
 note left of PIN_CAT
   **Puertos de entrada (driving)**
   Los PROVEE el dominio (linea solida).

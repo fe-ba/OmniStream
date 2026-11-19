@@ -14,6 +14,12 @@
 '     puertos estan en OmniStream-PuertosAdaptadores.puml.
 '   - Los tipos del modelo (Usuario, CatalogoIndice, ...) se
 '     muestran sin miembros: estan en OmniStream-Dominio-Modelo.puml.
+'   - Los servicios leen el estado de una entidad a traves de su
+'     instantanea y los puertos de entrada responden con
+'     instantaneas, nunca con entidades (ADR 0011).
+'   - El reloj (java.time.Clock) se inyecta: los servicios pasan
+'     el instante a los metodos del dominio que lo necesitan.
+'   - Borde punteado: fuera del alcance de la version 1.0 (ADR 0009).
 ' ============================================================
 
 skinparam backgroundColor #FFFFFF
@@ -78,6 +84,7 @@ package "Base de autorizacion" {
   abstract class ServicioAutorizado <<service base>> {
     # repositorioUsuarios : IRepositorioUsuarios
     # politicaAcceso : PoliticaAcceso
+    # reloj : Clock
     __
     # cargarUsuario(u : UsuarioId) : Usuario
     # verificarAcceso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : void
@@ -109,7 +116,7 @@ package "Acceso y seguridad" {
     + cerrarSesion(valor : String) : void
     + accederConEnlace(enlace : String) : TokenSesion
     + autorizarRecurso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : boolean
-    + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : EnlaceCompartido
+    + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : InstantaneaEnlace
     + crearUsuario(admin : UsuarioId, nombreUsuario : String, clave : String, rol : Rol) : UsuarioId
     + gestionarRoles(admin : UsuarioId, obj : UsuarioId, rol : Rol) : void
     + otorgarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
@@ -140,11 +147,14 @@ package "Catalogo e ingesta" {
     - repositorioCatalogo : IRepositorioCatalogo
     - repositorioSesiones : IRepositorioSesiones
     - almacenamiento : IAlmacenamientoArchivos
+    - respaldoDatos : IRespaldoDatos
+    - repositorioConfiguracion : IRepositorioConfiguracion
+    - politicaDeduplicacion : PoliticaDeduplicacion
     __
     + ingestarArchivo(u : UsuarioId, ruta : Path) : ResultadoIngesta
     + subirArchivo(u : UsuarioId, nombreArchivo : String, datos : InputStream) : ResultadoIngesta
     + reindexarBiblioteca(u : UsuarioId, raiz : Path) : int
-    + detectarDuplicados(u : UsuarioId) : List<ArchivoMultimedia>
+    + detectarDuplicados(u : UsuarioId) : List<InstantaneaArchivo>
     + editarMetadato(u : UsuarioId, id : ElementoId, clave : String, valor : String) : void
     + eliminarArchivo(u : UsuarioId, id : ElementoId) : void
     + respaldarCatalogo(admin : UsuarioId, destino : Path) : Path
@@ -164,6 +174,7 @@ package "Catalogo e ingesta" {
   class PasoExtraccion <<handler>> {
     - almacenamiento : IAlmacenamientoArchivos
     - extractor : IExtractorMetadatos
+    - reloj : Clock
     __
     # procesar(ctx : ContextoIngesta) : boolean
   }
@@ -199,12 +210,12 @@ package "Busqueda y organizacion" {
   class ServicioBusqueda <<domain service>> {
     - repositorioCatalogo : IRepositorioCatalogo
     __
-    + buscarContenido(u : UsuarioId, txt : String) : List<ElementoCatalogo>
-    + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<ArchivoMultimedia>
-    + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<ElementoCatalogo>
-    + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : Coleccion
+    + buscarContenido(u : UsuarioId, txt : String) : List<InstantaneaElemento>
+    + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<InstantaneaArchivo>
+    + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<InstantaneaElemento>
+    + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : InstantaneaColeccion
     + etiquetarArchivo(u : UsuarioId, id : ElementoId, e : Etiqueta) : void
-    - ordenarResultados(l : List<ArchivoMultimedia>, c : CriterioBusqueda) : List<ArchivoMultimedia>
+    - ordenarResultados(l : List<InstantaneaArchivo>, c : CriterioBusqueda) : List<InstantaneaArchivo>
   }
 }
 
@@ -221,7 +232,7 @@ package "Sincronizacion y eventos" {
     + sincronizarCambios(u : UsuarioId, desde : Instant) : DeltaSincronizacion
     + cachearContenido(u : UsuarioId, id : ElementoId) : PaqueteOffline
     + hayCambiosPendientes(u : UsuarioId, desde : Instant) : boolean
-    - empaquetar(a : ArchivoMultimedia) : PaqueteOffline
+    - empaquetar(a : InstantaneaArchivo) : PaqueteOffline
     - filtrarVisibles(u : Usuario, d : DeltaSincronizacion) : DeltaSincronizacion
   }
 
@@ -262,32 +273,32 @@ package "Reproduccion" {
     - repositorioCatalogo : IRepositorioCatalogo
     - estrategiasStream : List<EstrategiaStream>
     __
-    + abrirSesion(u : UsuarioId, id : ElementoId) : SesionReproduccion
-    + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : SesionReproduccion
+    + abrirSesion(u : UsuarioId, id : ElementoId) : InstantaneaSesion
+    + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : InstantaneaSesion
     + solicitarStream(s : SesionId, p : PerfilStream) : FlujoMultimedia
     + registrarProgreso(s : SesionId, pos : Duration) : void
     + pausarSesion(s : SesionId) : void
     + finalizarSesion(s : SesionId) : void
-    - seleccionarStream(a : ArchivoMultimedia, p : PerfilStream) : EstrategiaStream
+    - seleccionarStream(a : InstantaneaArchivo, p : PerfilStream) : EstrategiaStream
   }
 
   interface EstrategiaStream <<strategy>> #E4F4E4;line:6FA86F {
-    + soporta(a : ArchivoMultimedia, p : PerfilStream) : boolean
-    + generarFlujo(a : ArchivoMultimedia, p : PerfilStream, pos : Duration) : FlujoMultimedia
+    + soporta(a : InstantaneaArchivo, p : PerfilStream) : boolean
+    + generarFlujo(a : InstantaneaArchivo, p : PerfilStream, pos : Duration) : FlujoMultimedia
   }
 
   class StreamDirecto <<strategy>> {
     - almacenamiento : IAlmacenamientoArchivos
     __
-    + soporta(a : ArchivoMultimedia, p : PerfilStream) : boolean
-    + generarFlujo(a : ArchivoMultimedia, p : PerfilStream, pos : Duration) : FlujoMultimedia
+    + soporta(a : InstantaneaArchivo, p : PerfilStream) : boolean
+    + generarFlujo(a : InstantaneaArchivo, p : PerfilStream, pos : Duration) : FlujoMultimedia
   }
 
   class StreamTranscodificado <<strategy>> {
     - transcodificador : ITranscodificador
     __
-    + soporta(a : ArchivoMultimedia, p : PerfilStream) : boolean
-    + generarFlujo(a : ArchivoMultimedia, p : PerfilStream, pos : Duration) : FlujoMultimedia
+    + soporta(a : InstantaneaArchivo, p : PerfilStream) : boolean
+    + generarFlujo(a : InstantaneaArchivo, p : PerfilStream, pos : Duration) : FlujoMultimedia
   }
 
   note right of EstrategiaStream
@@ -325,7 +336,7 @@ package "DTOs y comandos de los puertos" {
     + clave : String
   }
 
-  class CredencialesOIDC <<dto>> {
+  class CredencialesOIDC <<dto>> #FCF4E0;line.dashed;line:999999 {
     + tokenExterno : String
     + emisor : URI
   }
@@ -424,6 +435,7 @@ PasoIngesta <|-- PasoIndexacion
 PasoIngesta ..> ContextoIngesta : <<procesa>>
 PasoDuplicados --> "1" PoliticaDeduplicacion : politica
 PasoIndexacion ..> CatalogoIndice : <<ingestar>>
+ServicioCatalogo --> "1" PoliticaDeduplicacion : politicaDeduplicacion
 ServicioCatalogo ..> CatalogoIndice : <<modifica>>
 ServicioBusqueda ..> CatalogoIndice : <<consulta / modifica>>
 

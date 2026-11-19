@@ -13,6 +13,7 @@ below.
 
 | Spanish | English | Defined in |
 |---|---|---|
+| `AccesoDenegado` | `AccessDenied` | Domain model |
 | `PoliticaAcceso` | `AccessPolicy` | Domain model |
 | `ServicioAcceso` | `AccessService` | Services |
 | `TipoAcceso` | `AccessType` | Domain model |
@@ -26,39 +27,46 @@ below.
 | `CatalogoIndice` | `CatalogIndex` | Domain model |
 | `MapeadorCatalogoIndice` | `CatalogIndexMapper` | Ports and adapters |
 | `ElementoCatalogo` | `CatalogItem` | Domain model |
+| `InstantaneaElemento` | `CatalogItemSnapshot` | Domain model |
 | `ServicioCatalogo` | `CatalogService` | Services |
+| `InstantaneaCatalogo` | `CatalogSnapshot` | Domain model |
 | `TipoCambio` | `ChangeType` | Domain model |
 | `EstadoCircuito` | `CircuitState` | Ports and adapters |
 | `AdaptadorCLI` | `CliAdapter` | Ports and adapters |
 | `Coleccion` | `Collection` | Domain model |
 | `ComandoColeccion` | `CollectionCommand` | Services |
 | `ColeccionCreada` | `CollectionCreated` | Domain model |
+| `MapeadorColeccion` | `CollectionMapper` | Ports and adapters |
 | `ColeccionModificada` | `CollectionModified` | Domain model |
+| `InstantaneaColeccion` | `CollectionSnapshot` | Domain model |
 | `ComposicionRaiz` | `CompositionRoot` | Ports and adapters |
 | `Credenciales` | `Credentials` | Services |
+| `ColeccionCiclica` | `CyclicCollection` | Domain model |
 | `PoliticaDeduplicacion` | `DeduplicationPolicy` | Domain model |
-| `AdaptadorDesktop` | `DesktopAdapter` | Ports and adapters |
 | `StreamDirecto` | `DirectStream` | Services |
 | `EventoDominio` | `DomainEvent` | Domain model |
+| `ExcepcionDominio` | `DomainException` | Domain model |
 | `AccionDuplicado` | `DuplicateAction` | Domain model |
 | `PasoDuplicados` | `DuplicatesStep` | Services |
 | `AdaptadorBusEventos` | `EventBusAdapter` | Ports and adapters |
 | `ServicioDespachoEventos` | `EventDispatchService` | Services |
 | `EventoId` | `EventId` | Domain model |
 | `MapeadorEvento` | `EventMapper` | Ports and adapters |
+| `EnlaceVencido` | `ExpiredLink` | Domain model |
 | `PasoExtraccion` | `ExtractionStep` | Services |
 | `ArchivoEliminado` | `FileDeleted` | Domain model |
 | `ArchivoIngestado` | `FileIngested` | Domain model |
 | `ArchivoModificado` | `FileModified` | Domain model |
+| `ArchivoRechazado` | `FileRejected` | Domain model |
 | `HuellaDigital` | `Fingerprint` | Domain model |
-| `SolicitudHttp` | `HttpRequest` | Ports and adapters |
-| `RespuestaHttp` | `HttpResponse` | Ports and adapters |
 | `IControlAcceso` | `IAccessControl` | Ports and adapters |
 | `IGestionCatalogo` | `ICatalogManagement` | Ports and adapters |
 | `IObservadorCatalogo` | `ICatalogObserver` | Services |
 | `IRepositorioCatalogo` | `ICatalogRepository` | Ports and adapters |
 | `IRegistroCambios` | `IChangeLog` | Ports and adapters |
+| `IRepositorioConfiguracion` | `IConfigurationRepository` | Ports and adapters |
 | `IRegistroCredenciales` | `ICredentialRegistry` | Ports and adapters |
+| `IRespaldoDatos` | `IDataBackup` | Ports and adapters |
 | `IBusEventos` | `IEventBus` | Ports and adapters |
 | `IDespachoEventos` | `IEventDispatch` | Ports and adapters |
 | `IPublicadorEventos` | `IEventPublisher` | Ports and adapters |
@@ -73,6 +81,7 @@ below.
 | `ResultadoIngesta` | `IngestionResult` | Domain model |
 | `PasoIngesta` | `IngestionStep` | Services |
 | `AdaptadorTokensEnMemoria` | `InMemoryTokenAdapter` | Ports and adapters |
+| `CredencialesInvalidas` | `InvalidCredentials` | Domain model |
 | `IRepositorioOutbox` | `IOutboxRepository` | Ports and adapters |
 | `IReproduccion` | `IPlayback` | Ports and adapters |
 | `IBusqueda` | `ISearch` | Ports and adapters |
@@ -86,29 +95,34 @@ below.
 | `IRepositorioUsuarios` | `IUserRepository` | Ports and adapters |
 | `AdaptadorPersistenciaJdbc` | `JdbcPersistenceAdapter` | Ports and adapters |
 | `IdentidadVinculada` | `LinkedIdentity` | Domain model |
+| `MapeadorIdentidad` | `LinkedIdentityMapper` | Ports and adapters |
 | `CredencialesLocales` | `LocalCredentials` | Services |
 | `FabricaLocal` | `LocalFactory` | Ports and adapters |
 | `AdaptadorArchivosLocal` | `LocalFileStorageAdapter` | Ports and adapters |
 | `AdaptadorIdentidadLocal` | `LocalIdentityAdapter` | Ports and adapters |
 | `ArchivoMultimedia` | `MediaFile` | Domain model |
 | `MapeadorArchivo` | `MediaFileMapper` | Ports and adapters |
+| `InstantaneaArchivo` | `MediaFileSnapshot` | Domain model |
 | `FlujoMultimedia` | `MediaStream` | Services |
 | `TipoMedio` | `MediaType` | Domain model |
 | `AdaptadorMetadatos` | `MetadataAdapter` | Ports and adapters |
 | `Metadato` | `MetadataEntry` | Domain model |
+| `MapeadorMetadato` | `MetadataEntryMapper` | Ports and adapters |
 | `OrigenMetadato` | `MetadataSource` | Domain model |
-| `AdaptadorMobile` | `MobileAdapter` | Ports and adapters |
 | `AdaptadorArchivosRed` | `NetworkFileStorageAdapter` | Ports and adapters |
 | `PaqueteOffline` | `OfflinePackage` | Services |
 | `CredencialesOIDC` | `OidcCredentials` | Services |
 | `AdaptadorIdentidadOIDC` | `OidcIdentityAdapter` | Ports and adapters |
 | `Permiso` | `Permission` | Domain model |
 | `NivelPermiso` | `PermissionLevel` | Domain model |
+| `MapeadorPermiso` | `PermissionMapper` | Ports and adapters |
 | `ServicioReproduccion` | `PlaybackService` | Services |
 | `SesionReproduccion` | `PlaybackSession` | Domain model |
+| `InstantaneaSesion` | `PlaybackSessionSnapshot` | Domain model |
 | `AdaptadorPersistenciaPostgreSQL` | `PostgreSqlPersistenceAdapter` | Ports and adapters |
 | `TareaReindexar` | `ReindexTask` | Ports and adapters |
 | `ProveedorIdentidadResiliente` | `ResilientIdentityProvider` | Ports and adapters |
+| `RecursoNoEncontrado` | `ResourceNotFound` | Domain model |
 | `AdaptadorApiRest` | `RestApiAdapter` | Ports and adapters |
 | `Rol` | `Role` | Domain model |
 | `TareaProgramada` | `ScheduledTask` | Ports and adapters |
@@ -124,6 +138,7 @@ below.
 | `EnlaceCompartido` | `SharedLink` | Domain model |
 | `EnlaceId` | `SharedLinkId` | Domain model |
 | `MapeadorEnlace` | `SharedLinkMapper` | Ports and adapters |
+| `InstantaneaEnlace` | `SharedLinkSnapshot` | Domain model |
 | `AdaptadorPersistenciaSQLite` | `SqlitePersistenceAdapter` | Ports and adapters |
 | `PerfilStream` | `StreamProfile` | Services |
 | `EstrategiaStream` | `StreamStrategy` | Services |
@@ -137,6 +152,8 @@ below.
 | `Usuario` | `User` | Domain model |
 | `UsuarioId` | `UserId` | Domain model |
 | `MapeadorUsuario` | `UserMapper` | Ports and adapters |
+| `InstantaneaUsuario` | `UserSnapshot` | Domain model |
+| `ConflictoDeVersion` | `VersionConflict` | Domain model |
 | `NavegadorWeb` | `WebBrowser` | Ports and adapters |
 | `AdaptadorWebUI` | `WebUiAdapter` | Ports and adapters |
 
@@ -148,6 +165,17 @@ below.
 | `clave` | `password` | Local credentials: `LocalCredentials.password`, `createUser(..., password, ...)`, `ICredentialRegistry.register(username, password)` |
 | `agregar` | `itemsToAdd` | Field of `CollectionCommand` |
 | `agregar` | `add` | Method `Collection.add()` |
+| `registra` | `registers` | `IEventSubscriber` registering observers |
+| `registra` | `records` | Aggregates and the change log recording events |
+
+## Recurring member names
+
+| Spanish | English |
+|---|---|
+| `aInstantanea()` / `desdeInstantanea()` | `toSnapshot()` / `fromSnapshot()` |
+| `aValor()` / `asignar()` (mappers) | `toValue()` / `bind()` |
+| `buscar...` / `guardar` / `eliminar` | `find...` / `save` / `delete` |
+| `ahora` / `reloj` | `now` / `clock` |
 
 ## Enum constants
 

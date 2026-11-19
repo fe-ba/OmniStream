@@ -8,6 +8,8 @@
 '                punto de extension del caso base.
 '   generalizacion: variantes de un mismo proposito.
 '
+'  Borde punteado: fuera del alcance de la version 1.0 (ADR 0009).
+'
 '  Nota: "Iniciar sesion" NO se incluye en cada caso de uso.
 '  Estar autenticado es una PRECONDICION; lo que si se ejecuta
 '  siempre es "Autorizar acceso al recurso".
@@ -95,7 +97,7 @@ package "Reproduccion" {
 package "Acceso y seguridad" {
   usecase "Iniciar sesion"                as UC18
   usecase "Autenticacion local"           as UC18a
-  usecase "Autenticacion\ncon OIDC"       as UC18b
+  usecase "Autenticacion\ncon OIDC"       as UC18b #F5F5F5;line.dashed;line:999999
   usecase "Autorizar acceso\nal recurso"  as UC19 <<incluido>>
   usecase "Compartir coleccion"           as UC20
   usecase "Gestionar usuarios\ny roles"   as UC21 <<admin>>
@@ -116,7 +118,7 @@ package "Administracion del servidor" {
 actor "Almacenamiento\n(NAS / disco)"               as SysFs
 actor "Extractor de metadatos\n(FFmpeg / ExifTool)" as SysMeta
 actor "Transcodificador"                            as SysTrans
-actor "Proveedor de identidad\n(OIDC)"              as SysIdp
+actor "Proveedor de identidad\n(OIDC)"              as SysIdp #F5F5F5;line.dashed;line:999999
 actor "Programador de tareas"                       as SysTimer
 
 ' ============================================================

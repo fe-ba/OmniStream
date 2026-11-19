@@ -14,6 +14,12 @@
 '     ports are in OmniStream-PortsAdapters.puml.
 '   - Model types (User, CatalogIndex, ...) are shown
 '     without members: they are in OmniStream-Domain-Model.puml.
+'   - Services read an entity's state through its snapshot,
+'     and the driving ports respond with snapshots,
+'     never with entities (ADR 0011).
+'   - The clock (java.time.Clock) is injected: services pass
+'     the instant to the domain methods that need it.
+'   - Dashed border: outside the scope of version 1.0 (ADR 0009).
 ' ============================================================
 
 skinparam backgroundColor #FFFFFF
@@ -78,6 +84,7 @@ package "Authorization base" {
   abstract class AuthorizedService <<service base>> {
     # userRepository : IUserRepository
     # accessPolicy : AccessPolicy
+    # clock : Clock
     __
     # loadUser(u : UserId) : User
     # checkAccess(u : UserId, r : ItemId, acc : AccessType) : void
@@ -109,7 +116,7 @@ package "Access and security" {
     + logout(value : String) : void
     + accessWithLink(link : String) : SessionToken
     + authorizeResource(u : UserId, r : ItemId, acc : AccessType) : boolean
-    + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLink
+    + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLinkSnapshot
     + createUser(admin : UserId, username : String, password : String, role : Role) : UserId
     + manageRoles(admin : UserId, target : UserId, role : Role) : void
     + grantPermission(admin : UserId, u : UserId, p : Permission) : void
@@ -140,11 +147,14 @@ package "Catalog and ingestion" {
     - catalogRepository : ICatalogRepository
     - sessionRepository : ISessionRepository
     - storage : IFileStorage
+    - dataBackup : IDataBackup
+    - configurationRepository : IConfigurationRepository
+    - deduplicationPolicy : DeduplicationPolicy
     __
     + ingestFile(u : UserId, path : Path) : IngestionResult
     + uploadFile(u : UserId, fileName : String, data : InputStream) : IngestionResult
     + reindexLibrary(u : UserId, root : Path) : int
-    + detectDuplicates(u : UserId) : List<MediaFile>
+    + detectDuplicates(u : UserId) : List<MediaFileSnapshot>
     + editMetadata(u : UserId, id : ItemId, key : String, value : String) : void
     + deleteFile(u : UserId, id : ItemId) : void
     + backupCatalog(admin : UserId, destination : Path) : Path
@@ -164,6 +174,7 @@ package "Catalog and ingestion" {
   class ExtractionStep <<handler>> {
     - storage : IFileStorage
     - extractor : IMetadataExtractor
+    - clock : Clock
     __
     # process(ctx : IngestionContext) : boolean
   }
@@ -199,12 +210,12 @@ package "Search and organization" {
   class SearchService <<domain service>> {
     - catalogRepository : ICatalogRepository
     __
-    + searchContent(u : UserId, txt : String) : List<CatalogItem>
-    + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFile>
-    + browseLibrary(u : UserId, col : ItemId) : List<CatalogItem>
-    + manageCollections(u : UserId, cmd : CollectionCommand) : Collection
+    + searchContent(u : UserId, txt : String) : List<CatalogItemSnapshot>
+    + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFileSnapshot>
+    + browseLibrary(u : UserId, col : ItemId) : List<CatalogItemSnapshot>
+    + manageCollections(u : UserId, cmd : CollectionCommand) : CollectionSnapshot
     + tagFile(u : UserId, id : ItemId, e : Tag) : void
-    - sortResults(l : List<MediaFile>, c : SearchCriteria) : List<MediaFile>
+    - sortResults(l : List<MediaFileSnapshot>, c : SearchCriteria) : List<MediaFileSnapshot>
   }
 }
 
@@ -221,7 +232,7 @@ package "Synchronization and events" {
     + syncChanges(u : UserId, since : Instant) : SyncDelta
     + cacheContent(u : UserId, id : ItemId) : OfflinePackage
     + hasPendingChanges(u : UserId, since : Instant) : boolean
-    - pack(a : MediaFile) : OfflinePackage
+    - pack(a : MediaFileSnapshot) : OfflinePackage
     - filterVisible(u : User, d : SyncDelta) : SyncDelta
   }
 
@@ -262,32 +273,32 @@ package "Playback" {
     - catalogRepository : ICatalogRepository
     - streamStrategies : List<StreamStrategy>
     __
-    + openSession(u : UserId, id : ItemId) : PlaybackSession
-    + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSession
+    + openSession(u : UserId, id : ItemId) : PlaybackSessionSnapshot
+    + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSessionSnapshot
     + requestStream(s : SessionId, p : StreamProfile) : MediaStream
     + recordProgress(s : SessionId, pos : Duration) : void
     + pauseSession(s : SessionId) : void
     + finishSession(s : SessionId) : void
-    - selectStream(a : MediaFile, p : StreamProfile) : StreamStrategy
+    - selectStream(a : MediaFileSnapshot, p : StreamProfile) : StreamStrategy
   }
 
   interface StreamStrategy <<strategy>> #E4F4E4;line:6FA86F {
-    + supports(a : MediaFile, p : StreamProfile) : boolean
-    + generateStream(a : MediaFile, p : StreamProfile, pos : Duration) : MediaStream
+    + supports(a : MediaFileSnapshot, p : StreamProfile) : boolean
+    + generateStream(a : MediaFileSnapshot, p : StreamProfile, pos : Duration) : MediaStream
   }
 
   class DirectStream <<strategy>> {
     - storage : IFileStorage
     __
-    + supports(a : MediaFile, p : StreamProfile) : boolean
-    + generateStream(a : MediaFile, p : StreamProfile, pos : Duration) : MediaStream
+    + supports(a : MediaFileSnapshot, p : StreamProfile) : boolean
+    + generateStream(a : MediaFileSnapshot, p : StreamProfile, pos : Duration) : MediaStream
   }
 
   class TranscodedStream <<strategy>> {
     - transcoder : ITranscoder
     __
-    + supports(a : MediaFile, p : StreamProfile) : boolean
-    + generateStream(a : MediaFile, p : StreamProfile, pos : Duration) : MediaStream
+    + supports(a : MediaFileSnapshot, p : StreamProfile) : boolean
+    + generateStream(a : MediaFileSnapshot, p : StreamProfile, pos : Duration) : MediaStream
   }
 
   note right of StreamStrategy
@@ -325,7 +336,7 @@ package "Port DTOs and commands" {
     + password : String
   }
 
-  class OidcCredentials <<dto>> {
+  class OidcCredentials <<dto>> #FCF4E0;line.dashed;line:999999 {
     + externalToken : String
     + issuer : URI
   }
@@ -424,6 +435,7 @@ IngestionStep <|-- IndexingStep
 IngestionStep ..> IngestionContext : <<processes>>
 DuplicatesStep --> "1" DeduplicationPolicy : policy
 IndexingStep ..> CatalogIndex : <<ingest>>
+CatalogService --> "1" DeduplicationPolicy : deduplicationPolicy
 CatalogService ..> CatalogIndex : <<modifies>>
 SearchService ..> CatalogIndex : <<queries / modifies>>
 

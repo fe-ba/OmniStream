@@ -18,6 +18,9 @@
 '   - "(via X)" en una dependencia indica que la usa un
 '     colaborador interno del servicio (paso de la cadena o
 '     estrategia), no el servicio directamente.
+'   - Los adaptadores HTTP usan Javalin (ADR 0014); Javalin y
+'     Context son tipos de esa libreria.
+'   - Borde punteado: fuera del alcance de la version 1.0 (ADR 0009).
 ' ============================================================
 
 left to right direction
@@ -86,28 +89,20 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      + ejecutar(args : List<String>) : int
      - imprimirAyuda() : void
    }
-   class AdaptadorDesktop <<primary adapter>> {
-     - gestionCatalogo : IGestionCatalogo
-     - sincronizacion : ISincronizacion
-     + atenderIPC(mensaje : String) : String
-     + iniciarSincronizacion(u : UsuarioId) : void
-   }
-   class AdaptadorMobile <<primary adapter>> {
-     - sincronizacion : ISincronizacion
-     + manejarSolicitudSync(req : SolicitudHttp) : RespuestaHttp
-   }
    class AdaptadorWebUI <<primary adapter>> {
-     + servirInterfaz(ruta : String) : RespuestaHttp
+     - directorioEstatico : Path
+     + registrarRutas(app : Javalin) : void
    }
    class AdaptadorApiRest <<primary adapter>> {
      - gestionCatalogo : IGestionCatalogo
      - reproduccion : IReproduccion
      - busqueda : IBusqueda
      - controlAcceso : IControlAcceso
-     + enrutar(req : SolicitudHttp) : RespuestaHttp
-     - autenticarPeticion(req : SolicitudHttp) : TokenSesion
-     - serializar(obj : Object) : String
-     - mapearError(e : Exception) : RespuestaHttp
+     - sincronizacion : ISincronizacion
+     + registrarRutas(app : Javalin) : void
+     - autenticarPeticion(ctx : Context) : TokenSesion
+     - enviarStream(ctx : Context, f : FlujoMultimedia) : void
+     - mapearError(e : ExcepcionDominio, ctx : Context) : void
    }
    class AdaptadorProgramador <<primary adapter>> {
      - tareas : Map<String,TareaProgramada>
@@ -116,17 +111,6 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      + iniciar() : void
      + detener() : void
      - disparar(t : TareaProgramada) : void
-   }
-   class SolicitudHttp <<dto>> {
-     - metodo : String
-     - ruta : String
-     - cabeceras : Map<String,String>
-     - cuerpo : String
-   }
-   class RespuestaHttp <<dto>> {
-     - codigo : int
-     - cabeceras : Map<String,String>
-     - cuerpo : String
    }
    interface TareaProgramada <<command>> {
      + nombre() : String
@@ -168,7 +152,7 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
      + ingestarArchivo(u : UsuarioId, ruta : Path) : ResultadoIngesta
      + subirArchivo(u : UsuarioId, nombreArchivo : String, datos : InputStream) : ResultadoIngesta
      + reindexarBiblioteca(u : UsuarioId, raiz : Path) : int
-     + detectarDuplicados(u : UsuarioId) : List<ArchivoMultimedia>
+     + detectarDuplicados(u : UsuarioId) : List<InstantaneaArchivo>
      + editarMetadato(u : UsuarioId, id : ElementoId, clave : String, valor : String) : void
      + eliminarArchivo(u : UsuarioId, id : ElementoId) : void
      + respaldarCatalogo(admin : UsuarioId, destino : Path) : Path
@@ -176,15 +160,15 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
      + monitorearEstadoServidor(admin : UsuarioId) : EstadoServidor
    }
    interface IBusqueda <<driving port>> {
-     + buscarContenido(u : UsuarioId, txt : String) : List<ElementoCatalogo>
-     + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<ArchivoMultimedia>
-     + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<ElementoCatalogo>
-     + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : Coleccion
+     + buscarContenido(u : UsuarioId, txt : String) : List<InstantaneaElemento>
+     + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<InstantaneaArchivo>
+     + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<InstantaneaElemento>
+     + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : InstantaneaColeccion
      + etiquetarArchivo(u : UsuarioId, id : ElementoId, e : Etiqueta) : void
    }
    interface IReproduccion <<driving port>> {
-     + abrirSesion(u : UsuarioId, id : ElementoId) : SesionReproduccion
-     + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : SesionReproduccion
+     + abrirSesion(u : UsuarioId, id : ElementoId) : InstantaneaSesion
+     + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : InstantaneaSesion
      + solicitarStream(s : SesionId, p : PerfilStream) : FlujoMultimedia
      + registrarProgreso(s : SesionId, pos : Duration) : void
      + pausarSesion(s : SesionId) : void
@@ -196,7 +180,7 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
      + cerrarSesion(valor : String) : void
      + accederConEnlace(enlace : String) : TokenSesion
      + autorizarRecurso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : boolean
-     + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : EnlaceCompartido
+     + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : InstantaneaEnlace
      + crearUsuario(admin : UsuarioId, nombreUsuario : String, clave : String, rol : Rol) : UsuarioId
      + gestionarRoles(admin : UsuarioId, obj : UsuarioId, rol : Rol) : void
      + otorgarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
@@ -239,13 +223,11 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  IDespachoEventos <|.. ServicioDespachoEventos
 
  AdaptadorCLI --> IGestionCatalogo : invoca
- AdaptadorDesktop --> IGestionCatalogo : invoca
- AdaptadorDesktop --> ISincronizacion : invoca
- AdaptadorMobile --> ISincronizacion : invoca
  AdaptadorApiRest --> IGestionCatalogo : invoca
  AdaptadorApiRest --> IBusqueda : invoca
  AdaptadorApiRest --> IReproduccion : invoca
  AdaptadorApiRest --> IControlAcceso : invoca
+ AdaptadorApiRest --> ISincronizacion : invoca
  AdaptadorProgramador ..> TareaProgramada : dispara
  TareaReindexar --> IGestionCatalogo : invoca
  TareaRespaldar --> IGestionCatalogo : invoca
@@ -258,10 +240,10 @@ package "Puertos de salida (dominio)" #F3E5F5 {
    interface IRepositorioCatalogo <<driven port>> {
      + obtenerCatalogo() : CatalogoIndice
      + guardar(c : CatalogoIndice) : void
-     + buscarArchivo(id : ElementoId) : Optional<ArchivoMultimedia>
-     + buscarPorHuella(h : HuellaDigital) : Optional<ArchivoMultimedia>
-     + buscarPorTexto(txt : String) : List<ArchivoMultimedia>
-     + buscarPorCriterios(c : CriterioBusqueda) : List<ArchivoMultimedia>
+     + buscarArchivo(id : ElementoId) : Optional<InstantaneaArchivo>
+     + buscarPorHuella(h : HuellaDigital) : Optional<InstantaneaArchivo>
+     + buscarPorTexto(txt : String) : List<InstantaneaArchivo>
+     + buscarPorCriterios(c : CriterioBusqueda) : List<InstantaneaArchivo>
    }
    interface IRepositorioSesiones <<driven port>> {
      + guardar(s : SesionReproduccion) : void
@@ -322,6 +304,13 @@ package "Puertos de salida (dominio)" #F3E5F5 {
      + registrar(nombreUsuario : String, clave : String) : IdentidadVinculada
      + cambiarClave(i : IdentidadVinculada, nueva : String) : void
    }
+   interface IRespaldoDatos <<driven port>> {
+     + respaldar(destino : Path) : Path
+   }
+   interface IRepositorioConfiguracion <<driven port>> {
+     + obtenerRutaBiblioteca() : Path
+     + guardarRutaBiblioteca(ruta : Path) : void
+   }
    interface IPublicadorEventos <<driven port>> {
      + publicar(e : EventoDominio) : void
    }
@@ -337,7 +326,9 @@ package "Puertos de salida (dominio)" #F3E5F5 {
  ServicioAutorizado ..> IRepositorioUsuarios : carga usuario para autorizar
  ServicioCatalogo ..> IRepositorioCatalogo : consulta / persiste
  ServicioCatalogo ..> IRepositorioSesiones : cuenta sesiones activas
- ServicioCatalogo ..> IAlmacenamientoArchivos : lee / escribe / respalda
+ ServicioCatalogo ..> IAlmacenamientoArchivos : lee / escribe
+ ServicioCatalogo ..> IRespaldoDatos : respalda la base de datos
+ ServicioCatalogo ..> IRepositorioConfiguracion : guarda la ruta de la biblioteca
  ServicioCatalogo ..> IExtractorMetadatos : extrae (via PasoExtraccion)
  ServicioBusqueda ..> IRepositorioCatalogo : consulta / persiste
  ServicioReproduccion ..> IRepositorioSesiones : persiste sesiones
@@ -362,22 +353,31 @@ package "Puertos de salida (dominio)" #F3E5F5 {
 ' ============================================================
 package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
    abstract class AdaptadorPersistenciaJdbc <<secondary adapter>> {
-     # mapeadorArchivo : MapeadorArchivo
      # mapeadorCatalogo : MapeadorCatalogoIndice
-     # mapeadorSesion : MapeadorSesion
+     # mapeadorArchivo : MapeadorArchivo
+     # mapeadorMetadato : MapeadorMetadato
+     # mapeadorColeccion : MapeadorColeccion
      # mapeadorUsuario : MapeadorUsuario
+     # mapeadorPermiso : MapeadorPermiso
+     # mapeadorIdentidad : MapeadorIdentidad
+     # mapeadorSesion : MapeadorSesion
      # mapeadorEnlace : MapeadorEnlace
      # mapeadorEvento : MapeadorEvento
      # {abstract} conexion() : Connection
+     # {abstract} volcarBase(destino : Path) : Path
+     - armarCatalogo(c : Connection) : InstantaneaCatalogo
+     - escribirCatalogo(c : Connection, i : InstantaneaCatalogo, eventos : List<EventoCatalogo>) : void
    }
    class AdaptadorPersistenciaSQLite <<secondary adapter>> {
      - rutaBaseDatos : Path
      # conexion() : Connection
+     # volcarBase(destino : Path) : Path
    }
    class AdaptadorPersistenciaPostgreSQL <<secondary adapter>> {
      - url : URI
      - pool : DataSource
      # conexion() : Connection
+     # volcarBase(destino : Path) : Path
    }
    class AdaptadorArchivosLocal <<secondary adapter>> {
      - raizPermitida : Path
@@ -391,7 +391,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      + espacioLibre() : long
      - validarDentroDeRaiz(ruta : Path) : void
    }
-   class AdaptadorArchivosRed <<secondary adapter>> {
+   class AdaptadorArchivosRed <<secondary adapter>> #FCE4D6;line.dashed;line:999999 {
      - punto : URI
      - credencialesMontaje : String
      + leer(ruta : Path) : InputStream
@@ -428,7 +428,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      - calcularHash(clave : String, sal : String) : String
      - compararClave(plana : String, hash : String) : boolean
    }
-   class AdaptadorIdentidadOIDC <<secondary adapter>> {
+   class AdaptadorIdentidadOIDC <<secondary adapter>> #FCE4D6;line.dashed;line:999999 {
      - emisor : URI
      - clientId : String
      + soporta(c : Credenciales) : boolean
@@ -449,30 +449,45 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      + desuscribir(obs : IObservadorCatalogo) : void
      - despacharAObservadores(e : EventoDominio) : void
    }
-   class MapeadorArchivo <<mapper>> {
-     + aEntidad(fila : ResultSet) : ArchivoMultimedia
-     + aFila(a : ArchivoMultimedia) : Map<String,Object>
-     + aMetadatos(json : String) : List<Metadato>
-   }
    class MapeadorCatalogoIndice <<mapper>> {
-     + aEntidad(fila : ResultSet) : CatalogoIndice
-     + aFila(c : CatalogoIndice) : Map<String,Object>
+     + aInstantanea(fila : ResultSet, archivos : List<InstantaneaArchivo>, colecciones : List<InstantaneaColeccion>) : InstantaneaCatalogo
+     + asignar(sentencia : PreparedStatement, i : InstantaneaCatalogo) : void
    }
-   class MapeadorSesion <<mapper>> {
-     + aEntidad(fila : ResultSet) : SesionReproduccion
-     + aFila(s : SesionReproduccion) : Map<String,Object>
+   class MapeadorArchivo <<mapper>> {
+     + aInstantanea(fila : ResultSet, metadatos : List<Metadato>, etiquetas : Set<Etiqueta>) : InstantaneaArchivo
+     + asignar(sentencia : PreparedStatement, i : InstantaneaArchivo) : void
+   }
+   class MapeadorMetadato <<mapper>> {
+     + aValor(fila : ResultSet) : Metadato
+     + asignar(sentencia : PreparedStatement, archivoId : ElementoId, m : Metadato) : void
+   }
+   class MapeadorColeccion <<mapper>> {
+     + aInstantanea(fila : ResultSet, elementos : List<ElementoId>) : InstantaneaColeccion
+     + asignar(sentencia : PreparedStatement, i : InstantaneaColeccion) : void
    }
    class MapeadorUsuario <<mapper>> {
-     + aEntidad(fila : ResultSet) : Usuario
-     + aFila(u : Usuario) : Map<String,Object>
+     + aInstantanea(fila : ResultSet, permisos : Set<Permiso>, identidades : Set<IdentidadVinculada>) : InstantaneaUsuario
+     + asignar(sentencia : PreparedStatement, i : InstantaneaUsuario) : void
+   }
+   class MapeadorPermiso <<mapper>> {
+     + aValor(fila : ResultSet) : Permiso
+     + asignar(sentencia : PreparedStatement, usuarioId : UsuarioId, p : Permiso) : void
+   }
+   class MapeadorIdentidad <<mapper>> {
+     + aValor(fila : ResultSet) : IdentidadVinculada
+     + asignar(sentencia : PreparedStatement, usuarioId : UsuarioId, i : IdentidadVinculada) : void
+   }
+   class MapeadorSesion <<mapper>> {
+     + aInstantanea(fila : ResultSet) : InstantaneaSesion
+     + asignar(sentencia : PreparedStatement, i : InstantaneaSesion) : void
    }
    class MapeadorEnlace <<mapper>> {
-     + aEntidad(fila : ResultSet) : EnlaceCompartido
-     + aFila(e : EnlaceCompartido) : Map<String,Object>
+     + aInstantanea(fila : ResultSet) : InstantaneaEnlace
+     + asignar(sentencia : PreparedStatement, i : InstantaneaEnlace) : void
    }
    class MapeadorEvento <<mapper>> {
      + aEvento(fila : ResultSet) : EventoDominio
-     + aFila(e : EventoDominio) : Map<String,Object>
+     + asignar(sentencia : PreparedStatement, e : EventoDominio) : void
    }
    class RepositorioCatalogoConCache <<decorator>> {
      - delegado : IRepositorioCatalogo
@@ -481,10 +496,10 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      - ttl : Duration
      + obtenerCatalogo() : CatalogoIndice
      + guardar(c : CatalogoIndice) : void
-     + buscarArchivo(id : ElementoId) : Optional<ArchivoMultimedia>
-     + buscarPorHuella(h : HuellaDigital) : Optional<ArchivoMultimedia>
-     + buscarPorTexto(txt : String) : List<ArchivoMultimedia>
-     + buscarPorCriterios(c : CriterioBusqueda) : List<ArchivoMultimedia>
+     + buscarArchivo(id : ElementoId) : Optional<InstantaneaArchivo>
+     + buscarPorHuella(h : HuellaDigital) : Optional<InstantaneaArchivo>
+     + buscarPorTexto(txt : String) : List<InstantaneaArchivo>
+     + buscarPorCriterios(c : CriterioBusqueda) : List<InstantaneaArchivo>
      - invalidar() : void
      - vigente() : boolean
    }
@@ -497,7 +512,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      - claveCache(ruta : Path, p : PerfilStream) : String
      - expulsarMasAntiguos() : void
    }
-   class ProveedorIdentidadResiliente <<decorator>> {
+   class ProveedorIdentidadResiliente <<decorator>> #FDEBD0;line.dashed;line:999999 {
      - delegado : IProveedorIdentidad
      - estado : EstadoCircuito
      - umbralFallos : int
@@ -507,7 +522,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      - registrarFallo() : void
      - circuitoAbierto() : boolean
    }
-   enum EstadoCircuito {
+   enum EstadoCircuito #F7F7F7;line.dashed;line:999999 {
      CERRADO
      ABIERTO
      SEMI_ABIERTO
@@ -524,6 +539,8 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
  IRegistroCambios <|.. AdaptadorPersistenciaJdbc
  IRepositorioOutbox <|.. AdaptadorPersistenciaJdbc
  IUnidadDeTrabajo <|.. AdaptadorPersistenciaJdbc
+ IRespaldoDatos <|.. AdaptadorPersistenciaJdbc
+ IRepositorioConfiguracion <|.. AdaptadorPersistenciaJdbc
  IAlmacenamientoArchivos <|.. AdaptadorArchivosLocal
  IAlmacenamientoArchivos <|.. AdaptadorArchivosRed
  IExtractorMetadatos <|.. AdaptadorMetadatos
@@ -541,10 +558,14 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
  TranscodificadorConCache --> ITranscodificador : delegado
  ProveedorIdentidadResiliente --> IProveedorIdentidad : delegado
  ProveedorIdentidadResiliente --> EstadoCircuito : mantiene estado
- AdaptadorPersistenciaJdbc ..> MapeadorArchivo : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorCatalogoIndice : utiliza
- AdaptadorPersistenciaJdbc ..> MapeadorSesion : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorArchivo : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorMetadato : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorColeccion : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorUsuario : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorPermiso : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorIdentidad : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorSesion : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorEnlace : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorEvento : utiliza
  AdaptadorBusEventos ..> IObservadorCatalogo : notifica
@@ -573,6 +594,8 @@ package "Composicion (arranque)" #FFFDE7 {
      + {abstract} crearRegistroCambios() : IRegistroCambios
      + {abstract} crearRepositorioOutbox() : IRepositorioOutbox
      + {abstract} crearUnidadDeTrabajo() : IUnidadDeTrabajo
+     + {abstract} crearRespaldoDatos() : IRespaldoDatos
+     + {abstract} crearRepositorioConfiguracion() : IRepositorioConfiguracion
      + {abstract} crearRepositorioTokens() : IRepositorioTokens
      + {abstract} crearAlmacenamiento() : IAlmacenamientoArchivos
      + {abstract} crearProveedoresIdentidad() : List<IProveedorIdentidad>
@@ -592,6 +615,7 @@ package "Composicion (arranque)" #FFFDE7 {
      - decorarPuertos() : void
      - construirCadenaIngesta() : PasoIngesta
      - crearServicios() : void
+     - crearServidorHttp() : Javalin
      - crearAdaptadoresPrimarios() : void
      - registrarObservadores() : void
    }
@@ -633,6 +657,10 @@ package "Composicion (arranque)" #FFFDE7 {
    implementan los adaptadores secundarios.
    Una instalacion tiene un solo catalogo, por eso
    obtenerCatalogo() no recibe identificador.
+   Las consultas devuelven instantaneas (solo lectura);
+   obtenerCatalogo() devuelve el agregado para cambiarlo.
+   guardar() compara la version (bloqueo optimista) y
+   lanza ConflictoDeVersion si otro lo guardo antes.
  end note
 
  note right of IRepositorioOutbox
@@ -669,9 +697,29 @@ package "Composicion (arranque)" #FFFDE7 {
  end note
 
  note bottom of AdaptadorPersistenciaJdbc
-   Implementa una sola vez los 7 puertos de persistencia.
-   SQLite y PostgreSQL solo cambian como se obtiene la
-   conexion (Template Method).
+   Implementa una sola vez los 9 puertos de persistencia,
+   con JDBC directo (ADR 0015). SQLite y PostgreSQL solo
+   cambian la conexion y el volcado de la base para el
+   respaldo (Template Method).
+   El adaptador escribe el SQL y arma cada agregado: lanza
+   una consulta por tabla, convierte las filas con los
+   mapeadores y entrega desdeInstantanea(...). El registro
+   de cambios guarda eventos y reutiliza MapeadorEvento.
+ end note
+
+ note bottom of MapeadorArchivo
+   Mapeadores de fila: uno por instantanea o valor, sin
+   estado y sin SQL. aInstantanea()/aValor() leen la fila
+   actual; asignar() llena los parametros del INSERT o
+   UPDATE. Son instancias que el adaptador tiene como
+   atributos, no metodos estaticos.
+ end note
+
+ note bottom of FabricaServidor
+   En la version 1.0 solo cambia la base de datos
+   (PostgreSQL): usa AdaptadorArchivosLocal y la
+   identidad local hasta que existan los adaptadores
+   de red y OIDC (ADR 0009).
  end note
 
  note bottom of TareaSincronizar

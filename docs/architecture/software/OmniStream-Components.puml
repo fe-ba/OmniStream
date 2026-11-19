@@ -16,6 +16,7 @@
 '  Line convention:
 '    solid line    component -- port : PROVIDES / IMPLEMENTS it
 '    arrow ..>     component -> port : CONSUMES it / depends on it
+'    dashed border: outside the scope of version 1.0 (ADR 0009)
 ' ============================================================
 
 skinparam backgroundColor #FFFFFF
@@ -64,8 +65,7 @@ skinparam interface {
 ' ============================================================
 rectangle "Clients" <<external>> {
   component "Browser"          as CliWeb
-  component "Desktop app"  as CliDesk
-  component "Mobile app"          as CliMobile
+  component "Mobile app"          as CliMobile #FFFFFF;line.dashed;line:999999
   component "Terminal / scripts" as CliCli
 }
 
@@ -73,11 +73,9 @@ rectangle "Clients" <<external>> {
 ' 2. PRESENTATION LAYER  (primary / driving adapters)
 ' ============================================================
 rectangle "Presentation layer\n(primary / driving adapters)" <<presentation>> {
-  component "Web UI adapter\n<<HTTP controller>>"            as AdWeb
-  component "Desktop adapter\n<<local controller>>"          as AdDesk
-  component "Mobile adapter\n<<mobile controller>>"           as AdMobile
+  component "Web UI adapter\n<<Javalin>>"                     as AdWeb
   component "CLI adapter\n<<controller>>"                    as AdCli
-  component "REST API adapter\n<<controller>>"               as AdApi
+  component "REST API adapter\n<<Javalin>>"                   as AdApi
   component "Scheduler adapter\n<<scheduled tasks>>"     as AdScheduler
 }
 
@@ -140,6 +138,8 @@ rectangle "Driven ports" <<domain>> {
   interface "ITranscoder"       as POUT_TRANS
   interface "IIdentityProvider"     as POUT_IDP
   interface "ICredentialRegistry"   as POUT_CRED
+  interface "IDataBackup"          as POUT_BACKUP
+  interface "IConfigurationRepository" as POUT_CONFIG
   interface "IEventPublisher"      as POUT_PUB
   interface "IEventSubscriber"      as POUT_SUB
 }
@@ -163,7 +163,7 @@ rectangle "Infrastructure\n(secondary / driven adapters)" <<driven>> {
 rectangle "External resources" <<infra>> {
   database  "Database\nand index"               as DbIndex
   folder    "File library\n(NAS / disk)" as FsLibrary
-  component "External\nidentity provider"       as IdpExternal
+  component "External\nidentity provider"       as IdpExternal #FFFFFF;line.dashed;line:999999
 }
 
 ' ============================================================
@@ -177,12 +177,9 @@ rectangle "Bootstrap" <<bootstrap>> {
 ' CLIENTS -> PRESENTATION
 ' ============================================================
 CliWeb    --> AdWeb
-CliDesk   --> AdDesk
-CliMobile --> AdMobile
+CliWeb    --> AdApi : HTTP/JSON
+CliMobile ..> AdApi : HTTP/JSON
 CliCli    --> AdCli
-AdWeb     --> AdApi : HTTP/JSON
-AdDesk    --> AdApi : HTTP/IPC
-AdMobile  --> AdApi : HTTP/JSON
 
 ' ============================================================
 ' PRESENTATION -> DRIVING PORTS  (consumes)
@@ -191,10 +188,8 @@ AdApi    ..> PIN_CAT
 AdApi    ..> PIN_SEARCH
 AdApi    ..> PIN_PLAY
 AdApi    ..> PIN_ACC
+AdApi    ..> PIN_SYNC
 AdCli    ..> PIN_CAT
-AdDesk   ..> PIN_CAT
-AdDesk   ..> PIN_SYNC
-AdMobile ..> PIN_SYNC
 AdScheduler   ..> PIN_CAT : reindex / back up
 AdScheduler   ..> PIN_DISPATCH : sync
 
@@ -238,6 +233,8 @@ SvCatalog ..> POUT_REPO
 SvCatalog ..> POUT_SES
 SvCatalog ..> POUT_FS
 SvCatalog ..> POUT_META
+SvCatalog ..> POUT_BACKUP
+SvCatalog ..> POUT_CONFIG
 SvSearch ..> POUT_REPO
 SvPlayback ..> POUT_SES
 SvPlayback ..> POUT_REPO
@@ -266,6 +263,8 @@ AdPersistence  -up- POUT_LINK
 AdPersistence  -up- POUT_CHANGES
 AdPersistence  -up- POUT_OUT
 AdPersistence  -up- POUT_UOW
+AdPersistence  -up- POUT_BACKUP
+AdPersistence  -up- POUT_CONFIG
 AdFs    -up- POUT_FS
 AdMeta  -up- POUT_META
 AdTrans -up- POUT_TRANS
@@ -286,7 +285,7 @@ AdIdp   --> DbIndex : local credentials
 AdFs    --> FsLibrary
 AdMeta  --> FsLibrary
 AdTrans --> FsLibrary
-AdIdp   --> IdpExternal : optional (OIDC)
+AdIdp   ..> IdpExternal : optional (OIDC)
 
 ' ============================================================
 ' BOOTSTRAP -> LAYERS
@@ -304,6 +303,17 @@ end note
 ' ============================================================
 ' NOTES
 ' ============================================================
+note right of CliMobile
+  There is no separate desktop app: it is the
+  server with the local profile, used from the
+  browser (ADR 0010). The mobile app comes
+  after version 1.0 and will use the
+  REST API, which already exposes synchronization.
+  Version 1.0 has neither OIDC nor NAS: the
+  identity adapter is local only and the
+  file storage adapter local disk only (ADR 0009).
+end note
+
 note left of PIN_CAT
   **Driving ports**
   PROVIDED by the domain (solid line).
