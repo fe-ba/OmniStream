@@ -87,8 +87,8 @@ git config merge.ours.driver true        # auto-resolve conflicts on the CI-gene
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first pull request. In
 short:
 
-- Every change goes through a pull request to `main`, reviewed by the owner of
-  the area it touches.
+- Each area has its own branch (`model`, `ports`, `services`); integrate into
+  `main` often, and only with code that passes `./mvnw verify`.
 - Commits, branches and repository files are written in English, following
   [Conventional Commits](https://www.conventionalcommits.org/):
   `feat(model): ...`, `fix(services): ...`, `docs: ...`.
