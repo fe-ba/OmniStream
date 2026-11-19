@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>co.omnistream</groupId>
+    <artifactId>omnistream</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>omnistream-infrastructure</artifactId>
+  <name>OmniStream Infrastructure</name>
+  <description>Secondary adapters, mappers and decorators</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>co.omnistream</groupId>
+      <artifactId>omnistream-domain</artifactId>
+    </dependency>
+    <!-- Contracts that every real adapter must pass (ADR 0018) -->
+    <dependency>
+      <groupId>co.omnistream</groupId>
+      <artifactId>omnistream-domain</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Dependency rule of the hexagonal architecture (ADR 0013) -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>enforce-layers</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <bannedDependencies>
+                  <excludes>
+                    <exclude>co.omnistream:omnistream-presentation</exclude>
+                    <exclude>co.omnistream:omnistream-bootstrap</exclude>
+                  </excludes>
+                  <message>Infrastructure depends only on the domain.</message>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
