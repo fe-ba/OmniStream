@@ -1,0 +1,467 @@
+@startuml OmniStream-Services
+' ============================================================
+'  OmniStream - Class diagram
+'  DOMAIN layer, SERVICES view
+'  Module: omnistream-domain
+'
+'  Domain services that implement the driving ports,
+'  the patterns they use internally and the port DTOs.
+'
+'  Conventions:
+'   - Each service implements one driving port (see note).
+'   - Dependencies on driven ports appear as attributes
+'     typed with the interface; the lines to those
+'     ports are in OmniStream-PortsAdapters.puml.
+'   - Model types (User, CatalogIndex, ...) are shown
+'     without members: they are in OmniStream-Domain-Model.puml.
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 50
+hide empty members
+' Packages are visual groupings only, not namespaces.
+set separator none
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 12
+  AttributeFontSize 11
+  BackgroundColor<<domain service>>      #FCE8B4
+  BorderColor<<domain service>>          #B89748
+  BackgroundColor<<service base>>        #ECE4F8
+  BorderColor<<service base>>            #9673A6
+  BackgroundColor<<chain handler>>       #ECE4F8
+  BorderColor<<chain handler>>           #9673A6
+  BackgroundColor<<handler>>             #FCF4E0
+  BorderColor<<handler>>                 #C4A868
+  BackgroundColor<<strategy>>            #FCF4E0
+  BorderColor<<strategy>>                #C4A868
+  BackgroundColor<<observer>>            #FCF4E0
+  BorderColor<<observer>>                #C4A868
+  BackgroundColor<<dto>>                 #FCF4E0
+  BorderColor<<dto>>                     #C4A868
+  BackgroundColor<<command>>             #FCF4E0
+  BorderColor<<command>>                 #C4A868
+  BackgroundColor<<event>>               #ECE4F8
+  BorderColor<<event>>                   #9673A6
+  BackgroundColor<<aggregate root>>      #FFE8B5
+  BorderColor<<aggregate root>>          #B8860B
+  BackgroundColor<<policy>>              #E6F6E6
+  BorderColor<<policy>>                  #3E8E41
+  BackgroundColor<<driven port>>         #F3E5F5
+  BorderColor<<driven port>>             #8E44AD
+}
+skinparam package {
+  BackgroundColor #FCFCFC
+  BorderColor #555555
+}
+skinparam note {
+  BackgroundColor #FEFFDD
+  BorderColor #B8A848
+  FontSize 11
+}
+
+' ============================================================
+' AUTHORIZATION BASE
+' ============================================================
+package "Authorization base" {
+
+  abstract class AuthorizedService <<service base>> {
+    # userRepository : IUserRepository
+    # accessPolicy : AccessPolicy
+    __
+    # loadUser(u : UserId) : User
+    # checkAccess(u : UserId, r : ItemId, acc : AccessType) : void
+    # requireAdmin(admin : UserId) : void
+  }
+
+  note top of AuthorizedService
+    Common base of the services that receive a UserId.
+    Loads the User through IUserRepository and asks
+    AccessPolicy. It depends on abstractions, not on another
+    service. If access is denied it throws AccessDenied.
+  end note
+}
+
+' ============================================================
+' ACCESS AND SECURITY
+' ============================================================
+package "Access and security" {
+
+  class AccessService <<domain service>> {
+    - providers : List<IIdentityProvider>
+    - credentialRegistry : ICredentialRegistry
+    - tokenRepository : ITokenRepository
+    - sharedLinkRepository : ISharedLinkRepository
+    - unitOfWork : IUnitOfWork
+    __
+    + authenticateUser(c : Credentials) : SessionToken
+    + validateToken(value : String) : Optional<SessionToken>
+    + logout(value : String) : void
+    + accessWithLink(link : String) : SessionToken
+    + authorizeResource(u : UserId, r : ItemId, acc : AccessType) : boolean
+    + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLink
+    + createUser(admin : UserId, username : String, password : String, role : Role) : UserId
+    + manageRoles(admin : UserId, target : UserId, role : Role) : void
+    + grantPermission(admin : UserId, u : UserId, p : Permission) : void
+    + revokePermission(admin : UserId, u : UserId, p : Permission) : void
+    + deactivateUser(admin : UserId, u : UserId) : void
+    - selectProvider(c : Credentials) : IIdentityProvider
+    - issueToken(u : User) : SessionToken
+  }
+
+  interface IIdentityProvider <<driven port>>
+
+  note bottom of IIdentityProvider
+    **Strategy pattern (identity):**
+    the port is the strategy. selectProvider()
+    uses the first one that supports the credentials.
+    Implementations: LocalIdentityAdapter and
+    OidcIdentityAdapter (see ports and adapters).
+  end note
+}
+
+' ============================================================
+' CATALOG AND INGESTION
+' ============================================================
+package "Catalog and ingestion" {
+
+  class CatalogService <<domain service>> {
+    - ingestionChain : IngestionStep
+    - catalogRepository : ICatalogRepository
+    - sessionRepository : ISessionRepository
+    - storage : IFileStorage
+    __
+    + ingestFile(u : UserId, path : Path) : IngestionResult
+    + uploadFile(u : UserId, fileName : String, data : InputStream) : IngestionResult
+    + reindexLibrary(u : UserId, root : Path) : int
+    + detectDuplicates(u : UserId) : List<MediaFile>
+    + editMetadata(u : UserId, id : ItemId, key : String, value : String) : void
+    + deleteFile(u : UserId, id : ItemId) : void
+    + backupCatalog(admin : UserId, destination : Path) : Path
+    + configureLibraryPath(admin : UserId, path : Path) : void
+    + monitorServerStatus(admin : UserId) : ServerStatus
+    - ingest(ctx : IngestionContext) : IngestionResult
+  }
+
+  abstract class IngestionStep <<chain handler>> {
+    - next : IngestionStep
+    __
+    + chain(next : IngestionStep) : IngestionStep
+    + execute(ctx : IngestionContext) : IngestionResult
+    # {abstract} process(ctx : IngestionContext) : boolean
+  }
+
+  class ExtractionStep <<handler>> {
+    - storage : IFileStorage
+    - extractor : IMetadataExtractor
+    __
+    # process(ctx : IngestionContext) : boolean
+  }
+
+  class DuplicatesStep <<handler>> {
+    - policy : DeduplicationPolicy
+    __
+    # process(ctx : IngestionContext) : boolean
+  }
+
+  class IndexingStep <<handler>> {
+    # process(ctx : IngestionContext) : boolean
+  }
+
+  note left of IngestionStep
+    **Chain of Responsibility pattern:**
+    Extraction -> Duplicates -> Indexing.
+    execute() calls process() and, if it returns
+    true, moves on to the next one (Template Method).
+    ExtractionStep creates the MediaFile with its
+    fingerprint and metadata; DuplicatesStep stops the chain
+    if the policy says REJECT; IndexingStep calls
+    CatalogIndex.ingest(). The chain is built by
+    CompositionRoot.
+  end note
+}
+
+' ============================================================
+' SEARCH AND ORGANIZATION
+' ============================================================
+package "Search and organization" {
+
+  class SearchService <<domain service>> {
+    - catalogRepository : ICatalogRepository
+    __
+    + searchContent(u : UserId, txt : String) : List<CatalogItem>
+    + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFile>
+    + browseLibrary(u : UserId, col : ItemId) : List<CatalogItem>
+    + manageCollections(u : UserId, cmd : CollectionCommand) : Collection
+    + tagFile(u : UserId, id : ItemId, e : Tag) : void
+    - sortResults(l : List<MediaFile>, c : SearchCriteria) : List<MediaFile>
+  }
+}
+
+' ============================================================
+' SYNCHRONIZATION AND EVENTS
+' ============================================================
+package "Synchronization and events" {
+
+  class SyncService <<domain service>> {
+    - changeLog : IChangeLog
+    - catalogRepository : ICatalogRepository
+    - storage : IFileStorage
+    __
+    + syncChanges(u : UserId, since : Instant) : SyncDelta
+    + cacheContent(u : UserId, id : ItemId) : OfflinePackage
+    + hasPendingChanges(u : UserId, since : Instant) : boolean
+    - pack(a : MediaFile) : OfflinePackage
+    - filterVisible(u : User, d : SyncDelta) : SyncDelta
+  }
+
+  class EventDispatchService <<domain service>> {
+    - outbox : IOutboxRepository
+    - publisher : IEventPublisher
+    __
+    + publishPending(limit : int) : int
+  }
+
+  interface ICatalogObserver <<observer>> #E4F4E4;line:6FA86F {
+    + onCatalogChanged(e : DomainEvent) : void
+  }
+
+  class SyncObserver <<observer>> {
+    - changeLog : IChangeLog
+    __
+    + onCatalogChanged(e : DomainEvent) : void
+  }
+
+  note bottom of SyncObserver
+    **Observer pattern:**
+    the event bus (EventBusAdapter) is the only
+    owner of the observer list. CompositionRoot
+    registers this observer at startup. For each
+    CatalogEvent it writes to IChangeLog, which
+    SyncService reads from. Neither knows the other.
+  end note
+}
+
+' ============================================================
+' PLAYBACK
+' ============================================================
+package "Playback" {
+
+  class PlaybackService <<domain service>> {
+    - sessionRepository : ISessionRepository
+    - catalogRepository : ICatalogRepository
+    - streamStrategies : List<StreamStrategy>
+    __
+    + openSession(u : UserId, id : ItemId) : PlaybackSession
+    + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSession
+    + requestStream(s : SessionId, p : StreamProfile) : MediaStream
+    + recordProgress(s : SessionId, pos : Duration) : void
+    + pauseSession(s : SessionId) : void
+    + finishSession(s : SessionId) : void
+    - selectStream(a : MediaFile, p : StreamProfile) : StreamStrategy
+  }
+
+  interface StreamStrategy <<strategy>> #E4F4E4;line:6FA86F {
+    + supports(a : MediaFile, p : StreamProfile) : boolean
+    + generateStream(a : MediaFile, p : StreamProfile, pos : Duration) : MediaStream
+  }
+
+  class DirectStream <<strategy>> {
+    - storage : IFileStorage
+    __
+    + supports(a : MediaFile, p : StreamProfile) : boolean
+    + generateStream(a : MediaFile, p : StreamProfile, pos : Duration) : MediaStream
+  }
+
+  class TranscodedStream <<strategy>> {
+    - transcoder : ITranscoder
+    __
+    + supports(a : MediaFile, p : StreamProfile) : boolean
+    + generateStream(a : MediaFile, p : StreamProfile, pos : Duration) : MediaStream
+  }
+
+  note right of StreamStrategy
+    **Strategy pattern (stream):**
+    DirectStream reads the file as is (direct play);
+    TranscodedStream converts it on demand.
+  end note
+}
+
+' ============================================================
+' REFERENCED DOMAIN MODEL
+' ============================================================
+package "Model (see domain diagram)" {
+  class AccessPolicy <<policy>>
+  class DeduplicationPolicy <<policy>>
+  class User <<aggregate root>>
+  class CatalogIndex <<aggregate root>>
+  class SharedLink <<aggregate root>>
+  class PlaybackSession <<aggregate root>>
+  abstract class DomainEvent <<event>>
+  abstract class CatalogEvent <<event>>
+}
+
+' ============================================================
+' PORT DTOS AND COMMANDS
+' ============================================================
+package "Port DTOs and commands" {
+
+  abstract class Credentials <<dto>> #ECE4F8;line:9673A6 {
+    + provider : String
+  }
+
+  class LocalCredentials <<dto>> {
+    + username : String
+    + password : String
+  }
+
+  class OidcCredentials <<dto>> {
+    + externalToken : String
+    + issuer : URI
+  }
+
+  class SessionToken <<dto>> {
+    + value : String
+    + userId : UserId
+    + role : Role
+    + expiresAt : Instant
+    __
+    + isValidAt(now : Instant) : boolean
+  }
+
+  class IngestionContext <<dto>> {
+    + catalog : CatalogIndex
+    + path : Path
+    + file : MediaFile
+    + result : IngestionResult
+  }
+
+  class ServerStatus <<dto>> {
+    + indexedFiles : int
+    + freeSpace : long
+    + activeSessions : int
+  }
+
+  class SearchCriteria <<dto>> {
+    + text : String
+    + type : MediaType
+    + tags : Set<Tag>
+    __
+    + hasFilters() : boolean
+  }
+
+  class CollectionCommand <<command>> {
+    + collectionId : ItemId
+    + name : String
+    + itemsToAdd : List<ItemId>
+  }
+
+  class StreamProfile <<dto>> {
+    + codec : String
+    + bitrateKbps : int
+    + resolution : String
+    __
+    + isDirectPlay() : boolean
+  }
+
+  class MediaStream <<dto>> {
+    + data : InputStream
+    + mime : String
+    + transcoded : boolean
+  }
+
+  class SyncDelta <<dto>> {
+    + added : List<ItemId>
+    + modified : List<ItemId>
+    + removed : List<ItemId>
+    __
+    + isEmpty() : boolean
+  }
+
+  class OfflinePackage <<dto>> {
+    + fileId : ItemId
+    + metadata : List<MetadataEntry>
+    + content : Path
+  }
+}
+
+' ============================================================
+' RELATIONS - AUTHORIZATION BASE
+' ============================================================
+AuthorizedService <|-- AccessService
+AuthorizedService <|-- CatalogService
+AuthorizedService <|-- SearchService
+AuthorizedService <|-- SyncService
+AuthorizedService <|-- PlaybackService
+AuthorizedService --> "1" AccessPolicy : accessPolicy
+AuthorizedService ..> User : <<loads>>
+
+' ============================================================
+' RELATIONS - ACCESS (identity Strategy)
+' ============================================================
+AccessService "1" o-- "1..*" IIdentityProvider : providers
+AccessService ..> SharedLink : <<creates>>
+AccessService ..> SessionToken : <<issues>>
+
+' ============================================================
+' RELATIONS - CATALOG AND INGESTION (Chain of Responsibility)
+' ============================================================
+CatalogService "1" *-- "1" IngestionStep : ingestionChain
+IngestionStep --> "0..1" IngestionStep : next
+IngestionStep <|-- ExtractionStep
+IngestionStep <|-- DuplicatesStep
+IngestionStep <|-- IndexingStep
+IngestionStep ..> IngestionContext : <<processes>>
+DuplicatesStep --> "1" DeduplicationPolicy : policy
+IndexingStep ..> CatalogIndex : <<ingest>>
+CatalogService ..> CatalogIndex : <<modifies>>
+SearchService ..> CatalogIndex : <<queries / modifies>>
+
+' ============================================================
+' RELATIONS - SYNCHRONIZATION AND EVENTS (Observer)
+' ============================================================
+ICatalogObserver <|.. SyncObserver
+SyncObserver ..> CatalogEvent : <<receives>>
+EventDispatchService ..> DomainEvent : <<publishes>>
+SyncService ..> SyncDelta : <<delivers>>
+
+' ============================================================
+' RELATIONS - PLAYBACK (stream Strategy)
+' ============================================================
+PlaybackService ..> PlaybackSession : <<controls>>
+PlaybackService "1" o-- "1..*" StreamStrategy : streamStrategies
+StreamStrategy <|.. DirectStream
+StreamStrategy <|.. TranscodedStream
+
+' ============================================================
+' RELATIONS - DTOS
+' ============================================================
+Credentials <|-- LocalCredentials
+Credentials <|-- OidcCredentials
+
+' ============================================================
+' DRIVING PORT IMPLEMENTED BY EACH SERVICE
+' ============================================================
+note as PortsNote
+  **Driving port implemented by each service**
+  CatalogService       -> ICatalogManagement
+  SearchService        -> ISearch
+  PlaybackService      -> IPlayback
+  AccessService        -> IAccessControl
+  SyncService          -> ISync
+  EventDispatchService -> IEventDispatch
+  The public methods of each service are exactly
+  those of its port.
+end note
+
+@enduml

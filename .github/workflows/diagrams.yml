@@ -1,0 +1,98 @@
+name: Render diagrams
+
+# Renders every PlantUML diagram under docs/architecture/software/ to an SVG
+# with the same name, next to its source. Runs only when a .puml (or this
+# workflow) changes. On pushes to main the SVGs are committed back; on pull
+# requests they are only checked and uploaded as an artifact.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/architecture/software/**/*.puml'
+      - '.github/workflows/diagrams.yml'
+  pull_request:
+    paths:
+      - 'docs/architecture/software/**/*.puml'
+      - '.github/workflows/diagrams.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: diagrams-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DIAGRAMS: docs/architecture/software
+  PLANTUML_VERSION: 1.2024.7
+  PLANTUML_SHA256: e34c12bbe9944f1f338ca3d88c9b116b86300cc8e90b35c4086b825b5ae96d24
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      # Pinned version, verified by checksum, so every run renders the same way
+      - name: Download PlantUML
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/plantuml.jar" \
+            "https://github.com/plantuml/plantuml/releases/download/v${PLANTUML_VERSION}/plantuml-${PLANTUML_VERSION}.jar"
+          echo "${PLANTUML_SHA256}  $RUNNER_TEMP/plantuml.jar" | sha256sum -c -
+
+      # Each diagram is rendered on its own and moved to <name>.svg, so the SVG
+      # always matches the file name even if @startuml declares another one.
+      # SVGs whose .puml no longer exists are deleted.
+      - name: Render diagrams to SVG
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          failed=0
+
+          while IFS= read -r -d '' puml; do
+            rm -f "$tmp"/*
+            if java -Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=16384 \
+                 -jar "$RUNNER_TEMP/plantuml.jar" -tsvg -failfast2 -o "$tmp" "$puml"; then
+              mv "$tmp"/*.svg "${puml%.puml}.svg"
+              echo "OK      $puml"
+            else
+              echo "::error file=$puml::PlantUML could not render this diagram"
+              failed=1
+            fi
+          done < <(find "$DIAGRAMS" -type f -name '*.puml' -print0 | sort -z)
+
+          while IFS= read -r -d '' svg; do
+            if [ ! -f "${svg%.svg}.puml" ]; then
+              rm -f "$svg"
+              echo "REMOVED $svg (no .puml)"
+            fi
+          done < <(find "$DIAGRAMS" -type f -name '*.svg' -print0)
+
+          exit "$failed"
+
+      - name: Upload SVGs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagrams-svg
+          path: ${{ env.DIAGRAMS }}/**/*.svg
+          if-no-files-found: warn
+
+      - name: Commit SVGs to the repo
+        if: success() && github.event_name != 'pull_request'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: render software diagrams [skip ci]"
+          file_pattern: 'docs/architecture/software/*.svg'
+          add_options: '-A'

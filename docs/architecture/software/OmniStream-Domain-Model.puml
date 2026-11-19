@@ -1,0 +1,493 @@
+@startuml OmniStream-Domain-Model
+' ============================================================
+'  OmniStream - Class diagram
+'  DOMAIN layer, MODEL view (entities, rules and events)
+'  Module: omnistream-domain
+'
+'  Scope: the model only. Domain services are in
+'  OmniStream-Services.puml and ports in
+'  OmniStream-PortsAdapters.puml.
+'
+'  Rules applied:
+'   - One package per aggregate; references between aggregates
+'     are BY IDENTIFIER, never by object.
+'   - Value objects are immutable and have no identity.
+'   - No getters/setters: every method expresses a rule.
+'   - Every change to the catalog goes through its root, which records
+'     the corresponding domain event.
+'   - Zero dependencies on frameworks, persistence or HTTP.
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #666666
+skinparam ArrowFontSize 11
+skinparam PackageFontStyle bold
+skinparam nodesep 25
+skinparam ranksep 55
+' Packages are visual groupings only, not namespaces.
+set separator none
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 12
+  AttributeFontSize 11
+  BackgroundColor<<aggregate root>> #FFE8B5
+  BorderColor<<aggregate root>>     #B8860B
+  BackgroundColor<<entity>>         #FFF7E0
+  BorderColor<<entity>>             #C9A227
+  BackgroundColor<<value object>>   #E8F4FD
+  BorderColor<<value object>>       #2E86AB
+  BackgroundColor<<abstract>>       #F0E6FA
+  BorderColor<<abstract>>           #8E44AD
+  BackgroundColor<<policy>>         #E6F6E6
+  BorderColor<<policy>>             #3E8E41
+  BackgroundColor<<event>>          #ECE4F8
+  BorderColor<<event>>              #9673A6
+}
+skinparam enum {
+  BackgroundColor #F7F7F7
+  BorderColor #888888
+  FontSize 11
+}
+skinparam package {
+  BackgroundColor #FCFCFC
+  BorderColor #AAAAAA
+}
+
+' ============================================================
+' CATALOG AGGREGATE     root: CatalogIndex
+' ============================================================
+package "Catalog aggregate" {
+
+  class CatalogIndex <<aggregate root>> {
+    - id : CatalogId
+    - name : String
+    - files : Map<Fingerprint, MediaFile>
+    - collections : List<Collection>
+    - events : List<CatalogEvent>
+    __
+    + ingest(file : MediaFile) : IngestionResult
+    + findByFingerprint(h : Fingerprint) : Optional<MediaFile>
+    + findItem(id : ItemId) : Optional<CatalogItem>
+    + hasDuplicate(h : Fingerprint) : boolean
+    + editMetadata(id : ItemId, m : MetadataEntry) : void
+    + tag(id : ItemId, e : Tag) : void
+    + delete(id : ItemId) : void
+    + createCollection(name : String) : Collection
+    + addToCollection(collection : ItemId, item : ItemId) : void
+    + totalFiles() : int
+    + pullEvents() : List<CatalogEvent>
+    - register(e : CatalogEvent) : void
+  }
+
+  abstract class CatalogItem <<abstract>> {
+    # id : ItemId
+    # name : String
+    __
+    + {abstract} totalSize() : long
+    + {abstract} countFiles() : int
+    + {abstract} contains(e : CatalogItem) : boolean
+    + rename(name : String) : void
+  }
+
+  class MediaFile <<entity>> {
+    - path : Path
+    - fingerprint : Fingerprint
+    - type : MediaType
+    - sizeBytes : long
+    - duration : Duration
+    - status : IndexingStatus
+    - ingestedAt : Instant
+    __
+    + isDuplicateOf(other : MediaFile) : boolean
+    + addMetadata(m : MetadataEntry) : void
+    + metadataEntry(key : String) : Optional<MetadataEntry>
+    + tag(e : Tag) : void
+    + markIndexed() : void
+    + markFailed(cause : String) : void
+    + totalSize() : long
+    + countFiles() : int
+    + contains(e : CatalogItem) : boolean
+  }
+
+  class Collection <<entity>> {
+    - description : String
+    __
+    + add(e : CatalogItem) : void
+    + remove(e : CatalogItem) : void
+    + totalSize() : long
+    + countFiles() : int
+    + contains(e : CatalogItem) : boolean
+    + depth() : int
+    - wouldCreateCycle(e : CatalogItem) : boolean
+  }
+
+  class MetadataEntry <<value object>> {
+    - key : String
+    - value : String
+    - source : MetadataSource
+    __
+    + isManual() : boolean
+    + withValue(v : String) : MetadataEntry
+  }
+
+  class Fingerprint <<value object>> {
+    - algorithm : String
+    - value : String
+    __
+    + matches(other : Fingerprint) : boolean
+  }
+
+  class Tag <<value object>> {
+    - name : String
+    __
+    + normalized() : String
+  }
+
+  class IngestionResult <<value object>> {
+    - fileId : ItemId
+    - duplicate : boolean
+    - action : DuplicateAction
+    __
+    + wasIndexed() : boolean
+  }
+
+  class CatalogId <<value object>> {
+    - value : UUID
+  }
+
+  class ItemId <<value object>> {
+    - value : UUID
+  }
+}
+
+' ============================================================
+' ACCESS AGGREGATE      root: User
+' ============================================================
+package "Access aggregate" {
+
+  class User <<aggregate root>> {
+    - id : UserId
+    - username : String
+    - role : Role
+    - permissions : Set<Permission>
+    - identities : Set<LinkedIdentity>
+    - active : boolean
+    __
+    + {static} create(username : String, role : Role, i : LinkedIdentity) : User
+    + {static} createGuest(resource : ItemId, level : PermissionLevel) : User
+    + canAccess(resource : ItemId, access : AccessType) : boolean
+    + grant(p : Permission) : void
+    + revoke(p : Permission) : void
+    + changeRole(r : Role) : void
+    + link(i : LinkedIdentity) : void
+    + isAdmin() : boolean
+    + deactivate() : void
+  }
+
+  class Permission <<value object>> {
+    - resource : ItemId
+    - level : PermissionLevel
+    __
+    + allows(access : AccessType) : boolean
+    + appliesTo(resource : ItemId) : boolean
+  }
+
+  class LinkedIdentity <<value object>> {
+    - issuer : String
+    - subject : String
+    __
+    + isLocal() : boolean
+  }
+
+  class UserId <<value object>> {
+    - value : UUID
+  }
+}
+
+' ============================================================
+' SHARED LINK AGGREGATE   root: SharedLink
+' ============================================================
+package "Shared link aggregate" {
+
+  class SharedLink <<aggregate root>> {
+    - id : SharedLinkId
+    - token : String
+    - collectionId : ItemId
+    - guestId : UserId
+    - level : PermissionLevel
+    - createdBy : UserId
+    - expiresAt : Instant
+    - revoked : boolean
+    __
+    + {static} create(collection : ItemId, guest : UserId, level : PermissionLevel, createdBy : UserId, lifetime : Duration) : SharedLink
+    + isValidAt(now : Instant) : boolean
+    + revoke() : void
+  }
+
+  class SharedLinkId <<value object>> {
+    - value : UUID
+  }
+}
+
+' ============================================================
+' PLAYBACK AGGREGATE    root: PlaybackSession
+' ============================================================
+package "Playback aggregate" {
+
+  class PlaybackSession <<aggregate root>> {
+    - id : SessionId
+    - fileId : ItemId
+    - userId : UserId
+    - position : Duration
+    - totalDuration : Duration
+    - status : SessionStatus
+    - startedAt : Instant
+    __
+    + advance(delta : Duration) : void
+    + pause() : void
+    + resume() : void
+    + finish() : void
+    + isCompleted() : boolean
+    + canResume() : boolean
+    + percentWatched() : double
+  }
+
+  class SessionId <<value object>> {
+    - value : UUID
+  }
+}
+
+' ============================================================
+' DOMAIN EVENTS
+' ============================================================
+package "Domain events" {
+
+  abstract class DomainEvent <<event>> {
+    - id : EventId
+    - occurredAt : Instant
+    __
+    + type() : String
+  }
+
+  abstract class CatalogEvent <<event>> {
+    - itemId : ItemId
+    __
+    + item() : ItemId
+    + {abstract} changeType() : ChangeType
+  }
+
+  class FileIngested <<event>> {
+    + changeType() : ChangeType
+  }
+  class FileModified <<event>> {
+    + changeType() : ChangeType
+  }
+  class FileDeleted <<event>> {
+    + changeType() : ChangeType
+  }
+  class CollectionCreated <<event>> {
+    + changeType() : ChangeType
+  }
+  class CollectionModified <<event>> {
+    + changeType() : ChangeType
+  }
+
+  class EventId <<value object>> {
+    - value : UUID
+  }
+}
+
+' ============================================================
+' DOMAIN POLICIES   (stateless rules)
+' ============================================================
+package "Domain policies" {
+
+  class DeduplicationPolicy <<policy>> {
+    + isDuplicate(a : MediaFile, c : CatalogIndex) : boolean
+    + resolve(incoming : MediaFile, existing : MediaFile) : DuplicateAction
+  }
+
+  class AccessPolicy <<policy>> {
+    + authorizes(u : User, resource : ItemId, access : AccessType) : boolean
+    + effectiveLevel(u : User, resource : ItemId) : PermissionLevel
+  }
+}
+
+' ============================================================
+' ENUMERATIONS
+' ============================================================
+package "Enumerations" {
+  enum MediaType {
+    VIDEO
+    AUDIO
+    IMAGE
+    DOCUMENT
+  }
+  enum IndexingStatus {
+    PENDING
+    INDEXING
+    INDEXED
+    ERROR
+  }
+  enum MetadataSource {
+    EXTRACTED
+    MANUAL
+  }
+  enum Role {
+    ADMIN
+    USER
+    GUEST
+  }
+  enum PermissionLevel {
+    READ
+    WRITE
+    MANAGE
+  }
+  enum AccessType {
+    VIEW
+    DOWNLOAD
+    MODIFY
+    DELETE
+  }
+  enum SessionStatus {
+    ACTIVE
+    PAUSED
+    FINISHED
+  }
+  enum DuplicateAction {
+    REJECT
+    REPLACE
+    KEEP_BOTH
+  }
+  enum ChangeType {
+    ADDED
+    MODIFIED
+    REMOVED
+  }
+}
+
+' ============================================================
+' RELATIONS  -  CATALOG AGGREGATE
+' ============================================================
+
+' The root owns the files: deleting the catalog deletes them
+CatalogIndex "1" *-- "0..*" MediaFile : indexes >
+CatalogIndex "1" *-- "0..*" Collection         : organizes >
+CatalogIndex "1" *-- "1"    CatalogId        : id >
+CatalogIndex ..> IngestionResult : produces
+
+' COMPOSITE: the collection groups items that exist on their own
+CatalogItem <|-- MediaFile
+CatalogItem <|-- Collection
+Collection "1" o-- "0..*" CatalogItem : items >
+
+' The file owns its metadata, fingerprint and tags
+MediaFile "1" *-- "0..*" MetadataEntry  : metadata >
+MediaFile "1" *-- "1"    Fingerprint : fingerprint >
+MediaFile "1" *-- "0..*" Tag  : tags >
+
+CatalogItem "1" *-- "1" ItemId : id >
+
+' ============================================================
+' RELATIONS  -  ACCESS AGGREGATE
+' ============================================================
+User "1" *-- "0..*" Permission   : permissions >
+User "1" *-- "1..*" LinkedIdentity : identities >
+User "1" *-- "1"    UserId : id >
+
+' ============================================================
+' RELATIONS  -  SHARED LINK AGGREGATE
+' ============================================================
+SharedLink "1" *-- "1" SharedLinkId : id >
+
+' ============================================================
+' RELATIONS  -  PLAYBACK AGGREGATE
+' ============================================================
+PlaybackSession "1" *-- "1" SessionId : id >
+
+' ============================================================
+' REFERENCES BETWEEN AGGREGATES  -  ALWAYS BY IDENTIFIER
+' ============================================================
+PlaybackSession ..> ItemId : <<by id>>\nplays
+PlaybackSession ..> UserId  : <<by id>>\nbelongs to
+SharedLink   ..> ItemId : <<by id>>\nshares
+SharedLink   ..> UserId  : <<by id>>\nguest and creator
+
+' ============================================================
+' RELATIONS  -  EVENTS
+' ============================================================
+DomainEvent <|-- CatalogEvent
+CatalogEvent <|-- FileIngested
+CatalogEvent <|-- FileModified
+CatalogEvent <|-- FileDeleted
+CatalogEvent <|-- CollectionCreated
+CatalogEvent <|-- CollectionModified
+DomainEvent "1" *-- "1" EventId : id >
+CatalogIndex "1" o-- "0..*" CatalogEvent : records >
+
+' ============================================================
+' POLICIES
+' ============================================================
+DeduplicationPolicy ..> CatalogIndex : evaluates
+AccessPolicy        ..> User        : evaluates
+
+' ============================================================
+' DESIGN NOTES
+' ============================================================
+note top of CatalogItem
+  **Composite pattern**
+  MediaFile is the leaf and Collection the composite.
+  totalSize(), countFiles() and contains() are resolved
+  recursively over the tree; the leaf ends the recursion.
+  Collections can be nested inside collections.
+end note
+
+note right of Collection
+  wouldCreateCycle() walks the descendants before
+  adding: a collection cannot contain itself
+  or any of its ancestors. Composite invariant.
+end note
+
+note bottom of PlaybackSession
+  Separate aggregate: it references the file and the user
+  **by identifier**, never by object, so each aggregate
+  is loaded and persisted independently.
+end note
+
+note bottom of SharedLink
+  Sharing a collection creates a guest User
+  (User.createGuest) with permission on it, and a
+  link that points to that guest. Whoever uses the
+  link gets a token for that user, so authorization
+  works exactly as for any other user.
+end note
+
+note bottom of CatalogEvent
+  Every CatalogIndex method that changes the catalog
+  records an event. Inside save(), the persistence adapter
+  writes the aggregate and pullEvents() to the outbox
+  in the same transaction.
+  changeType() tells the change log whether the item
+  was added, modified or removed.
+end note
+
+note bottom of DeduplicationPolicy
+  Stateless rules, kept apart from the entities because
+  they need to see several objects at once.
+  Rules that fit in a single entity live in it
+  (e.g. isDuplicateOf, canResume).
+end note
+
+note bottom of LinkedIdentity
+  (issuer, subject) by which an identity provider
+  recognizes the user: "local" + username, or
+  the OIDC issuer + its "sub". The password never enters
+  the domain: the local identity adapter stores it.
+end note
+
+@enduml

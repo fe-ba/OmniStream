@@ -1,0 +1,467 @@
+@startuml OmniStream-Servicios
+' ============================================================
+'  OmniStream - Diagrama de clases
+'  Capa de DOMINIO, vista de SERVICIOS
+'  Modulo: omnistream-domain
+'
+'  Servicios de dominio que implementan los puertos de entrada,
+'  los patrones que usan por dentro y los DTOs de los puertos.
+'
+'  Convenciones:
+'   - Cada servicio implementa un puerto de entrada (ver nota).
+'   - Las dependencias hacia puertos de salida aparecen como
+'     atributos tipados con la interfaz; las lineas hacia esos
+'     puertos estan en OmniStream-PuertosAdaptadores.puml.
+'   - Los tipos del modelo (Usuario, CatalogoIndice, ...) se
+'     muestran sin miembros: estan en OmniStream-Dominio-Modelo.puml.
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam classAttributeIconSize 0
+skinparam nodesep 40
+skinparam ranksep 50
+hide empty members
+' Los paquetes son solo agrupaciones visuales, no espacios de nombres.
+set separator none
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 12
+  AttributeFontSize 11
+  BackgroundColor<<domain service>>      #FCE8B4
+  BorderColor<<domain service>>          #B89748
+  BackgroundColor<<service base>>        #ECE4F8
+  BorderColor<<service base>>            #9673A6
+  BackgroundColor<<chain handler>>       #ECE4F8
+  BorderColor<<chain handler>>           #9673A6
+  BackgroundColor<<handler>>             #FCF4E0
+  BorderColor<<handler>>                 #C4A868
+  BackgroundColor<<strategy>>            #FCF4E0
+  BorderColor<<strategy>>                #C4A868
+  BackgroundColor<<observer>>            #FCF4E0
+  BorderColor<<observer>>                #C4A868
+  BackgroundColor<<dto>>                 #FCF4E0
+  BorderColor<<dto>>                     #C4A868
+  BackgroundColor<<command>>             #FCF4E0
+  BorderColor<<command>>                 #C4A868
+  BackgroundColor<<event>>               #ECE4F8
+  BorderColor<<event>>                   #9673A6
+  BackgroundColor<<aggregate root>>      #FFE8B5
+  BorderColor<<aggregate root>>          #B8860B
+  BackgroundColor<<policy>>              #E6F6E6
+  BorderColor<<policy>>                  #3E8E41
+  BackgroundColor<<driven port>>         #F3E5F5
+  BorderColor<<driven port>>             #8E44AD
+}
+skinparam package {
+  BackgroundColor #FCFCFC
+  BorderColor #555555
+}
+skinparam note {
+  BackgroundColor #FEFFDD
+  BorderColor #B8A848
+  FontSize 11
+}
+
+' ============================================================
+' BASE DE AUTORIZACION
+' ============================================================
+package "Base de autorizacion" {
+
+  abstract class ServicioAutorizado <<service base>> {
+    # repositorioUsuarios : IRepositorioUsuarios
+    # politicaAcceso : PoliticaAcceso
+    __
+    # cargarUsuario(u : UsuarioId) : Usuario
+    # verificarAcceso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : void
+    # exigirAdministrador(admin : UsuarioId) : void
+  }
+
+  note top of ServicioAutorizado
+    Base comun de los servicios que reciben un UsuarioId.
+    Carga el Usuario con IRepositorioUsuarios y le pregunta
+    a PoliticaAcceso. Depende de abstracciones, no de otro
+    servicio. Si se niega el acceso lanza AccesoDenegado.
+  end note
+}
+
+' ============================================================
+' ACCESO Y SEGURIDAD
+' ============================================================
+package "Acceso y seguridad" {
+
+  class ServicioAcceso <<domain service>> {
+    - proveedores : List<IProveedorIdentidad>
+    - registroCredenciales : IRegistroCredenciales
+    - repositorioTokens : IRepositorioTokens
+    - repositorioEnlaces : IRepositorioEnlaces
+    - unidadDeTrabajo : IUnidadDeTrabajo
+    __
+    + autenticarUsuario(c : Credenciales) : TokenSesion
+    + validarToken(valor : String) : Optional<TokenSesion>
+    + cerrarSesion(valor : String) : void
+    + accederConEnlace(enlace : String) : TokenSesion
+    + autorizarRecurso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : boolean
+    + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : EnlaceCompartido
+    + crearUsuario(admin : UsuarioId, nombreUsuario : String, clave : String, rol : Rol) : UsuarioId
+    + gestionarRoles(admin : UsuarioId, obj : UsuarioId, rol : Rol) : void
+    + otorgarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
+    + revocarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
+    + desactivarUsuario(admin : UsuarioId, u : UsuarioId) : void
+    - seleccionarProveedor(c : Credenciales) : IProveedorIdentidad
+    - emitirToken(u : Usuario) : TokenSesion
+  }
+
+  interface IProveedorIdentidad <<driven port>>
+
+  note bottom of IProveedorIdentidad
+    **Patron Strategy (identidad):**
+    el puerto es la estrategia. seleccionarProveedor()
+    usa el primero que soporte las credenciales.
+    Implementaciones: AdaptadorIdentidadLocal y
+    AdaptadorIdentidadOIDC (ver puertos y adaptadores).
+  end note
+}
+
+' ============================================================
+' CATALOGO E INGESTA
+' ============================================================
+package "Catalogo e ingesta" {
+
+  class ServicioCatalogo <<domain service>> {
+    - cadenaIngesta : PasoIngesta
+    - repositorioCatalogo : IRepositorioCatalogo
+    - repositorioSesiones : IRepositorioSesiones
+    - almacenamiento : IAlmacenamientoArchivos
+    __
+    + ingestarArchivo(u : UsuarioId, ruta : Path) : ResultadoIngesta
+    + subirArchivo(u : UsuarioId, nombreArchivo : String, datos : InputStream) : ResultadoIngesta
+    + reindexarBiblioteca(u : UsuarioId, raiz : Path) : int
+    + detectarDuplicados(u : UsuarioId) : List<ArchivoMultimedia>
+    + editarMetadato(u : UsuarioId, id : ElementoId, clave : String, valor : String) : void
+    + eliminarArchivo(u : UsuarioId, id : ElementoId) : void
+    + respaldarCatalogo(admin : UsuarioId, destino : Path) : Path
+    + configurarRutaBiblioteca(admin : UsuarioId, ruta : Path) : void
+    + monitorearEstadoServidor(admin : UsuarioId) : EstadoServidor
+    - ingestar(ctx : ContextoIngesta) : ResultadoIngesta
+  }
+
+  abstract class PasoIngesta <<chain handler>> {
+    - siguiente : PasoIngesta
+    __
+    + encadenar(sig : PasoIngesta) : PasoIngesta
+    + ejecutar(ctx : ContextoIngesta) : ResultadoIngesta
+    # {abstract} procesar(ctx : ContextoIngesta) : boolean
+  }
+
+  class PasoExtraccion <<handler>> {
+    - almacenamiento : IAlmacenamientoArchivos
+    - extractor : IExtractorMetadatos
+    __
+    # procesar(ctx : ContextoIngesta) : boolean
+  }
+
+  class PasoDuplicados <<handler>> {
+    - politica : PoliticaDeduplicacion
+    __
+    # procesar(ctx : ContextoIngesta) : boolean
+  }
+
+  class PasoIndexacion <<handler>> {
+    # procesar(ctx : ContextoIngesta) : boolean
+  }
+
+  note left of PasoIngesta
+    **Patron Chain of Responsibility:**
+    Extraccion -> Duplicados -> Indexacion.
+    ejecutar() llama a procesar() y, si devuelve
+    true, pasa al siguiente (Template Method).
+    PasoExtraccion crea el ArchivoMultimedia con su
+    huella y metadatos; PasoDuplicados corta la cadena
+    si la politica dice RECHAZAR; PasoIndexacion llama
+    a CatalogoIndice.ingestar(). La cadena la arma
+    ComposicionRaiz.
+  end note
+}
+
+' ============================================================
+' BUSQUEDA Y ORGANIZACION
+' ============================================================
+package "Busqueda y organizacion" {
+
+  class ServicioBusqueda <<domain service>> {
+    - repositorioCatalogo : IRepositorioCatalogo
+    __
+    + buscarContenido(u : UsuarioId, txt : String) : List<ElementoCatalogo>
+    + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<ArchivoMultimedia>
+    + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<ElementoCatalogo>
+    + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : Coleccion
+    + etiquetarArchivo(u : UsuarioId, id : ElementoId, e : Etiqueta) : void
+    - ordenarResultados(l : List<ArchivoMultimedia>, c : CriterioBusqueda) : List<ArchivoMultimedia>
+  }
+}
+
+' ============================================================
+' SINCRONIZACION Y EVENTOS
+' ============================================================
+package "Sincronizacion y eventos" {
+
+  class ServicioSincronizacion <<domain service>> {
+    - registroCambios : IRegistroCambios
+    - repositorioCatalogo : IRepositorioCatalogo
+    - almacenamiento : IAlmacenamientoArchivos
+    __
+    + sincronizarCambios(u : UsuarioId, desde : Instant) : DeltaSincronizacion
+    + cachearContenido(u : UsuarioId, id : ElementoId) : PaqueteOffline
+    + hayCambiosPendientes(u : UsuarioId, desde : Instant) : boolean
+    - empaquetar(a : ArchivoMultimedia) : PaqueteOffline
+    - filtrarVisibles(u : Usuario, d : DeltaSincronizacion) : DeltaSincronizacion
+  }
+
+  class ServicioDespachoEventos <<domain service>> {
+    - outbox : IRepositorioOutbox
+    - publicador : IPublicadorEventos
+    __
+    + publicarPendientes(limite : int) : int
+  }
+
+  interface IObservadorCatalogo <<observer>> #E4F4E4;line:6FA86F {
+    + alCambiarCatalogo(e : EventoDominio) : void
+  }
+
+  class ObservadorSincronizacion <<observer>> {
+    - registroCambios : IRegistroCambios
+    __
+    + alCambiarCatalogo(e : EventoDominio) : void
+  }
+
+  note bottom of ObservadorSincronizacion
+    **Patron Observer:**
+    el bus de eventos (AdaptadorBusEventos) es el unico
+    dueno de la lista de observadores. ComposicionRaiz
+    registra este observador al arrancar. Por cada
+    EventoCatalogo escribe en IRegistroCambios, de donde
+    lee ServicioSincronizacion. Los dos no se conocen.
+  end note
+}
+
+' ============================================================
+' REPRODUCCION
+' ============================================================
+package "Reproduccion" {
+
+  class ServicioReproduccion <<domain service>> {
+    - repositorioSesiones : IRepositorioSesiones
+    - repositorioCatalogo : IRepositorioCatalogo
+    - estrategiasStream : List<EstrategiaStream>
+    __
+    + abrirSesion(u : UsuarioId, id : ElementoId) : SesionReproduccion
+    + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : SesionReproduccion
+    + solicitarStream(s : SesionId, p : PerfilStream) : FlujoMultimedia
+    + registrarProgreso(s : SesionId, pos : Duration) : void
+    + pausarSesion(s : SesionId) : void
+    + finalizarSesion(s : SesionId) : void
+    - seleccionarStream(a : ArchivoMultimedia, p : PerfilStream) : EstrategiaStream
+  }
+
+  interface EstrategiaStream <<strategy>> #E4F4E4;line:6FA86F {
+    + soporta(a : ArchivoMultimedia, p : PerfilStream) : boolean
+    + generarFlujo(a : ArchivoMultimedia, p : PerfilStream, pos : Duration) : FlujoMultimedia
+  }
+
+  class StreamDirecto <<strategy>> {
+    - almacenamiento : IAlmacenamientoArchivos
+    __
+    + soporta(a : ArchivoMultimedia, p : PerfilStream) : boolean
+    + generarFlujo(a : ArchivoMultimedia, p : PerfilStream, pos : Duration) : FlujoMultimedia
+  }
+
+  class StreamTranscodificado <<strategy>> {
+    - transcodificador : ITranscodificador
+    __
+    + soporta(a : ArchivoMultimedia, p : PerfilStream) : boolean
+    + generarFlujo(a : ArchivoMultimedia, p : PerfilStream, pos : Duration) : FlujoMultimedia
+  }
+
+  note right of EstrategiaStream
+    **Patron Strategy (stream):**
+    StreamDirecto lee el archivo tal cual (direct play);
+    StreamTranscodificado lo convierte bajo demanda.
+  end note
+}
+
+' ============================================================
+' MODELO DE DOMINIO REFERENCIADO
+' ============================================================
+package "Modelo (ver diagrama de dominio)" {
+  class PoliticaAcceso <<policy>>
+  class PoliticaDeduplicacion <<policy>>
+  class Usuario <<aggregate root>>
+  class CatalogoIndice <<aggregate root>>
+  class EnlaceCompartido <<aggregate root>>
+  class SesionReproduccion <<aggregate root>>
+  abstract class EventoDominio <<event>>
+  abstract class EventoCatalogo <<event>>
+}
+
+' ============================================================
+' DTOS Y COMANDOS DE LOS PUERTOS
+' ============================================================
+package "DTOs y comandos de los puertos" {
+
+  abstract class Credenciales <<dto>> #ECE4F8;line:9673A6 {
+    + proveedor : String
+  }
+
+  class CredencialesLocales <<dto>> {
+    + usuario : String
+    + clave : String
+  }
+
+  class CredencialesOIDC <<dto>> {
+    + tokenExterno : String
+    + emisor : URI
+  }
+
+  class TokenSesion <<dto>> {
+    + valor : String
+    + usuarioId : UsuarioId
+    + rol : Rol
+    + expiraEn : Instant
+    __
+    + estaVigente(ahora : Instant) : boolean
+  }
+
+  class ContextoIngesta <<dto>> {
+    + catalogo : CatalogoIndice
+    + ruta : Path
+    + archivo : ArchivoMultimedia
+    + resultado : ResultadoIngesta
+  }
+
+  class EstadoServidor <<dto>> {
+    + archivosIndexados : int
+    + espacioLibre : long
+    + sesionesActivas : int
+  }
+
+  class CriterioBusqueda <<dto>> {
+    + texto : String
+    + tipo : TipoMedio
+    + etiquetas : Set<Etiqueta>
+    __
+    + tieneFiltros() : boolean
+  }
+
+  class ComandoColeccion <<command>> {
+    + coleccionId : ElementoId
+    + nombre : String
+    + agregar : List<ElementoId>
+  }
+
+  class PerfilStream <<dto>> {
+    + codec : String
+    + bitrateKbps : int
+    + resolucion : String
+    __
+    + esDirectPlay() : boolean
+  }
+
+  class FlujoMultimedia <<dto>> {
+    + datos : InputStream
+    + mime : String
+    + transcodificado : boolean
+  }
+
+  class DeltaSincronizacion <<dto>> {
+    + agregados : List<ElementoId>
+    + modificados : List<ElementoId>
+    + eliminados : List<ElementoId>
+    __
+    + estaVacio() : boolean
+  }
+
+  class PaqueteOffline <<dto>> {
+    + archivoId : ElementoId
+    + metadatos : List<Metadato>
+    + contenido : Path
+  }
+}
+
+' ============================================================
+' RELACIONES - BASE DE AUTORIZACION
+' ============================================================
+ServicioAutorizado <|-- ServicioAcceso
+ServicioAutorizado <|-- ServicioCatalogo
+ServicioAutorizado <|-- ServicioBusqueda
+ServicioAutorizado <|-- ServicioSincronizacion
+ServicioAutorizado <|-- ServicioReproduccion
+ServicioAutorizado --> "1" PoliticaAcceso : politicaAcceso
+ServicioAutorizado ..> Usuario : <<carga>>
+
+' ============================================================
+' RELACIONES - ACCESO (Strategy de identidad)
+' ============================================================
+ServicioAcceso "1" o-- "1..*" IProveedorIdentidad : proveedores
+ServicioAcceso ..> EnlaceCompartido : <<crea>>
+ServicioAcceso ..> TokenSesion : <<emite>>
+
+' ============================================================
+' RELACIONES - CATALOGO E INGESTA (Chain of Responsibility)
+' ============================================================
+ServicioCatalogo "1" *-- "1" PasoIngesta : cadenaIngesta
+PasoIngesta --> "0..1" PasoIngesta : siguiente
+PasoIngesta <|-- PasoExtraccion
+PasoIngesta <|-- PasoDuplicados
+PasoIngesta <|-- PasoIndexacion
+PasoIngesta ..> ContextoIngesta : <<procesa>>
+PasoDuplicados --> "1" PoliticaDeduplicacion : politica
+PasoIndexacion ..> CatalogoIndice : <<ingestar>>
+ServicioCatalogo ..> CatalogoIndice : <<modifica>>
+ServicioBusqueda ..> CatalogoIndice : <<consulta / modifica>>
+
+' ============================================================
+' RELACIONES - SINCRONIZACION Y EVENTOS (Observer)
+' ============================================================
+IObservadorCatalogo <|.. ObservadorSincronizacion
+ObservadorSincronizacion ..> EventoCatalogo : <<recibe>>
+ServicioDespachoEventos ..> EventoDominio : <<publica>>
+ServicioSincronizacion ..> DeltaSincronizacion : <<entrega>>
+
+' ============================================================
+' RELACIONES - REPRODUCCION (Strategy de stream)
+' ============================================================
+ServicioReproduccion ..> SesionReproduccion : <<controla>>
+ServicioReproduccion "1" o-- "1..*" EstrategiaStream : estrategiasStream
+EstrategiaStream <|.. StreamDirecto
+EstrategiaStream <|.. StreamTranscodificado
+
+' ============================================================
+' RELACIONES - DTOS
+' ============================================================
+Credenciales <|-- CredencialesLocales
+Credenciales <|-- CredencialesOIDC
+
+' ============================================================
+' PUERTOS DE ENTRADA QUE IMPLEMENTA CADA SERVICIO
+' ============================================================
+note as NotaPuertos
+  **Puerto de entrada que implementa cada servicio**
+  ServicioCatalogo        -> IGestionCatalogo
+  ServicioBusqueda        -> IBusqueda
+  ServicioReproduccion    -> IReproduccion
+  ServicioAcceso          -> IControlAcceso
+  ServicioSincronizacion  -> ISincronizacion
+  ServicioDespachoEventos -> IDespachoEventos
+  Los metodos publicos de cada servicio son exactamente
+  los de su puerto.
+end note
+
+@enduml

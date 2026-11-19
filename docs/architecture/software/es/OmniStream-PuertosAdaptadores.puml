@@ -1,0 +1,694 @@
+@startuml OmniStream-PuertosAdaptadores
+' ============================================================
+'  OmniStream - Diagrama de clases
+'  PUERTOS Y ADAPTADORES (arquitectura hexagonal en 3 capas)
+'
+'  Capas:  Presentacion (adaptadores primarios)
+'          -> Dominio (puertos, servicios y modelo)
+'          -> Infraestructura (adaptadores secundarios)
+'  La composicion raiz no es una capa: solo crea y conecta.
+'
+'  Convenciones:
+'   - Los puertos son interfaces del dominio. Los de entrada
+'     los implementan los servicios de dominio; los de salida,
+'     los adaptadores secundarios.
+'   - Los servicios se muestran sin miembros: estan en
+'     OmniStream-Servicios.puml. Los tipos de las firmas estan
+'     en ese diagrama (DTOs) y en OmniStream-Dominio-Modelo.puml.
+'   - "(via X)" en una dependencia indica que la usa un
+'     colaborador interno del servicio (paso de la cadena o
+'     estrategia), no el servicio directamente.
+' ============================================================
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+' Los paquetes son solo agrupaciones visuales, no espacios de nombres.
+set separator none
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 12
+  AttributeFontSize 11
+  BackgroundColor<<primary adapter>>   #EAF3F8
+  BorderColor<<primary adapter>>       #2E86AB
+  BackgroundColor<<driving port>>      #E8F5E9
+  BorderColor<<driving port>>          #3E8E41
+  BackgroundColor<<domain service>>    #FCE8B4
+  BorderColor<<domain service>>        #B89748
+  BackgroundColor<<service base>>      #ECE4F8
+  BorderColor<<service base>>          #9673A6
+  BackgroundColor<<observer>>          #FCF4E0
+  BorderColor<<observer>>              #C4A868
+  BackgroundColor<<driven port>>       #F3E5F5
+  BorderColor<<driven port>>           #8E44AD
+  BackgroundColor<<secondary adapter>> #FCE4D6
+  BorderColor<<secondary adapter>>     #C0504D
+  BackgroundColor<<decorator>>         #FDEBD0
+  BorderColor<<decorator>>             #D98E04
+  BackgroundColor<<mapper>>            #F7F7F7
+  BorderColor<<mapper>>                #888888
+  BackgroundColor<<command>>           #FCF4E0
+  BorderColor<<command>>               #C4A868
+  BackgroundColor<<dto>>               #FCF4E0
+  BorderColor<<dto>>                   #C4A868
+  BackgroundColor<<abstract factory>>  #ECE4F8
+  BorderColor<<abstract factory>>      #9673A6
+  BackgroundColor<<concrete factory>>  #FFFDE7
+  BorderColor<<concrete factory>>      #B8A848
+  BackgroundColor<<composition root>>  #FFF2CC
+  BorderColor<<composition root>>      #B8860B
+}
+skinparam note {
+  BackgroundColor #FEFFDD
+  BorderColor #B8A848
+  FontSize 11
+}
+
+' ============================================================
+' ACTOR EXTERNO Y ADAPTADORES PRIMARIOS  (presentacion)
+' ============================================================
+class "Navegador web" as NavegadorWeb <<actor>>
+
+package "Adaptadores primarios (presentacion)" #EAF3F8 {
+   class AdaptadorCLI <<primary adapter>> {
+     - gestionCatalogo : IGestionCatalogo
+     + ejecutar(args : List<String>) : int
+     - imprimirAyuda() : void
+   }
+   class AdaptadorDesktop <<primary adapter>> {
+     - gestionCatalogo : IGestionCatalogo
+     - sincronizacion : ISincronizacion
+     + atenderIPC(mensaje : String) : String
+     + iniciarSincronizacion(u : UsuarioId) : void
+   }
+   class AdaptadorMobile <<primary adapter>> {
+     - sincronizacion : ISincronizacion
+     + manejarSolicitudSync(req : SolicitudHttp) : RespuestaHttp
+   }
+   class AdaptadorWebUI <<primary adapter>> {
+     + servirInterfaz(ruta : String) : RespuestaHttp
+   }
+   class AdaptadorApiRest <<primary adapter>> {
+     - gestionCatalogo : IGestionCatalogo
+     - reproduccion : IReproduccion
+     - busqueda : IBusqueda
+     - controlAcceso : IControlAcceso
+     + enrutar(req : SolicitudHttp) : RespuestaHttp
+     - autenticarPeticion(req : SolicitudHttp) : TokenSesion
+     - serializar(obj : Object) : String
+     - mapearError(e : Exception) : RespuestaHttp
+   }
+   class AdaptadorProgramador <<primary adapter>> {
+     - tareas : Map<String,TareaProgramada>
+     - identidadSistema : UsuarioId
+     + registrar(expresionCron : String, t : TareaProgramada) : void
+     + iniciar() : void
+     + detener() : void
+     - disparar(t : TareaProgramada) : void
+   }
+   class SolicitudHttp <<dto>> {
+     - metodo : String
+     - ruta : String
+     - cabeceras : Map<String,String>
+     - cuerpo : String
+   }
+   class RespuestaHttp <<dto>> {
+     - codigo : int
+     - cabeceras : Map<String,String>
+     - cuerpo : String
+   }
+   interface TareaProgramada <<command>> {
+     + nombre() : String
+     + ejecutar(ejecutor : UsuarioId) : void
+   }
+   class TareaReindexar <<command>> {
+     - gestionCatalogo : IGestionCatalogo
+     - raiz : Path
+     + nombre() : String
+     + ejecutar(ejecutor : UsuarioId) : void
+   }
+   class TareaRespaldar <<command>> {
+     - gestionCatalogo : IGestionCatalogo
+     - destino : Path
+     + nombre() : String
+     + ejecutar(ejecutor : UsuarioId) : void
+   }
+   class TareaSincronizar <<command>> {
+     - despachoEventos : IDespachoEventos
+     - limite : int
+     + nombre() : String
+     + ejecutar(ejecutor : UsuarioId) : void
+   }
+
+   TareaProgramada <|.. TareaReindexar
+   TareaProgramada <|.. TareaRespaldar
+   TareaProgramada <|.. TareaSincronizar
+   AdaptadorProgramador o-- "0..*" TareaProgramada : programa
+ }
+
+NavegadorWeb --> AdaptadorWebUI : solicita interfaz HTTP
+NavegadorWeb --> AdaptadorApiRest : consume API HTTP/JSON
+
+' ============================================================
+' PUERTOS DE ENTRADA  (dominio)
+' ============================================================
+package "Puertos de entrada (dominio)" #E8F5E9 {
+   interface IGestionCatalogo <<driving port>> {
+     + ingestarArchivo(u : UsuarioId, ruta : Path) : ResultadoIngesta
+     + subirArchivo(u : UsuarioId, nombreArchivo : String, datos : InputStream) : ResultadoIngesta
+     + reindexarBiblioteca(u : UsuarioId, raiz : Path) : int
+     + detectarDuplicados(u : UsuarioId) : List<ArchivoMultimedia>
+     + editarMetadato(u : UsuarioId, id : ElementoId, clave : String, valor : String) : void
+     + eliminarArchivo(u : UsuarioId, id : ElementoId) : void
+     + respaldarCatalogo(admin : UsuarioId, destino : Path) : Path
+     + configurarRutaBiblioteca(admin : UsuarioId, ruta : Path) : void
+     + monitorearEstadoServidor(admin : UsuarioId) : EstadoServidor
+   }
+   interface IBusqueda <<driving port>> {
+     + buscarContenido(u : UsuarioId, txt : String) : List<ElementoCatalogo>
+     + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<ArchivoMultimedia>
+     + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<ElementoCatalogo>
+     + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : Coleccion
+     + etiquetarArchivo(u : UsuarioId, id : ElementoId, e : Etiqueta) : void
+   }
+   interface IReproduccion <<driving port>> {
+     + abrirSesion(u : UsuarioId, id : ElementoId) : SesionReproduccion
+     + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : SesionReproduccion
+     + solicitarStream(s : SesionId, p : PerfilStream) : FlujoMultimedia
+     + registrarProgreso(s : SesionId, pos : Duration) : void
+     + pausarSesion(s : SesionId) : void
+     + finalizarSesion(s : SesionId) : void
+   }
+   interface IControlAcceso <<driving port>> {
+     + autenticarUsuario(c : Credenciales) : TokenSesion
+     + validarToken(valor : String) : Optional<TokenSesion>
+     + cerrarSesion(valor : String) : void
+     + accederConEnlace(enlace : String) : TokenSesion
+     + autorizarRecurso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : boolean
+     + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : EnlaceCompartido
+     + crearUsuario(admin : UsuarioId, nombreUsuario : String, clave : String, rol : Rol) : UsuarioId
+     + gestionarRoles(admin : UsuarioId, obj : UsuarioId, rol : Rol) : void
+     + otorgarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
+     + revocarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
+     + desactivarUsuario(admin : UsuarioId, u : UsuarioId) : void
+   }
+   interface ISincronizacion <<driving port>> {
+     + sincronizarCambios(u : UsuarioId, desde : Instant) : DeltaSincronizacion
+     + cachearContenido(u : UsuarioId, id : ElementoId) : PaqueteOffline
+     + hayCambiosPendientes(u : UsuarioId, desde : Instant) : boolean
+   }
+   interface IDespachoEventos <<driving port>> {
+     + publicarPendientes(limite : int) : int
+   }
+ }
+
+' ============================================================
+' SERVICIOS DE DOMINIO  (detalle en el diagrama de servicios)
+' ============================================================
+package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
+   abstract class ServicioAutorizado <<service base>>
+   class ServicioCatalogo <<domain service>>
+   class ServicioBusqueda <<domain service>>
+   class ServicioReproduccion <<domain service>>
+   class ServicioAcceso <<domain service>>
+   class ServicioSincronizacion <<domain service>>
+   class ServicioDespachoEventos <<domain service>>
+   interface IObservadorCatalogo <<observer>> {
+     + alCambiarCatalogo(e : EventoDominio) : void
+   }
+   class ObservadorSincronizacion <<observer>>
+   IObservadorCatalogo <|.. ObservadorSincronizacion
+ }
+
+ IGestionCatalogo <|.. ServicioCatalogo
+ IBusqueda <|.. ServicioBusqueda
+ IReproduccion <|.. ServicioReproduccion
+ IControlAcceso <|.. ServicioAcceso
+ ISincronizacion <|.. ServicioSincronizacion
+ IDespachoEventos <|.. ServicioDespachoEventos
+
+ AdaptadorCLI --> IGestionCatalogo : invoca
+ AdaptadorDesktop --> IGestionCatalogo : invoca
+ AdaptadorDesktop --> ISincronizacion : invoca
+ AdaptadorMobile --> ISincronizacion : invoca
+ AdaptadorApiRest --> IGestionCatalogo : invoca
+ AdaptadorApiRest --> IBusqueda : invoca
+ AdaptadorApiRest --> IReproduccion : invoca
+ AdaptadorApiRest --> IControlAcceso : invoca
+ AdaptadorProgramador ..> TareaProgramada : dispara
+ TareaReindexar --> IGestionCatalogo : invoca
+ TareaRespaldar --> IGestionCatalogo : invoca
+ TareaSincronizar --> IDespachoEventos : invoca
+
+' ============================================================
+' PUERTOS DE SALIDA  (dominio)
+' ============================================================
+package "Puertos de salida (dominio)" #F3E5F5 {
+   interface IRepositorioCatalogo <<driven port>> {
+     + obtenerCatalogo() : CatalogoIndice
+     + guardar(c : CatalogoIndice) : void
+     + buscarArchivo(id : ElementoId) : Optional<ArchivoMultimedia>
+     + buscarPorHuella(h : HuellaDigital) : Optional<ArchivoMultimedia>
+     + buscarPorTexto(txt : String) : List<ArchivoMultimedia>
+     + buscarPorCriterios(c : CriterioBusqueda) : List<ArchivoMultimedia>
+   }
+   interface IRepositorioSesiones <<driven port>> {
+     + guardar(s : SesionReproduccion) : void
+     + buscarPorId(id : SesionId) : Optional<SesionReproduccion>
+     + buscarUltimaSesion(u : UsuarioId, a : ElementoId) : Optional<SesionReproduccion>
+     + contarActivas() : int
+   }
+   interface IRepositorioUsuarios <<driven port>> {
+     + guardar(u : Usuario) : void
+     + buscarPorId(id : UsuarioId) : Optional<Usuario>
+     + buscarPorNombre(nombreUsuario : String) : Optional<Usuario>
+     + buscarPorIdentidad(i : IdentidadVinculada) : Optional<Usuario>
+   }
+   interface IRepositorioEnlaces <<driven port>> {
+     + guardar(e : EnlaceCompartido) : void
+     + buscarPorToken(token : String) : Optional<EnlaceCompartido>
+   }
+   interface IRegistroCambios <<driven port>> {
+     + registrar(e : EventoCatalogo) : void
+     + cambiosDesde(desde : Instant) : DeltaSincronizacion
+     + hayCambiosDesde(desde : Instant) : boolean
+   }
+   interface IRepositorioOutbox <<driven port>> {
+     + obtenerPendientes(limite : int) : List<EventoDominio>
+     + marcarPublicado(id : EventoId) : void
+   }
+   interface IUnidadDeTrabajo <<driven port>> {
+     + ejecutar(trabajo : Supplier<T>) : T
+   }
+   interface IRepositorioTokens <<driven port>> {
+     + guardar(t : TokenSesion) : void
+     + buscar(valor : String) : Optional<TokenSesion>
+     + eliminar(valor : String) : void
+   }
+   interface IAlmacenamientoArchivos <<driven port>> {
+     + leer(ruta : Path) : InputStream
+     + escribir(ruta : Path, datos : InputStream) : void
+     + eliminar(ruta : Path) : void
+     + existe(ruta : Path) : boolean
+     + listar(raiz : Path) : List<Path>
+     + calcularHuella(ruta : Path) : HuellaDigital
+     + copiar(origen : Path, destino : Path) : Path
+     + espacioLibre() : long
+   }
+   interface IExtractorMetadatos <<driven port>> {
+     + soporta(tipo : TipoMedio) : boolean
+     + extraer(ruta : Path) : List<Metadato>
+   }
+   interface ITranscodificador <<driven port>> {
+     + soporta(origen : TipoMedio, p : PerfilStream) : boolean
+     + transcodificar(ruta : Path, p : PerfilStream, pos : Duration) : FlujoMultimedia
+   }
+   interface IProveedorIdentidad <<driven port>> {
+     + soporta(c : Credenciales) : boolean
+     + verificar(c : Credenciales) : Optional<IdentidadVinculada>
+   }
+   interface IRegistroCredenciales <<driven port>> {
+     + registrar(nombreUsuario : String, clave : String) : IdentidadVinculada
+     + cambiarClave(i : IdentidadVinculada, nueva : String) : void
+   }
+   interface IPublicadorEventos <<driven port>> {
+     + publicar(e : EventoDominio) : void
+   }
+   interface ISuscriptorEventos <<driven port>> {
+     + suscribir(obs : IObservadorCatalogo) : void
+     + desuscribir(obs : IObservadorCatalogo) : void
+   }
+   interface IBusEventos <<driven port>>
+   IBusEventos --|> IPublicadorEventos
+   IBusEventos --|> ISuscriptorEventos
+ }
+
+ ServicioAutorizado ..> IRepositorioUsuarios : carga usuario para autorizar
+ ServicioCatalogo ..> IRepositorioCatalogo : consulta / persiste
+ ServicioCatalogo ..> IRepositorioSesiones : cuenta sesiones activas
+ ServicioCatalogo ..> IAlmacenamientoArchivos : lee / escribe / respalda
+ ServicioCatalogo ..> IExtractorMetadatos : extrae (via PasoExtraccion)
+ ServicioBusqueda ..> IRepositorioCatalogo : consulta / persiste
+ ServicioReproduccion ..> IRepositorioSesiones : persiste sesiones
+ ServicioReproduccion ..> IRepositorioCatalogo : busca el archivo
+ ServicioReproduccion ..> IAlmacenamientoArchivos : stream directo (via StreamDirecto)
+ ServicioReproduccion ..> ITranscodificador : transcodifica (via StreamTranscodificado)
+ ServicioAcceso ..> IProveedorIdentidad : verifica identidad (Strategy)
+ ServicioAcceso ..> IRegistroCredenciales : registra clave local
+ ServicioAcceso ..> IRepositorioTokens : guarda / valida tokens
+ ServicioAcceso ..> IRepositorioEnlaces : guarda / busca enlaces
+ ServicioAcceso ..> IUnidadDeTrabajo : delimita transaccion
+ ServicioSincronizacion ..> IRegistroCambios : lee cambios
+ ServicioSincronizacion ..> IRepositorioCatalogo : arma paquetes
+ ServicioSincronizacion ..> IAlmacenamientoArchivos : lee contenido
+ ObservadorSincronizacion ..> IRegistroCambios : registra cambios
+ ServicioDespachoEventos ..> IRepositorioOutbox : obtiene y marca pendientes
+ ServicioDespachoEventos ..> IPublicadorEventos : publica eventos
+ ISuscriptorEventos ..> IObservadorCatalogo : registra
+
+' ============================================================
+' ADAPTADORES SECUNDARIOS  (infraestructura)
+' ============================================================
+package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
+   abstract class AdaptadorPersistenciaJdbc <<secondary adapter>> {
+     # mapeadorArchivo : MapeadorArchivo
+     # mapeadorCatalogo : MapeadorCatalogoIndice
+     # mapeadorSesion : MapeadorSesion
+     # mapeadorUsuario : MapeadorUsuario
+     # mapeadorEnlace : MapeadorEnlace
+     # mapeadorEvento : MapeadorEvento
+     # {abstract} conexion() : Connection
+   }
+   class AdaptadorPersistenciaSQLite <<secondary adapter>> {
+     - rutaBaseDatos : Path
+     # conexion() : Connection
+   }
+   class AdaptadorPersistenciaPostgreSQL <<secondary adapter>> {
+     - url : URI
+     - pool : DataSource
+     # conexion() : Connection
+   }
+   class AdaptadorArchivosLocal <<secondary adapter>> {
+     - raizPermitida : Path
+     + leer(ruta : Path) : InputStream
+     + escribir(ruta : Path, datos : InputStream) : void
+     + eliminar(ruta : Path) : void
+     + existe(ruta : Path) : boolean
+     + listar(raiz : Path) : List<Path>
+     + calcularHuella(ruta : Path) : HuellaDigital
+     + copiar(origen : Path, destino : Path) : Path
+     + espacioLibre() : long
+     - validarDentroDeRaiz(ruta : Path) : void
+   }
+   class AdaptadorArchivosRed <<secondary adapter>> {
+     - punto : URI
+     - credencialesMontaje : String
+     + leer(ruta : Path) : InputStream
+     + escribir(ruta : Path, datos : InputStream) : void
+     + eliminar(ruta : Path) : void
+     + existe(ruta : Path) : boolean
+     + listar(raiz : Path) : List<Path>
+     + calcularHuella(ruta : Path) : HuellaDigital
+     + copiar(origen : Path, destino : Path) : Path
+     + espacioLibre() : long
+     - reconectar() : void
+   }
+   class AdaptadorMetadatos <<secondary adapter>> {
+     - rutaFFprobe : Path
+     - rutaExifTool : Path
+     + soporta(tipo : TipoMedio) : boolean
+     + extraer(ruta : Path) : List<Metadato>
+     - ejecutarProceso(cmd : List<String>) : String
+   }
+   class AdaptadorTranscodificacion <<secondary adapter>> {
+     - rutaFFmpeg : Path
+     - directorioTemporal : Path
+     + soporta(origen : TipoMedio, p : PerfilStream) : boolean
+     + transcodificar(ruta : Path, p : PerfilStream, pos : Duration) : FlujoMultimedia
+     - construirComando(ruta : Path, p : PerfilStream, pos : Duration) : List<String>
+   }
+   class AdaptadorIdentidadLocal <<secondary adapter>> {
+     - fuenteDatos : DataSource
+     - algoritmoHash : String
+     + soporta(c : Credenciales) : boolean
+     + verificar(c : Credenciales) : Optional<IdentidadVinculada>
+     + registrar(nombreUsuario : String, clave : String) : IdentidadVinculada
+     + cambiarClave(i : IdentidadVinculada, nueva : String) : void
+     - calcularHash(clave : String, sal : String) : String
+     - compararClave(plana : String, hash : String) : boolean
+   }
+   class AdaptadorIdentidadOIDC <<secondary adapter>> {
+     - emisor : URI
+     - clientId : String
+     + soporta(c : Credenciales) : boolean
+     + verificar(c : Credenciales) : Optional<IdentidadVinculada>
+     - validarToken(tokenExterno : String) : Map<String,String>
+   }
+   class AdaptadorTokensEnMemoria <<secondary adapter>> {
+     - tokens : Map<String,TokenSesion>
+     + guardar(t : TokenSesion) : void
+     + buscar(valor : String) : Optional<TokenSesion>
+     + eliminar(valor : String) : void
+     - purgarVencidos() : void
+   }
+   class AdaptadorBusEventos <<secondary adapter>> {
+     - observadores : List<IObservadorCatalogo>
+     + publicar(e : EventoDominio) : void
+     + suscribir(obs : IObservadorCatalogo) : void
+     + desuscribir(obs : IObservadorCatalogo) : void
+     - despacharAObservadores(e : EventoDominio) : void
+   }
+   class MapeadorArchivo <<mapper>> {
+     + aEntidad(fila : ResultSet) : ArchivoMultimedia
+     + aFila(a : ArchivoMultimedia) : Map<String,Object>
+     + aMetadatos(json : String) : List<Metadato>
+   }
+   class MapeadorCatalogoIndice <<mapper>> {
+     + aEntidad(fila : ResultSet) : CatalogoIndice
+     + aFila(c : CatalogoIndice) : Map<String,Object>
+   }
+   class MapeadorSesion <<mapper>> {
+     + aEntidad(fila : ResultSet) : SesionReproduccion
+     + aFila(s : SesionReproduccion) : Map<String,Object>
+   }
+   class MapeadorUsuario <<mapper>> {
+     + aEntidad(fila : ResultSet) : Usuario
+     + aFila(u : Usuario) : Map<String,Object>
+   }
+   class MapeadorEnlace <<mapper>> {
+     + aEntidad(fila : ResultSet) : EnlaceCompartido
+     + aFila(e : EnlaceCompartido) : Map<String,Object>
+   }
+   class MapeadorEvento <<mapper>> {
+     + aEvento(fila : ResultSet) : EventoDominio
+     + aFila(e : EventoDominio) : Map<String,Object>
+   }
+   class RepositorioCatalogoConCache <<decorator>> {
+     - delegado : IRepositorioCatalogo
+     - cache : CatalogoIndice
+     - cargadoEn : Instant
+     - ttl : Duration
+     + obtenerCatalogo() : CatalogoIndice
+     + guardar(c : CatalogoIndice) : void
+     + buscarArchivo(id : ElementoId) : Optional<ArchivoMultimedia>
+     + buscarPorHuella(h : HuellaDigital) : Optional<ArchivoMultimedia>
+     + buscarPorTexto(txt : String) : List<ArchivoMultimedia>
+     + buscarPorCriterios(c : CriterioBusqueda) : List<ArchivoMultimedia>
+     - invalidar() : void
+     - vigente() : boolean
+   }
+   class TranscodificadorConCache <<decorator>> {
+     - delegado : ITranscodificador
+     - directorioCache : Path
+     - limiteBytes : long
+     + soporta(origen : TipoMedio, p : PerfilStream) : boolean
+     + transcodificar(ruta : Path, p : PerfilStream, pos : Duration) : FlujoMultimedia
+     - claveCache(ruta : Path, p : PerfilStream) : String
+     - expulsarMasAntiguos() : void
+   }
+   class ProveedorIdentidadResiliente <<decorator>> {
+     - delegado : IProveedorIdentidad
+     - estado : EstadoCircuito
+     - umbralFallos : int
+     - ventanaReintento : Duration
+     + soporta(c : Credenciales) : boolean
+     + verificar(c : Credenciales) : Optional<IdentidadVinculada>
+     - registrarFallo() : void
+     - circuitoAbierto() : boolean
+   }
+   enum EstadoCircuito {
+     CERRADO
+     ABIERTO
+     SEMI_ABIERTO
+   }
+
+   AdaptadorPersistenciaJdbc <|-- AdaptadorPersistenciaSQLite
+   AdaptadorPersistenciaJdbc <|-- AdaptadorPersistenciaPostgreSQL
+ }
+
+ IRepositorioCatalogo <|.. AdaptadorPersistenciaJdbc
+ IRepositorioSesiones <|.. AdaptadorPersistenciaJdbc
+ IRepositorioUsuarios <|.. AdaptadorPersistenciaJdbc
+ IRepositorioEnlaces <|.. AdaptadorPersistenciaJdbc
+ IRegistroCambios <|.. AdaptadorPersistenciaJdbc
+ IRepositorioOutbox <|.. AdaptadorPersistenciaJdbc
+ IUnidadDeTrabajo <|.. AdaptadorPersistenciaJdbc
+ IAlmacenamientoArchivos <|.. AdaptadorArchivosLocal
+ IAlmacenamientoArchivos <|.. AdaptadorArchivosRed
+ IExtractorMetadatos <|.. AdaptadorMetadatos
+ ITranscodificador <|.. AdaptadorTranscodificacion
+ IProveedorIdentidad <|.. AdaptadorIdentidadLocal
+ IRegistroCredenciales <|.. AdaptadorIdentidadLocal
+ IProveedorIdentidad <|.. AdaptadorIdentidadOIDC
+ IRepositorioTokens <|.. AdaptadorTokensEnMemoria
+ IBusEventos <|.. AdaptadorBusEventos
+ IRepositorioCatalogo <|.. RepositorioCatalogoConCache
+ ITranscodificador <|.. TranscodificadorConCache
+ IProveedorIdentidad <|.. ProveedorIdentidadResiliente
+
+ RepositorioCatalogoConCache --> IRepositorioCatalogo : delegado
+ TranscodificadorConCache --> ITranscodificador : delegado
+ ProveedorIdentidadResiliente --> IProveedorIdentidad : delegado
+ ProveedorIdentidadResiliente --> EstadoCircuito : mantiene estado
+ AdaptadorPersistenciaJdbc ..> MapeadorArchivo : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorCatalogoIndice : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorSesion : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorUsuario : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorEnlace : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorEvento : utiliza
+ AdaptadorBusEventos ..> IObservadorCatalogo : notifica
+
+' ============================================================
+' COMPOSICION Y CONFIGURACION  (arranque, fuera de las capas)
+' ============================================================
+package "Composicion (arranque)" #FFFDE7 {
+   class ConfiguracionApp <<dto>> {
+     - perfil : String
+     - rutaBiblioteca : Path
+     - rutaBaseDatos : Path
+     - urlBaseDatos : Optional<URI>
+     - oidcEmisor : Optional<URI>
+     - rutaFFmpeg : Path
+     - rutaExifTool : Path
+     - cacheHabilitado : boolean
+     - umbralFallosIdentidad : int
+     - vigenciaToken : Duration
+   }
+   abstract class FabricaInfraestructura <<abstract factory>> {
+     + {abstract} crearRepositorioCatalogo() : IRepositorioCatalogo
+     + {abstract} crearRepositorioSesiones() : IRepositorioSesiones
+     + {abstract} crearRepositorioUsuarios() : IRepositorioUsuarios
+     + {abstract} crearRepositorioEnlaces() : IRepositorioEnlaces
+     + {abstract} crearRegistroCambios() : IRegistroCambios
+     + {abstract} crearRepositorioOutbox() : IRepositorioOutbox
+     + {abstract} crearUnidadDeTrabajo() : IUnidadDeTrabajo
+     + {abstract} crearRepositorioTokens() : IRepositorioTokens
+     + {abstract} crearAlmacenamiento() : IAlmacenamientoArchivos
+     + {abstract} crearProveedoresIdentidad() : List<IProveedorIdentidad>
+     + {abstract} crearRegistroCredenciales() : IRegistroCredenciales
+     + {abstract} crearExtractorMetadatos() : IExtractorMetadatos
+     + {abstract} crearTranscodificador() : ITranscodificador
+     + {abstract} crearBusEventos() : IBusEventos
+   }
+   class FabricaLocal <<concrete factory>>
+   class FabricaServidor <<concrete factory>>
+   class ComposicionRaiz <<composition root>> {
+     - cfg : ConfiguracionApp
+     - fabrica : FabricaInfraestructura
+     + arrancar() : void
+     + detener() : void
+     - seleccionarFabrica(cfg : ConfiguracionApp) : FabricaInfraestructura
+     - decorarPuertos() : void
+     - construirCadenaIngesta() : PasoIngesta
+     - crearServicios() : void
+     - crearAdaptadoresPrimarios() : void
+     - registrarObservadores() : void
+   }
+   FabricaInfraestructura <|-- FabricaLocal
+   FabricaInfraestructura <|-- FabricaServidor
+   ComposicionRaiz --> ConfiguracionApp
+   ComposicionRaiz --> FabricaInfraestructura : selecciona segun perfil
+   ComposicionRaiz ..> ISuscriptorEventos : registra observadores
+   ComposicionRaiz ..> ObservadorSincronizacion : crea y suscribe
+
+   FabricaLocal ..> AdaptadorPersistenciaSQLite : crea
+   FabricaLocal ..> AdaptadorArchivosLocal : crea
+   FabricaLocal ..> AdaptadorIdentidadLocal : crea
+   FabricaLocal ..> AdaptadorMetadatos : crea
+   FabricaLocal ..> AdaptadorTranscodificacion : crea
+   FabricaLocal ..> AdaptadorTokensEnMemoria : crea
+   FabricaLocal ..> AdaptadorBusEventos : crea
+   FabricaServidor ..> AdaptadorPersistenciaPostgreSQL : crea
+   FabricaServidor ..> AdaptadorArchivosRed : crea
+   FabricaServidor ..> AdaptadorIdentidadLocal : crea
+   FabricaServidor ..> AdaptadorIdentidadOIDC : crea
+   FabricaServidor ..> AdaptadorMetadatos : crea
+   FabricaServidor ..> AdaptadorTranscodificacion : crea
+   FabricaServidor ..> AdaptadorTokensEnMemoria : crea
+   FabricaServidor ..> AdaptadorBusEventos : crea
+ }
+
+' ============================================================
+' NOTAS
+' ============================================================
+ note bottom of IGestionCatalogo
+   Los puertos de entrada pertenecen al dominio.
+   Los servicios de dominio los implementan y los
+   adaptadores primarios los invocan.
+ end note
+
+ note bottom of IRepositorioCatalogo
+   Los puertos de salida los define el dominio y los
+   implementan los adaptadores secundarios.
+   Una instalacion tiene un solo catalogo, por eso
+   obtenerCatalogo() no recibe identificador.
+ end note
+
+ note right of IRepositorioOutbox
+   Transactional Outbox:
+   CatalogoIndice registra sus eventos y el adaptador de
+   persistencia, dentro de guardar(), escribe el agregado y
+   sus eventos pendientes en la misma transaccion. Nadie
+   mas escribe en el outbox.
+   TareaSincronizar invoca a ServicioDespachoEventos, que
+   lee los pendientes, los publica en el bus y los marca.
+   La entrega es al menos una vez: IRegistroCambios.registrar
+   ignora un EventoId ya registrado.
+ end note
+
+ note bottom of IUnidadDeTrabajo
+   Solo se usa cuando una operacion toca dos agregados:
+   crear usuario (Usuario + credencial local) y compartir
+   coleccion (Usuario invitado + EnlaceCompartido).
+ end note
+
+ note bottom of IBusEventos
+   El bus es el unico dueno de la lista de observadores.
+   La composicion registra ObservadorSincronizacion una vez
+   durante el arranque. Los servicios no mantienen listas
+   propias ni implementan suscribir()/notificar().
+ end note
+
+ note bottom of IProveedorIdentidad
+   Strategy: ServicioAcceso recorre la lista y usa el primer
+   proveedor que soporte las credenciales. Local y OIDC
+   devuelven la misma IdentidadVinculada (emisor, sujeto) y
+   el usuario se resuelve con buscarPorIdentidad().
+   OIDC se envuelve en ProveedorIdentidadResiliente.
+ end note
+
+ note bottom of AdaptadorPersistenciaJdbc
+   Implementa una sola vez los 7 puertos de persistencia.
+   SQLite y PostgreSQL solo cambian como se obtiene la
+   conexion (Template Method).
+ end note
+
+ note bottom of TareaSincronizar
+   Parte servidor del caso de uso "Sincronizar cambios":
+   publica los eventos pendientes para que IRegistroCambios
+   quede al dia. Los clientes leen el delta con ISincronizacion.
+ end note
+
+ note bottom of ServicioDespachoEventos
+   Servicio de dominio invocado por TareaSincronizar.
+   No es un adaptador secundario: coordina los puertos
+   IRepositorioOutbox e IPublicadorEventos.
+ end note
+
+ note bottom of ServicioAutorizado
+   Clase base de todos los servicios salvo
+   ServicioDespachoEventos (ver diagrama de servicios).
+ end note
+
+@enduml

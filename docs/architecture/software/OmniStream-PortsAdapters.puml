@@ -1,0 +1,694 @@
+@startuml OmniStream-PortsAdapters
+' ============================================================
+'  OmniStream - Class diagram
+'  PORTS AND ADAPTERS (3-layer hexagonal architecture)
+'
+'  Layers:  Presentation (primary adapters)
+'          -> Domain (ports, services and model)
+'          -> Infrastructure (secondary adapters)
+'  The composition root is not a layer: it only creates and wires.
+'
+'  Conventions:
+'   - Ports are domain interfaces. Driving ports are
+'     implemented by the domain services; driven ports,
+'     by the secondary adapters.
+'   - Services are shown without members: they are in
+'     OmniStream-Services.puml. The types in the signatures are
+'     in that diagram (DTOs) and in OmniStream-Domain-Model.puml.
+'   - "(via X)" on a dependency means it is used by an
+'     internal collaborator of the service (chain step or
+'     strategy), not by the service directly.
+' ============================================================
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+hide empty members
+' Packages are visual groupings only, not namespaces.
+set separator none
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 12
+  AttributeFontSize 11
+  BackgroundColor<<primary adapter>>   #EAF3F8
+  BorderColor<<primary adapter>>       #2E86AB
+  BackgroundColor<<driving port>>      #E8F5E9
+  BorderColor<<driving port>>          #3E8E41
+  BackgroundColor<<domain service>>    #FCE8B4
+  BorderColor<<domain service>>        #B89748
+  BackgroundColor<<service base>>      #ECE4F8
+  BorderColor<<service base>>          #9673A6
+  BackgroundColor<<observer>>          #FCF4E0
+  BorderColor<<observer>>              #C4A868
+  BackgroundColor<<driven port>>       #F3E5F5
+  BorderColor<<driven port>>           #8E44AD
+  BackgroundColor<<secondary adapter>> #FCE4D6
+  BorderColor<<secondary adapter>>     #C0504D
+  BackgroundColor<<decorator>>         #FDEBD0
+  BorderColor<<decorator>>             #D98E04
+  BackgroundColor<<mapper>>            #F7F7F7
+  BorderColor<<mapper>>                #888888
+  BackgroundColor<<command>>           #FCF4E0
+  BorderColor<<command>>               #C4A868
+  BackgroundColor<<dto>>               #FCF4E0
+  BorderColor<<dto>>                   #C4A868
+  BackgroundColor<<abstract factory>>  #ECE4F8
+  BorderColor<<abstract factory>>      #9673A6
+  BackgroundColor<<concrete factory>>  #FFFDE7
+  BorderColor<<concrete factory>>      #B8A848
+  BackgroundColor<<composition root>>  #FFF2CC
+  BorderColor<<composition root>>      #B8860B
+}
+skinparam note {
+  BackgroundColor #FEFFDD
+  BorderColor #B8A848
+  FontSize 11
+}
+
+' ============================================================
+' EXTERNAL ACTOR AND PRIMARY ADAPTERS  (presentation)
+' ============================================================
+class "Web browser" as WebBrowser <<actor>>
+
+package "Primary adapters (presentation)" #EAF3F8 {
+   class CliAdapter <<primary adapter>> {
+     - catalogManagement : ICatalogManagement
+     + execute(args : List<String>) : int
+     - printHelp() : void
+   }
+   class DesktopAdapter <<primary adapter>> {
+     - catalogManagement : ICatalogManagement
+     - sync : ISync
+     + handleIpc(message : String) : String
+     + startSync(u : UserId) : void
+   }
+   class MobileAdapter <<primary adapter>> {
+     - sync : ISync
+     + handleSyncRequest(req : HttpRequest) : HttpResponse
+   }
+   class WebUiAdapter <<primary adapter>> {
+     + serveInterface(path : String) : HttpResponse
+   }
+   class RestApiAdapter <<primary adapter>> {
+     - catalogManagement : ICatalogManagement
+     - playback : IPlayback
+     - search : ISearch
+     - accessControl : IAccessControl
+     + route(req : HttpRequest) : HttpResponse
+     - authenticateRequest(req : HttpRequest) : SessionToken
+     - serialize(target : Object) : String
+     - mapError(e : Exception) : HttpResponse
+   }
+   class SchedulerAdapter <<primary adapter>> {
+     - tasks : Map<String,ScheduledTask>
+     - systemIdentity : UserId
+     + register(cronExpression : String, t : ScheduledTask) : void
+     + start() : void
+     + stop() : void
+     - fire(t : ScheduledTask) : void
+   }
+   class HttpRequest <<dto>> {
+     - method : String
+     - path : String
+     - headers : Map<String,String>
+     - body : String
+   }
+   class HttpResponse <<dto>> {
+     - statusCode : int
+     - headers : Map<String,String>
+     - body : String
+   }
+   interface ScheduledTask <<command>> {
+     + name() : String
+     + execute(executor : UserId) : void
+   }
+   class ReindexTask <<command>> {
+     - catalogManagement : ICatalogManagement
+     - root : Path
+     + name() : String
+     + execute(executor : UserId) : void
+   }
+   class BackupTask <<command>> {
+     - catalogManagement : ICatalogManagement
+     - destination : Path
+     + name() : String
+     + execute(executor : UserId) : void
+   }
+   class SyncTask <<command>> {
+     - eventDispatch : IEventDispatch
+     - limit : int
+     + name() : String
+     + execute(executor : UserId) : void
+   }
+
+   ScheduledTask <|.. ReindexTask
+   ScheduledTask <|.. BackupTask
+   ScheduledTask <|.. SyncTask
+   SchedulerAdapter o-- "0..*" ScheduledTask : schedules
+ }
+
+WebBrowser --> WebUiAdapter : requests HTTP interface
+WebBrowser --> RestApiAdapter : consumes HTTP/JSON API
+
+' ============================================================
+' DRIVING PORTS  (domain)
+' ============================================================
+package "Driving ports (domain)" #E8F5E9 {
+   interface ICatalogManagement <<driving port>> {
+     + ingestFile(u : UserId, path : Path) : IngestionResult
+     + uploadFile(u : UserId, fileName : String, data : InputStream) : IngestionResult
+     + reindexLibrary(u : UserId, root : Path) : int
+     + detectDuplicates(u : UserId) : List<MediaFile>
+     + editMetadata(u : UserId, id : ItemId, key : String, value : String) : void
+     + deleteFile(u : UserId, id : ItemId) : void
+     + backupCatalog(admin : UserId, destination : Path) : Path
+     + configureLibraryPath(admin : UserId, path : Path) : void
+     + monitorServerStatus(admin : UserId) : ServerStatus
+   }
+   interface ISearch <<driving port>> {
+     + searchContent(u : UserId, txt : String) : List<CatalogItem>
+     + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFile>
+     + browseLibrary(u : UserId, col : ItemId) : List<CatalogItem>
+     + manageCollections(u : UserId, cmd : CollectionCommand) : Collection
+     + tagFile(u : UserId, id : ItemId, e : Tag) : void
+   }
+   interface IPlayback <<driving port>> {
+     + openSession(u : UserId, id : ItemId) : PlaybackSession
+     + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSession
+     + requestStream(s : SessionId, p : StreamProfile) : MediaStream
+     + recordProgress(s : SessionId, pos : Duration) : void
+     + pauseSession(s : SessionId) : void
+     + finishSession(s : SessionId) : void
+   }
+   interface IAccessControl <<driving port>> {
+     + authenticateUser(c : Credentials) : SessionToken
+     + validateToken(value : String) : Optional<SessionToken>
+     + logout(value : String) : void
+     + accessWithLink(link : String) : SessionToken
+     + authorizeResource(u : UserId, r : ItemId, acc : AccessType) : boolean
+     + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLink
+     + createUser(admin : UserId, username : String, password : String, role : Role) : UserId
+     + manageRoles(admin : UserId, target : UserId, role : Role) : void
+     + grantPermission(admin : UserId, u : UserId, p : Permission) : void
+     + revokePermission(admin : UserId, u : UserId, p : Permission) : void
+     + deactivateUser(admin : UserId, u : UserId) : void
+   }
+   interface ISync <<driving port>> {
+     + syncChanges(u : UserId, since : Instant) : SyncDelta
+     + cacheContent(u : UserId, id : ItemId) : OfflinePackage
+     + hasPendingChanges(u : UserId, since : Instant) : boolean
+   }
+   interface IEventDispatch <<driving port>> {
+     + publishPending(limit : int) : int
+   }
+ }
+
+' ============================================================
+' DOMAIN SERVICES  (details in the services diagram)
+' ============================================================
+package "Domain services (see services diagram)" #FFF8E1 {
+   abstract class AuthorizedService <<service base>>
+   class CatalogService <<domain service>>
+   class SearchService <<domain service>>
+   class PlaybackService <<domain service>>
+   class AccessService <<domain service>>
+   class SyncService <<domain service>>
+   class EventDispatchService <<domain service>>
+   interface ICatalogObserver <<observer>> {
+     + onCatalogChanged(e : DomainEvent) : void
+   }
+   class SyncObserver <<observer>>
+   ICatalogObserver <|.. SyncObserver
+ }
+
+ ICatalogManagement <|.. CatalogService
+ ISearch <|.. SearchService
+ IPlayback <|.. PlaybackService
+ IAccessControl <|.. AccessService
+ ISync <|.. SyncService
+ IEventDispatch <|.. EventDispatchService
+
+ CliAdapter --> ICatalogManagement : invokes
+ DesktopAdapter --> ICatalogManagement : invokes
+ DesktopAdapter --> ISync : invokes
+ MobileAdapter --> ISync : invokes
+ RestApiAdapter --> ICatalogManagement : invokes
+ RestApiAdapter --> ISearch : invokes
+ RestApiAdapter --> IPlayback : invokes
+ RestApiAdapter --> IAccessControl : invokes
+ SchedulerAdapter ..> ScheduledTask : fires
+ ReindexTask --> ICatalogManagement : invokes
+ BackupTask --> ICatalogManagement : invokes
+ SyncTask --> IEventDispatch : invokes
+
+' ============================================================
+' DRIVEN PORTS  (domain)
+' ============================================================
+package "Driven ports (domain)" #F3E5F5 {
+   interface ICatalogRepository <<driven port>> {
+     + getCatalog() : CatalogIndex
+     + save(c : CatalogIndex) : void
+     + findFile(id : ItemId) : Optional<MediaFile>
+     + findByFingerprint(h : Fingerprint) : Optional<MediaFile>
+     + findByText(txt : String) : List<MediaFile>
+     + findByCriteria(c : SearchCriteria) : List<MediaFile>
+   }
+   interface ISessionRepository <<driven port>> {
+     + save(s : PlaybackSession) : void
+     + findById(id : SessionId) : Optional<PlaybackSession>
+     + findLastSession(u : UserId, a : ItemId) : Optional<PlaybackSession>
+     + countActive() : int
+   }
+   interface IUserRepository <<driven port>> {
+     + save(u : User) : void
+     + findById(id : UserId) : Optional<User>
+     + findByUsername(username : String) : Optional<User>
+     + findByIdentity(i : LinkedIdentity) : Optional<User>
+   }
+   interface ISharedLinkRepository <<driven port>> {
+     + save(e : SharedLink) : void
+     + findByToken(token : String) : Optional<SharedLink>
+   }
+   interface IChangeLog <<driven port>> {
+     + register(e : CatalogEvent) : void
+     + changesSince(since : Instant) : SyncDelta
+     + hasChangesSince(since : Instant) : boolean
+   }
+   interface IOutboxRepository <<driven port>> {
+     + fetchPending(limit : int) : List<DomainEvent>
+     + markPublished(id : EventId) : void
+   }
+   interface IUnitOfWork <<driven port>> {
+     + execute(work : Supplier<T>) : T
+   }
+   interface ITokenRepository <<driven port>> {
+     + save(t : SessionToken) : void
+     + find(value : String) : Optional<SessionToken>
+     + delete(value : String) : void
+   }
+   interface IFileStorage <<driven port>> {
+     + read(path : Path) : InputStream
+     + write(path : Path, data : InputStream) : void
+     + delete(path : Path) : void
+     + exists(path : Path) : boolean
+     + list(root : Path) : List<Path>
+     + computeFingerprint(path : Path) : Fingerprint
+     + copy(source : Path, destination : Path) : Path
+     + freeSpace() : long
+   }
+   interface IMetadataExtractor <<driven port>> {
+     + supports(type : MediaType) : boolean
+     + extract(path : Path) : List<MetadataEntry>
+   }
+   interface ITranscoder <<driven port>> {
+     + supports(source : MediaType, p : StreamProfile) : boolean
+     + transcode(path : Path, p : StreamProfile, pos : Duration) : MediaStream
+   }
+   interface IIdentityProvider <<driven port>> {
+     + supports(c : Credentials) : boolean
+     + verify(c : Credentials) : Optional<LinkedIdentity>
+   }
+   interface ICredentialRegistry <<driven port>> {
+     + register(username : String, password : String) : LinkedIdentity
+     + changePassword(i : LinkedIdentity, newPassword : String) : void
+   }
+   interface IEventPublisher <<driven port>> {
+     + publish(e : DomainEvent) : void
+   }
+   interface IEventSubscriber <<driven port>> {
+     + subscribe(observer : ICatalogObserver) : void
+     + unsubscribe(observer : ICatalogObserver) : void
+   }
+   interface IEventBus <<driven port>>
+   IEventBus --|> IEventPublisher
+   IEventBus --|> IEventSubscriber
+ }
+
+ AuthorizedService ..> IUserRepository : loads user to authorize
+ CatalogService ..> ICatalogRepository : queries / persists
+ CatalogService ..> ISessionRepository : counts active sessions
+ CatalogService ..> IFileStorage : reads / writes / backs up
+ CatalogService ..> IMetadataExtractor : extracts (via ExtractionStep)
+ SearchService ..> ICatalogRepository : queries / persists
+ PlaybackService ..> ISessionRepository : persists sessions
+ PlaybackService ..> ICatalogRepository : finds the file
+ PlaybackService ..> IFileStorage : direct stream (via DirectStream)
+ PlaybackService ..> ITranscoder : transcodes (via TranscodedStream)
+ AccessService ..> IIdentityProvider : verifies identity (Strategy)
+ AccessService ..> ICredentialRegistry : registers local password
+ AccessService ..> ITokenRepository : saves / validates tokens
+ AccessService ..> ISharedLinkRepository : saves / finds links
+ AccessService ..> IUnitOfWork : wraps transaction
+ SyncService ..> IChangeLog : reads changes
+ SyncService ..> ICatalogRepository : builds packages
+ SyncService ..> IFileStorage : reads content
+ SyncObserver ..> IChangeLog : records changes
+ EventDispatchService ..> IOutboxRepository : fetches and marks pending
+ EventDispatchService ..> IEventPublisher : publishes events
+ IEventSubscriber ..> ICatalogObserver : registers
+
+' ============================================================
+' SECONDARY ADAPTERS  (infrastructure)
+' ============================================================
+package "Secondary adapters (infrastructure)" #FCE4D6 {
+   abstract class JdbcPersistenceAdapter <<secondary adapter>> {
+     # mediaFileMapper : MediaFileMapper
+     # catalogMapper : CatalogIndexMapper
+     # sessionMapper : SessionMapper
+     # userMapper : UserMapper
+     # sharedLinkMapper : SharedLinkMapper
+     # eventMapper : EventMapper
+     # {abstract} connection() : Connection
+   }
+   class SqlitePersistenceAdapter <<secondary adapter>> {
+     - databasePath : Path
+     # connection() : Connection
+   }
+   class PostgreSqlPersistenceAdapter <<secondary adapter>> {
+     - url : URI
+     - pool : DataSource
+     # connection() : Connection
+   }
+   class LocalFileStorageAdapter <<secondary adapter>> {
+     - allowedRoot : Path
+     + read(path : Path) : InputStream
+     + write(path : Path, data : InputStream) : void
+     + delete(path : Path) : void
+     + exists(path : Path) : boolean
+     + list(root : Path) : List<Path>
+     + computeFingerprint(path : Path) : Fingerprint
+     + copy(source : Path, destination : Path) : Path
+     + freeSpace() : long
+     - ensureWithinRoot(path : Path) : void
+   }
+   class NetworkFileStorageAdapter <<secondary adapter>> {
+     - mountPoint : URI
+     - mountCredentials : String
+     + read(path : Path) : InputStream
+     + write(path : Path, data : InputStream) : void
+     + delete(path : Path) : void
+     + exists(path : Path) : boolean
+     + list(root : Path) : List<Path>
+     + computeFingerprint(path : Path) : Fingerprint
+     + copy(source : Path, destination : Path) : Path
+     + freeSpace() : long
+     - reconnect() : void
+   }
+   class MetadataAdapter <<secondary adapter>> {
+     - ffprobePath : Path
+     - exifToolPath : Path
+     + supports(type : MediaType) : boolean
+     + extract(path : Path) : List<MetadataEntry>
+     - runProcess(cmd : List<String>) : String
+   }
+   class TranscodingAdapter <<secondary adapter>> {
+     - ffmpegPath : Path
+     - tempDirectory : Path
+     + supports(source : MediaType, p : StreamProfile) : boolean
+     + transcode(path : Path, p : StreamProfile, pos : Duration) : MediaStream
+     - buildCommand(path : Path, p : StreamProfile, pos : Duration) : List<String>
+   }
+   class LocalIdentityAdapter <<secondary adapter>> {
+     - dataSource : DataSource
+     - hashAlgorithm : String
+     + supports(c : Credentials) : boolean
+     + verify(c : Credentials) : Optional<LinkedIdentity>
+     + register(username : String, password : String) : LinkedIdentity
+     + changePassword(i : LinkedIdentity, newPassword : String) : void
+     - computeHash(password : String, salt : String) : String
+     - comparePassword(plain : String, hash : String) : boolean
+   }
+   class OidcIdentityAdapter <<secondary adapter>> {
+     - issuer : URI
+     - clientId : String
+     + supports(c : Credentials) : boolean
+     + verify(c : Credentials) : Optional<LinkedIdentity>
+     - validateToken(externalToken : String) : Map<String,String>
+   }
+   class InMemoryTokenAdapter <<secondary adapter>> {
+     - tokens : Map<String,SessionToken>
+     + save(t : SessionToken) : void
+     + find(value : String) : Optional<SessionToken>
+     + delete(value : String) : void
+     - purgeExpired() : void
+   }
+   class EventBusAdapter <<secondary adapter>> {
+     - observers : List<ICatalogObserver>
+     + publish(e : DomainEvent) : void
+     + subscribe(observer : ICatalogObserver) : void
+     + unsubscribe(observer : ICatalogObserver) : void
+     - dispatchToObservers(e : DomainEvent) : void
+   }
+   class MediaFileMapper <<mapper>> {
+     + toEntity(row : ResultSet) : MediaFile
+     + toRow(a : MediaFile) : Map<String,Object>
+     + toMetadata(json : String) : List<MetadataEntry>
+   }
+   class CatalogIndexMapper <<mapper>> {
+     + toEntity(row : ResultSet) : CatalogIndex
+     + toRow(c : CatalogIndex) : Map<String,Object>
+   }
+   class SessionMapper <<mapper>> {
+     + toEntity(row : ResultSet) : PlaybackSession
+     + toRow(s : PlaybackSession) : Map<String,Object>
+   }
+   class UserMapper <<mapper>> {
+     + toEntity(row : ResultSet) : User
+     + toRow(u : User) : Map<String,Object>
+   }
+   class SharedLinkMapper <<mapper>> {
+     + toEntity(row : ResultSet) : SharedLink
+     + toRow(e : SharedLink) : Map<String,Object>
+   }
+   class EventMapper <<mapper>> {
+     + toEvent(row : ResultSet) : DomainEvent
+     + toRow(e : DomainEvent) : Map<String,Object>
+   }
+   class CachedCatalogRepository <<decorator>> {
+     - delegate : ICatalogRepository
+     - cache : CatalogIndex
+     - loadedAt : Instant
+     - ttl : Duration
+     + getCatalog() : CatalogIndex
+     + save(c : CatalogIndex) : void
+     + findFile(id : ItemId) : Optional<MediaFile>
+     + findByFingerprint(h : Fingerprint) : Optional<MediaFile>
+     + findByText(txt : String) : List<MediaFile>
+     + findByCriteria(c : SearchCriteria) : List<MediaFile>
+     - invalidate() : void
+     - isFresh() : boolean
+   }
+   class CachedTranscoder <<decorator>> {
+     - delegate : ITranscoder
+     - cacheDirectory : Path
+     - byteLimit : long
+     + supports(source : MediaType, p : StreamProfile) : boolean
+     + transcode(path : Path, p : StreamProfile, pos : Duration) : MediaStream
+     - cacheKey(path : Path, p : StreamProfile) : String
+     - evictOldest() : void
+   }
+   class ResilientIdentityProvider <<decorator>> {
+     - delegate : IIdentityProvider
+     - status : CircuitState
+     - failureThreshold : int
+     - retryWindow : Duration
+     + supports(c : Credentials) : boolean
+     + verify(c : Credentials) : Optional<LinkedIdentity>
+     - recordFailure() : void
+     - isCircuitOpen() : boolean
+   }
+   enum CircuitState {
+     CLOSED
+     OPEN
+     HALF_OPEN
+   }
+
+   JdbcPersistenceAdapter <|-- SqlitePersistenceAdapter
+   JdbcPersistenceAdapter <|-- PostgreSqlPersistenceAdapter
+ }
+
+ ICatalogRepository <|.. JdbcPersistenceAdapter
+ ISessionRepository <|.. JdbcPersistenceAdapter
+ IUserRepository <|.. JdbcPersistenceAdapter
+ ISharedLinkRepository <|.. JdbcPersistenceAdapter
+ IChangeLog <|.. JdbcPersistenceAdapter
+ IOutboxRepository <|.. JdbcPersistenceAdapter
+ IUnitOfWork <|.. JdbcPersistenceAdapter
+ IFileStorage <|.. LocalFileStorageAdapter
+ IFileStorage <|.. NetworkFileStorageAdapter
+ IMetadataExtractor <|.. MetadataAdapter
+ ITranscoder <|.. TranscodingAdapter
+ IIdentityProvider <|.. LocalIdentityAdapter
+ ICredentialRegistry <|.. LocalIdentityAdapter
+ IIdentityProvider <|.. OidcIdentityAdapter
+ ITokenRepository <|.. InMemoryTokenAdapter
+ IEventBus <|.. EventBusAdapter
+ ICatalogRepository <|.. CachedCatalogRepository
+ ITranscoder <|.. CachedTranscoder
+ IIdentityProvider <|.. ResilientIdentityProvider
+
+ CachedCatalogRepository --> ICatalogRepository : delegate
+ CachedTranscoder --> ITranscoder : delegate
+ ResilientIdentityProvider --> IIdentityProvider : delegate
+ ResilientIdentityProvider --> CircuitState : keeps state
+ JdbcPersistenceAdapter ..> MediaFileMapper : uses
+ JdbcPersistenceAdapter ..> CatalogIndexMapper : uses
+ JdbcPersistenceAdapter ..> SessionMapper : uses
+ JdbcPersistenceAdapter ..> UserMapper : uses
+ JdbcPersistenceAdapter ..> SharedLinkMapper : uses
+ JdbcPersistenceAdapter ..> EventMapper : uses
+ EventBusAdapter ..> ICatalogObserver : notifies
+
+' ============================================================
+' COMPOSITION AND CONFIGURATION  (bootstrap, outside the layers)
+' ============================================================
+package "Composition (bootstrap)" #FFFDE7 {
+   class AppConfiguration <<dto>> {
+     - profile : String
+     - libraryPath : Path
+     - databasePath : Path
+     - databaseUrl : Optional<URI>
+     - oidcIssuer : Optional<URI>
+     - ffmpegPath : Path
+     - exifToolPath : Path
+     - cacheEnabled : boolean
+     - identityFailureThreshold : int
+     - tokenLifetime : Duration
+   }
+   abstract class InfrastructureFactory <<abstract factory>> {
+     + {abstract} createCatalogRepository() : ICatalogRepository
+     + {abstract} createSessionRepository() : ISessionRepository
+     + {abstract} createUserRepository() : IUserRepository
+     + {abstract} createSharedLinkRepository() : ISharedLinkRepository
+     + {abstract} createChangeLog() : IChangeLog
+     + {abstract} createOutboxRepository() : IOutboxRepository
+     + {abstract} createUnitOfWork() : IUnitOfWork
+     + {abstract} createTokenRepository() : ITokenRepository
+     + {abstract} createStorage() : IFileStorage
+     + {abstract} createIdentityProviders() : List<IIdentityProvider>
+     + {abstract} createCredentialRegistry() : ICredentialRegistry
+     + {abstract} createMetadataExtractor() : IMetadataExtractor
+     + {abstract} createTranscoder() : ITranscoder
+     + {abstract} createEventBus() : IEventBus
+   }
+   class LocalFactory <<concrete factory>>
+   class ServerFactory <<concrete factory>>
+   class CompositionRoot <<composition root>> {
+     - config : AppConfiguration
+     - factory : InfrastructureFactory
+     + start() : void
+     + stop() : void
+     - selectFactory(config : AppConfiguration) : InfrastructureFactory
+     - decoratePorts() : void
+     - buildIngestionChain() : IngestionStep
+     - createServices() : void
+     - createPrimaryAdapters() : void
+     - registerObservers() : void
+   }
+   InfrastructureFactory <|-- LocalFactory
+   InfrastructureFactory <|-- ServerFactory
+   CompositionRoot --> AppConfiguration
+   CompositionRoot --> InfrastructureFactory : selects by profile
+   CompositionRoot ..> IEventSubscriber : registers observers
+   CompositionRoot ..> SyncObserver : creates and subscribes
+
+   LocalFactory ..> SqlitePersistenceAdapter : creates
+   LocalFactory ..> LocalFileStorageAdapter : creates
+   LocalFactory ..> LocalIdentityAdapter : creates
+   LocalFactory ..> MetadataAdapter : creates
+   LocalFactory ..> TranscodingAdapter : creates
+   LocalFactory ..> InMemoryTokenAdapter : creates
+   LocalFactory ..> EventBusAdapter : creates
+   ServerFactory ..> PostgreSqlPersistenceAdapter : creates
+   ServerFactory ..> NetworkFileStorageAdapter : creates
+   ServerFactory ..> LocalIdentityAdapter : creates
+   ServerFactory ..> OidcIdentityAdapter : creates
+   ServerFactory ..> MetadataAdapter : creates
+   ServerFactory ..> TranscodingAdapter : creates
+   ServerFactory ..> InMemoryTokenAdapter : creates
+   ServerFactory ..> EventBusAdapter : creates
+ }
+
+' ============================================================
+' NOTES
+' ============================================================
+ note bottom of ICatalogManagement
+   Driving ports belong to the domain.
+   The domain services implement them and the
+   primary adapters invoke them.
+ end note
+
+ note bottom of ICatalogRepository
+   Driven ports are defined by the domain and
+   implemented by the secondary adapters.
+   An installation has a single catalog, so
+   getCatalog() takes no identifier.
+ end note
+
+ note right of IOutboxRepository
+   Transactional Outbox:
+   CatalogIndex records its events and the persistence
+   adapter, inside save(), writes the aggregate and its
+   pending events in the same transaction. Nothing else
+   writes to the outbox.
+   SyncTask invokes EventDispatchService, which
+   reads the pending ones, publishes them on the bus and marks them.
+   Delivery is at least once: IChangeLog.register
+   ignores an EventId it already recorded.
+ end note
+
+ note bottom of IUnitOfWork
+   Only used when an operation touches two aggregates:
+   creating a user (User + local credential) and sharing
+   a collection (guest User + SharedLink).
+ end note
+
+ note bottom of IEventBus
+   The bus is the only owner of the observer list.
+   The composition root registers SyncObserver once
+   at startup. Services keep no lists of their own
+   and implement no subscribe()/notify().
+ end note
+
+ note bottom of IIdentityProvider
+   Strategy: AccessService walks the list and uses the first
+   provider that supports the credentials. Local and OIDC
+   return the same LinkedIdentity (issuer, subject) and
+   the user is resolved with findByIdentity().
+   OIDC is wrapped in ResilientIdentityProvider.
+ end note
+
+ note bottom of JdbcPersistenceAdapter
+   Implements the 7 persistence ports only once.
+   SQLite and PostgreSQL only change how the connection
+   is obtained (Template Method).
+ end note
+
+ note bottom of SyncTask
+   Server side of the "Sync changes" use case:
+   publishes the pending events so that IChangeLog
+   is up to date. Clients read the delta through ISync.
+ end note
+
+ note bottom of EventDispatchService
+   Domain service invoked by SyncTask.
+   It is not a secondary adapter: it coordinates the
+   IOutboxRepository and IEventPublisher ports.
+ end note
+
+ note bottom of AuthorizedService
+   Base class of every service except
+   EventDispatchService (see services diagram).
+ end note
+
+@enduml

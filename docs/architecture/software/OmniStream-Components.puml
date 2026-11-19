@@ -1,0 +1,324 @@
+@startuml OmniStream-Components
+' ============================================================
+'  OmniStream - Component diagram
+'  Clean / hexagonal architecture (ports and adapters)
+'
+'  Layers:  Presentation  ->  Domain  ->  Infrastructure
+'  Dependency rule: everything points inwards.
+'  The domain knows no concrete technology.
+'  The composition root is not a layer: it creates and wires everything.
+'
+'  Detail of each part:
+'   - Model:             OmniStream-Domain-Model.puml
+'   - Services:          OmniStream-Services.puml
+'   - Ports/adapters:    OmniStream-PortsAdapters.puml
+'
+'  Line convention:
+'    solid line    component -- port : PROVIDES / IMPLEMENTS it
+'    arrow ..>     component -> port : CONSUMES it / depends on it
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #666666
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam nodesep 45
+skinparam ranksep 55
+
+skinparam rectangle {
+  BorderThickness 1.4
+  BackgroundColor<<external>>  #F2F2F2
+  BorderColor<<external>>      #888888
+  BackgroundColor<<presentation>>  #E8F4FD
+  BorderColor<<presentation>>      #2E86AB
+  BackgroundColor<<domain>>  #FFF7E0
+  BorderColor<<domain>>      #B8860B
+  BackgroundColor<<service>> #FFF2CC
+  BorderColor<<service>>     #B8860B
+  BackgroundColor<<model>>   #FDF6E3
+  BorderColor<<model>>       #C9A227
+  BackgroundColor<<driven>>   #E6F6E6
+  BorderColor<<driven>>       #3E8E41
+  BackgroundColor<<infra>>    #F7F7F7
+  BorderColor<<infra>>        #999999
+  BackgroundColor<<bootstrap>> #FFFDE7
+  BorderColor<<bootstrap>>     #B8A848
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 11
+}
+skinparam interface {
+  BackgroundColor #FFFFFF
+  BorderColor #2E86AB
+  FontSize 11
+}
+
+' ============================================================
+' 1. CLIENTS  (outside the system)
+' ============================================================
+rectangle "Clients" <<external>> {
+  component "Browser"          as CliWeb
+  component "Desktop app"  as CliDesk
+  component "Mobile app"          as CliMobile
+  component "Terminal / scripts" as CliCli
+}
+
+' ============================================================
+' 2. PRESENTATION LAYER  (primary / driving adapters)
+' ============================================================
+rectangle "Presentation layer\n(primary / driving adapters)" <<presentation>> {
+  component "Web UI adapter\n<<HTTP controller>>"            as AdWeb
+  component "Desktop adapter\n<<local controller>>"          as AdDesk
+  component "Mobile adapter\n<<mobile controller>>"           as AdMobile
+  component "CLI adapter\n<<controller>>"                    as AdCli
+  component "REST API adapter\n<<controller>>"               as AdApi
+  component "Scheduler adapter\n<<scheduled tasks>>"     as AdScheduler
+}
+
+' ============================================================
+' 3. DRIVING PORTS  (provided by the domain)
+' ============================================================
+rectangle "Driving ports" <<domain>> {
+  interface "ICatalogManagement" as PIN_CAT
+  interface "ISearch"        as PIN_SEARCH
+  interface "IPlayback"    as PIN_PLAY
+  interface "IAccessControl"   as PIN_ACC
+  interface "ISync"  as PIN_SYNC
+  interface "IEventDispatch" as PIN_DISPATCH
+}
+
+' ============================================================
+' 4. DOMAIN
+' ============================================================
+rectangle "Domain" <<domain>> {
+
+  rectangle "Domain services" <<service>> {
+    component "Catalog service\n..\ningestFile()\nuploadFile()\nreindexLibrary()"          as SvCatalog
+    component "Search service\n..\nsearchContent()\nfilterByCriteria()\nmanageCollections()" as SvSearch
+    component "Playback service\n..\nopenSession()\nrequestStream()\nrecordProgress()"        as SvPlayback
+    component "Access service\n..\nauthenticateUser()\ncreateUser()\nshareCollection()"          as SvAccess
+    component "Sync service\n..\nsyncChanges()\ncacheContent()"                    as SvSync
+    component "Event dispatch service\n..\npublishPending()"                                   as SvDispatch
+    component "Sync observer\n<<observer>>\n..\nonCatalogChanged()"                         as SvObserver
+  }
+
+  rectangle "Domain model" <<model>> {
+    component "CatalogIndex\n<<aggregate root>>"       as ModelCatalog
+    component "MediaFile\n<<entity>>"            as ModelFile
+    component "MetadataEntry\n<<value object>>"               as ModelMetadata
+    component "Collection\n<<entity>>"                    as ModelCollection
+    component "Tag\n<<value object>>"               as ModelTag
+    component "User\n<<aggregate root>>"              as ModelUser
+    component "Permission\n<<value object>>"                as ModelPermission
+    component "SharedLink\n<<aggregate root>>"     as ModelSharedLink
+    component "PlaybackSession\n<<aggregate root>>"   as ModelSession
+    component "Domain events\n<<event>>"            as ModelEvents
+    component "Domain policies\n<<policy>>"         as ModelPolicies
+  }
+}
+
+' ============================================================
+' 5. DRIVEN PORTS  (defined by the domain)
+' ============================================================
+rectangle "Driven ports" <<domain>> {
+  interface "ICatalogRepository"    as POUT_REPO
+  interface "ISessionRepository"    as POUT_SES
+  interface "IUserRepository"    as POUT_USR
+  interface "ISharedLinkRepository"     as POUT_LINK
+  interface "IChangeLog"        as POUT_CHANGES
+  interface "IOutboxRepository"      as POUT_OUT
+  interface "IUnitOfWork"        as POUT_UOW
+  interface "ITokenRepository"      as POUT_TOK
+  interface "IFileStorage" as POUT_FS
+  interface "IMetadataExtractor"     as POUT_META
+  interface "ITranscoder"       as POUT_TRANS
+  interface "IIdentityProvider"     as POUT_IDP
+  interface "ICredentialRegistry"   as POUT_CRED
+  interface "IEventPublisher"      as POUT_PUB
+  interface "IEventSubscriber"      as POUT_SUB
+}
+
+' ============================================================
+' 6. SECONDARY ADAPTERS  (driven)
+' ============================================================
+rectangle "Infrastructure\n(secondary / driven adapters)" <<driven>> {
+  component "Persistence adapter\n<<JDBC: SQLite / PostgreSQL>>" as AdPersistence
+  component "File storage adapter\n<<local FS / NAS / SMB>>"         as AdFs
+  component "Metadata adapter\n<<FFprobe / ExifTool>>"          as AdMeta
+  component "Transcoding adapter\n<<FFmpeg>>"              as AdTrans
+  component "Identity adapter\n<<local / OIDC>>"                as AdIdp
+  component "Token adapter\n<<in memory>>"                     as AdTokens
+  component "Event adapter\n<<in-memory bus>>"                as AdEvents
+}
+
+' ============================================================
+' 7. EXTERNAL RESOURCES
+' ============================================================
+rectangle "External resources" <<infra>> {
+  database  "Database\nand index"               as DbIndex
+  folder    "File library\n(NAS / disk)" as FsLibrary
+  component "External\nidentity provider"       as IdpExternal
+}
+
+' ============================================================
+' 8. BOOTSTRAP  (outside the layers)
+' ============================================================
+rectangle "Bootstrap" <<bootstrap>> {
+  component "Composition root\n<<composition root>>\n..\nLocal / Server factory" as CompRoot
+}
+
+' ============================================================
+' CLIENTS -> PRESENTATION
+' ============================================================
+CliWeb    --> AdWeb
+CliDesk   --> AdDesk
+CliMobile --> AdMobile
+CliCli    --> AdCli
+AdWeb     --> AdApi : HTTP/JSON
+AdDesk    --> AdApi : HTTP/IPC
+AdMobile  --> AdApi : HTTP/JSON
+
+' ============================================================
+' PRESENTATION -> DRIVING PORTS  (consumes)
+' ============================================================
+AdApi    ..> PIN_CAT
+AdApi    ..> PIN_SEARCH
+AdApi    ..> PIN_PLAY
+AdApi    ..> PIN_ACC
+AdCli    ..> PIN_CAT
+AdDesk   ..> PIN_CAT
+AdDesk   ..> PIN_SYNC
+AdMobile ..> PIN_SYNC
+AdScheduler   ..> PIN_CAT : reindex / back up
+AdScheduler   ..> PIN_DISPATCH : sync
+
+' ============================================================
+' DOMAIN -- DRIVING PORTS  (provides)
+' ============================================================
+SvCatalog -up- PIN_CAT
+SvSearch -up- PIN_SEARCH
+SvPlayback -up- PIN_PLAY
+SvAccess -up- PIN_ACC
+SvSync -up- PIN_SYNC
+SvDispatch -up- PIN_DISPATCH
+
+' ============================================================
+' SERVICES -> DOMAIN MODEL
+' ============================================================
+SvCatalog --> ModelCatalog
+SvSearch --> ModelCatalog
+SvPlayback --> ModelSession
+SvAccess --> ModelUser
+SvAccess --> ModelSharedLink
+SvObserver --> ModelEvents : receives
+SvDispatch --> ModelEvents : publishes
+
+' --- relations inside the model ---
+ModelCatalog *-- ModelFile
+ModelCatalog *-- ModelCollection
+ModelFile  *-- ModelMetadata
+ModelFile  *-- ModelTag
+ModelUser  *-- ModelPermission
+ModelCatalog --> ModelEvents : records
+ModelSession   ..> ModelFile : by id
+ModelSharedLink   ..> ModelCollection : by id
+ModelPolicies   ..> ModelCatalog : validates
+ModelPolicies   ..> ModelPermission  : validates
+
+' ============================================================
+' DOMAIN -> DRIVEN PORTS  (consumes)
+' ============================================================
+SvCatalog ..> POUT_REPO
+SvCatalog ..> POUT_SES
+SvCatalog ..> POUT_FS
+SvCatalog ..> POUT_META
+SvSearch ..> POUT_REPO
+SvPlayback ..> POUT_SES
+SvPlayback ..> POUT_REPO
+SvPlayback ..> POUT_FS
+SvPlayback ..> POUT_TRANS
+SvAccess ..> POUT_USR
+SvAccess ..> POUT_IDP
+SvAccess ..> POUT_CRED
+SvAccess ..> POUT_TOK
+SvAccess ..> POUT_LINK
+SvAccess ..> POUT_UOW
+SvSync ..> POUT_CHANGES
+SvSync ..> POUT_REPO
+SvSync ..> POUT_FS
+SvObserver ..> POUT_CHANGES
+SvDispatch ..> POUT_OUT
+SvDispatch ..> POUT_PUB
+
+' ============================================================
+' ADAPTERS -- DRIVEN PORTS  (implements)
+' ============================================================
+AdPersistence  -up- POUT_REPO
+AdPersistence  -up- POUT_SES
+AdPersistence  -up- POUT_USR
+AdPersistence  -up- POUT_LINK
+AdPersistence  -up- POUT_CHANGES
+AdPersistence  -up- POUT_OUT
+AdPersistence  -up- POUT_UOW
+AdFs    -up- POUT_FS
+AdMeta  -up- POUT_META
+AdTrans -up- POUT_TRANS
+AdIdp   -up- POUT_IDP
+AdIdp   -up- POUT_CRED
+AdTokens   -up- POUT_TOK
+AdEvents   -up- POUT_PUB
+AdEvents   -up- POUT_SUB
+
+' The bus notifies the registered observers
+AdEvents ..> SvObserver : notifies (ICatalogObserver)
+
+' ============================================================
+' ADAPTERS -> EXTERNAL RESOURCES
+' ============================================================
+AdPersistence  --> DbIndex
+AdIdp   --> DbIndex : local credentials
+AdFs    --> FsLibrary
+AdMeta  --> FsLibrary
+AdTrans --> FsLibrary
+AdIdp   --> IdpExternal : optional (OIDC)
+
+' ============================================================
+' BOOTSTRAP -> LAYERS
+' ============================================================
+CompRoot ..> POUT_SUB : registers observers
+
+note right of CompRoot
+  Creates the adapters with the profile's factory
+  (Abstract Factory: Local or Server), builds the
+  ingestion chain, creates the services and the
+  primary adapters and subscribes the observer.
+  It is not a layer: nothing depends on it.
+end note
+
+' ============================================================
+' NOTES
+' ============================================================
+note left of PIN_CAT
+  **Driving ports**
+  PROVIDED by the domain (solid line).
+  CONSUMED by the presentation layer (dashed arrow).
+end note
+
+note left of POUT_REPO
+  **Driven ports**
+  NEEDED by the domain (dashed arrow).
+  IMPLEMENTED by the infrastructure (solid line).
+  This is where the dependency is inverted: swapping SQLite
+  for PostgreSQL does not touch the domain.
+  Every service except the dispatch one uses
+  IUserRepository through its authorization
+  base class; only the Access one is drawn.
+end note
+
+@enduml

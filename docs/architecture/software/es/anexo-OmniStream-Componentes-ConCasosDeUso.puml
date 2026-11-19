@@ -1,0 +1,238 @@
+@startuml OmniStream-Componentes-ConCasosDeUso
+' ============================================================
+'  OmniStream - Diagrama de componentes
+'  Arquitectura limpia / hexagonal (puertos y adaptadores)
+'
+'  Capas:  Presentacion -> Aplicacion (casos de uso) -> Dominio -> Infraestructura
+'  Regla de dependencia: todo apunta hacia adentro.
+'  El dominio no conoce ninguna tecnologia concreta.
+'
+'  Convencion de lineas:
+'    linea solida  componente -- puerto : lo PROVEE / lo IMPLEMENTA
+'    flecha ..>    componente -> puerto : lo CONSUME / depende de el
+' ============================================================
+
+' disposicion vertical: una capa por nivel
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #666666
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam nodesep 55
+skinparam ranksep 55
+
+skinparam rectangle {
+  BorderThickness 1.4
+  BackgroundColor<<externo>>  #F2F2F2
+  BorderColor<<externo>>      #888888
+  BackgroundColor<<present>>  #E8F4FD
+  BorderColor<<present>>      #2E86AB
+  BackgroundColor<<aplicacion>> #FDF2E0
+  BorderColor<<aplicacion>>     #D98E04
+  BackgroundColor<<dominio>>  #FFF7E0
+  BorderColor<<dominio>>      #B8860B
+  BackgroundColor<<servicio>> #FFF2CC
+  BorderColor<<servicio>>     #B8860B
+  BackgroundColor<<modelo>>   #FDF6E3
+  BorderColor<<modelo>>       #C9A227
+  BackgroundColor<<driven>>   #E6F6E6
+  BorderColor<<driven>>       #3E8E41
+  BackgroundColor<<infra>>    #F7F7F7
+  BorderColor<<infra>>        #999999
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 11
+}
+skinparam interface {
+  BackgroundColor #FFFFFF
+  BorderColor #2E86AB
+  FontSize 11
+}
+
+' ============================================================
+' 1. CLIENTES  (fuera del sistema)
+' ============================================================
+rectangle "Clientes" <<externo>> {
+  component "Navegador"        as CliWeb
+  component "App de escritorio" as CliDesk
+  component "App movil"        as CliMobile
+  component "Terminal / scripts" as CliCli
+}
+
+' ============================================================
+' 2. CAPA DE PRESENTACION  (adaptadores primarios / driving)
+' ============================================================
+rectangle "Capa de presentacion\n(adaptadores primarios / driving)" <<present>> {
+  component "Adaptador Web UI\n<<controlador HTTP>>"   as AdWeb
+  component "Adaptador Desktop\n<<controlador local>>" as AdDesk
+  component "Adaptador Mobile\n<<controlador movil>>"  as AdMobile
+  component "Adaptador CLI\n<<controlador>>"           as AdCli
+  component "Adaptador API REST\n<<controlador>>"      as AdApi
+}
+
+' ============================================================
+' 3. PUERTOS DE ENTRADA  (los provee el dominio)
+' ============================================================
+interface "IGestionCatalogo" as PIN_CAT
+interface "IBusqueda"        as PIN_BUS
+interface "IReproduccion"    as PIN_REP
+interface "IControlAcceso"   as PIN_ACC
+interface "ISincronizacion"  as PIN_SIN
+
+' ============================================================
+' 4. CAPA DE APLICACION  +  5. DOMINIO
+' ============================================================
+rectangle "Capa de aplicacion  (casos de uso)" <<aplicacion>> {
+  component "Servicio de Catalogo\n<<caso de uso>>\n..\ningestarArchivo()\nreindexarBiblioteca()\ndetectarDuplicados()"   as UcCat
+  component "Servicio de Busqueda\n<<caso de uso>>\n..\nbuscarContenido()\nfiltrarPorCriterios()\ngestionarColecciones()" as UcBus
+  component "Servicio de Reproduccion\n<<caso de uso>>\n..\nabrirSesion()\nsolicitarStream()\nregistrarProgreso()"        as UcRep
+  component "Servicio de Acceso\n<<caso de uso>>\n..\nautenticarUsuario()\nautorizarRecurso()\ngestionarRoles()"          as UcAcc
+  component "Servicio de Sincronizacion\n<<caso de uso>>\n..\nsincronizarCambios()\ncachearContenido()"                    as UcSin
+}
+
+rectangle "Dominio  (modelo y reglas)" <<dominio>> {
+  component "CatalogoIndice\n<<agregado raiz>>"   as EnCatalogo
+  component "ArchivoMultimedia\n<<entidad>>"      as EnArchivo
+  component "Metadato\n<<objeto de valor>>"       as EnMeta
+  component "Coleccion / Etiqueta\n<<entidad>>"   as EnColeccion
+  component "Usuario\n<<entidad>>"                as EnUsuario
+  component "Permiso\n<<objeto de valor>>"        as EnPermiso
+  component "SesionReproduccion\n<<entidad>>"     as EnSesion
+  component "Politicas de dominio\n<<reglas>>"    as EnReglas
+}
+
+' ============================================================
+' 5. PUERTOS DE SALIDA  (los necesita el dominio)
+' ============================================================
+interface "IRepositorioCatalogo"    as POUT_REPO
+interface "IAlmacenamientoArchivos" as POUT_FS
+interface "IExtractorMetadatos"     as POUT_META
+interface "ITranscodificador"       as POUT_TRANS
+interface "IProveedorIdentidad"     as POUT_IDP
+interface "IPublicadorEventos"      as POUT_EVT
+
+' ============================================================
+' 6. ADAPTADORES SECUNDARIOS  (driven)
+' ============================================================
+rectangle "Adaptadores secundarios (driven)" <<driven>> {
+  component "Adaptador de persistencia\n<<SQLite / PostgreSQL>>" as AdRepo
+  component "Adaptador de archivos\n<<FS local / NAS / SMB>>"    as AdFs
+  component "Adaptador de metadatos\n<<FFmpeg / ExifTool>>"      as AdMeta
+  component "Adaptador de transcodificacion\n<<FFmpeg>>"         as AdTrans
+  component "Adaptador de identidad\n<<OIDC / Auth local>>"      as AdIdp
+  component "Adaptador de eventos\n<<bus en memoria>>"           as AdEvt
+}
+
+' ============================================================
+' 7. INFRAESTRUCTURA
+' ============================================================
+rectangle "Infraestructura" <<infra>> {
+  database  "Base de datos\ne indice"               as DbIndice
+  folder    "Biblioteca de archivos\n(NAS / disco)" as FsBiblioteca
+  component "Proveedor de identidad\nexterno"       as IdpExterno
+}
+
+' ============================================================
+' CLIENTES -> PRESENTACION
+' ============================================================
+CliWeb    --> AdWeb
+CliDesk   --> AdDesk
+CliMobile --> AdMobile
+CliCli    --> AdCli
+AdWeb     --> AdApi : HTTP/JSON
+AdDesk    --> AdApi : HTTP/IPC
+AdMobile  --> AdApi : HTTP/JSON
+
+' ============================================================
+' PRESENTACION -> PUERTOS DE ENTRADA  (consume)
+' ============================================================
+AdApi    ..> PIN_CAT
+AdApi    ..> PIN_BUS
+AdApi    ..> PIN_REP
+AdApi    ..> PIN_ACC
+AdCli    ..> PIN_CAT
+AdDesk   ..> PIN_SIN
+AdMobile ..> PIN_SIN
+
+' ============================================================
+' CAPA DE APLICACION -- PUERTOS DE ENTRADA  (provee)
+' ============================================================
+UcCat -up- PIN_CAT
+UcBus -up- PIN_BUS
+UcRep -up- PIN_REP
+UcAcc -up- PIN_ACC
+UcSin -up- PIN_SIN
+
+' ============================================================
+' CASOS DE USO -> DOMINIO
+' ============================================================
+UcCat --> EnCatalogo
+UcBus --> EnColeccion
+UcRep --> EnSesion
+UcAcc --> EnUsuario
+UcSin --> EnCatalogo
+
+' --- relaciones internas del modelo ---
+EnCatalogo *-- EnArchivo
+EnArchivo  *-- EnMeta
+EnCatalogo o-- EnColeccion
+EnUsuario  *-- EnPermiso
+EnSesion   --> EnArchivo
+EnReglas   ..> EnCatalogo : valida
+EnReglas   ..> EnPermiso  : valida
+
+' ============================================================
+' CAPA DE APLICACION -> PUERTOS DE SALIDA  (consume)
+' ============================================================
+UcCat ..> POUT_REPO
+UcCat ..> POUT_FS
+UcCat ..> POUT_META
+UcCat ..> POUT_EVT
+UcBus ..> POUT_REPO
+UcRep ..> POUT_FS
+UcRep ..> POUT_TRANS
+UcAcc ..> POUT_IDP
+UcSin ..> POUT_EVT
+
+' ============================================================
+' ADAPTADORES -- PUERTOS DE SALIDA  (implementa)
+' ============================================================
+AdRepo  -up- POUT_REPO
+AdFs    -up- POUT_FS
+AdMeta  -up- POUT_META
+AdTrans -up- POUT_TRANS
+AdIdp   -up- POUT_IDP
+AdEvt   -up- POUT_EVT
+
+' ============================================================
+' ADAPTADORES -> INFRAESTRUCTURA
+' ============================================================
+AdRepo  --> DbIndice
+AdFs    --> FsBiblioteca
+AdMeta  --> FsBiblioteca
+AdTrans --> FsBiblioteca
+AdIdp   --> IdpExterno : opcional
+
+' ============================================================
+' NOTAS
+' ============================================================
+note left of PIN_CAT
+  **Puertos de entrada (driving)**
+  Los PROVEE la capa de aplicacion (linea solida).
+  Los CONSUME la presentacion (flecha punteada).
+end note
+
+note left of POUT_REPO
+  **Puertos de salida (driven)**
+  Los NECESITA la capa de aplicacion (flecha punteada).
+  Los IMPLEMENTA la infraestructura (linea solida).
+  Aqui se invierte la dependencia: cambiar SQLite
+  por PostgreSQL no toca el dominio.
+end note
+
+@enduml

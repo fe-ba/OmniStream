@@ -1,0 +1,187 @@
+@startuml OmniStream-CasosDeUso
+' ============================================================
+'  OmniStream - Diagrama de casos de uso
+'
+'  Criterio aplicado:
+'   <<include>>  comportamiento OBLIGATORIO, siempre ocurre.
+'   <<extend>>   comportamiento CONDICIONAL, engancha en un
+'                punto de extension del caso base.
+'   generalizacion: variantes de un mismo proposito.
+'
+'  Nota: "Iniciar sesion" NO se incluye en cada caso de uso.
+'  Estar autenticado es una PRECONDICION; lo que si se ejecuta
+'  siempre es "Autorizar acceso al recurso".
+' ============================================================
+
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam nodesep 28
+skinparam ranksep 80
+skinparam linetype ortho
+
+skinparam actor {
+  BackgroundColor #FFFFFF
+  BorderColor #2E86AB
+}
+skinparam usecase {
+  BackgroundColor #FFF2CC
+  BorderColor #B8860B
+  FontSize 11
+  BackgroundColor<<incluido>> #E8F4FD
+  BorderColor<<incluido>>     #2E86AB
+  BackgroundColor<<opcional>> #E6F6E6
+  BorderColor<<opcional>>     #3E8E41
+  BackgroundColor<<admin>>    #F5E6F5
+  BorderColor<<admin>>        #8E44AD
+}
+skinparam package {
+  BackgroundColor #FBFBFB
+  BorderColor #AAAAAA
+}
+
+' ============================================================
+' ACTORES
+' ============================================================
+actor "Usuario"                          as Usuario
+actor "Administrador"                    as Admin
+actor "Invitado\n(enlace compartido)"    as Invitado
+
+' El administrador hereda todo lo que puede hacer un usuario
+Admin --|> Usuario
+
+' ============================================================
+' 1. GESTION DE CONTENIDO
+' ============================================================
+package "Gestion de contenido" {
+  usecase "Ingerir archivo multimedia\n..\npuntos de extension:\nverificacion de duplicado" as UC1
+  usecase "Reindexar biblioteca"                  as UC2
+  usecase "Extraer metadatos"                     as UC3 <<incluido>>
+  usecase "Indexar en el catalogo"                as UC4 <<incluido>>
+  usecase "Detectar duplicados"                   as UC5 <<opcional>>
+  usecase "Editar metadatos\nmanualmente"         as UC6
+  usecase "Eliminar archivo\ndel catalogo"        as UC7
+}
+
+' ============================================================
+' 2. CONSULTA Y ORGANIZACION
+' ============================================================
+package "Consulta y organizacion" {
+  usecase "Buscar contenido\n..\npuntos de extension:\nrefinamiento de resultados" as UC8
+  usecase "Filtrar y ordenar\nresultados"      as UC9 <<opcional>>
+  usecase "Explorar biblioteca"                as UC10
+  usecase "Gestionar colecciones\ny etiquetas" as UC11
+}
+
+' ============================================================
+' 3. REPRODUCCION
+' ============================================================
+package "Reproduccion" {
+  usecase "Reproducir contenido\n..\npuntos de extension:\nformato no compatible,\nsesion previa existente" as UC12
+  usecase "Transcodificar\nbajo demanda"        as UC13 <<opcional>>
+  usecase "Reanudar desde\nla ultima posicion"  as UC14 <<opcional>>
+  usecase "Registrar progreso\nde reproduccion" as UC15 <<incluido>>
+  usecase "Descargar para\nuso offline\n..\npuntos de extension:\ncambios pendientes" as UC16
+  usecase "Sincronizar cambios"                 as UC17 <<opcional>>
+}
+
+' ============================================================
+' 4. ACCESO Y SEGURIDAD
+' ============================================================
+package "Acceso y seguridad" {
+  usecase "Iniciar sesion"                as UC18
+  usecase "Autenticacion local"           as UC18a
+  usecase "Autenticacion\ncon OIDC"       as UC18b
+  usecase "Autorizar acceso\nal recurso"  as UC19 <<incluido>>
+  usecase "Compartir coleccion"           as UC20
+  usecase "Gestionar usuarios\ny roles"   as UC21 <<admin>>
+}
+
+' ============================================================
+' 5. ADMINISTRACION DEL SERVIDOR
+' ============================================================
+package "Administracion del servidor" {
+  usecase "Configurar rutas\nde biblioteca"   as UC22 <<admin>>
+  usecase "Respaldar catalogo"                as UC23 <<admin>>
+  usecase "Monitorear estado\ndel servidor"   as UC24 <<admin>>
+}
+
+' ============================================================
+' ACTORES SECUNDARIOS (declarados aqui para que queden a la derecha)
+' ============================================================
+actor "Almacenamiento\n(NAS / disco)"               as SysFs
+actor "Extractor de metadatos\n(FFmpeg / ExifTool)" as SysMeta
+actor "Transcodificador"                            as SysTrans
+actor "Proveedor de identidad\n(OIDC)"              as SysIdp
+actor "Programador de tareas"                       as SysTimer
+
+' ============================================================
+' ASOCIACIONES - ACTORES PRIMARIOS
+' ============================================================
+Usuario --> UC1
+Usuario --> UC6
+Usuario --> UC7
+Usuario --> UC8
+Usuario --> UC10
+Usuario --> UC11
+Usuario --> UC12
+Usuario --> UC16
+Usuario --> UC18
+Usuario --> UC20
+
+Invitado --> UC10
+Invitado --> UC12
+
+Admin --> UC2
+Admin --> UC21
+Admin --> UC22
+Admin --> UC23
+Admin --> UC24
+
+' ============================================================
+' ASOCIACIONES - ACTORES SECUNDARIOS
+' ============================================================
+UC3   --> SysMeta
+UC1   --> SysFs
+UC16  --> SysFs
+UC13  --> SysTrans
+UC18b --> SysIdp
+SysTimer --> UC2
+SysTimer --> UC23
+SysTimer --> UC17
+
+' ============================================================
+' INCLUDE  (obligatorio, siempre ocurre)
+' ============================================================
+UC1  ..> UC3  : <<include>>
+UC1  ..> UC4  : <<include>>
+UC2  ..> UC3  : <<include>>
+UC2  ..> UC4  : <<include>>
+UC6  ..> UC4  : <<include>>
+UC7  ..> UC4  : <<include>>
+UC11 ..> UC4  : <<include>>
+UC12 ..> UC19 : <<include>>
+UC12 ..> UC15 : <<include>>
+UC16 ..> UC19 : <<include>>
+UC20 ..> UC19 : <<include>>
+
+' ============================================================
+' EXTEND  (condicional, con su condicion de guarda)
+' ============================================================
+UC5  ..> UC1  : <<extend>>\n[hash\nduplicado]
+UC13 ..> UC12 : <<extend>>\n[formato\nno soportado]
+UC14 ..> UC12 : <<extend>>\n[sesion previa]
+UC9  ..> UC8  : <<extend>>\n[refina\nla consulta]
+UC17 ..> UC16 : <<extend>>\n[cambios\npendientes]
+
+' ============================================================
+' GENERALIZACION  (variantes del mismo proposito)
+' ============================================================
+UC18a --|> UC18
+UC18b --|> UC18
+
+@enduml

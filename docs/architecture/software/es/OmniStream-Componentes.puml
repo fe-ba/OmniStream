@@ -1,0 +1,324 @@
+@startuml OmniStream-Componentes
+' ============================================================
+'  OmniStream - Diagrama de componentes
+'  Arquitectura limpia / hexagonal (puertos y adaptadores)
+'
+'  Capas:  Presentacion  ->  Dominio  ->  Infraestructura
+'  Regla de dependencia: todo apunta hacia adentro.
+'  El dominio no conoce ninguna tecnologia concreta.
+'  La composicion raiz no es una capa: crea y conecta todo.
+'
+'  Detalle de cada parte:
+'   - Modelo:            OmniStream-Dominio-Modelo.puml
+'   - Servicios:         OmniStream-Servicios.puml
+'   - Puertos/adaptad.:  OmniStream-PuertosAdaptadores.puml
+'
+'  Convencion de lineas:
+'    linea solida  componente -- puerto : lo PROVEE / lo IMPLEMENTA
+'    flecha ..>    componente -> puerto : lo CONSUME / depende de el
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #666666
+skinparam ArrowFontSize 10
+skinparam PackageFontStyle bold
+skinparam nodesep 45
+skinparam ranksep 55
+
+skinparam rectangle {
+  BorderThickness 1.4
+  BackgroundColor<<externo>>  #F2F2F2
+  BorderColor<<externo>>      #888888
+  BackgroundColor<<present>>  #E8F4FD
+  BorderColor<<present>>      #2E86AB
+  BackgroundColor<<dominio>>  #FFF7E0
+  BorderColor<<dominio>>      #B8860B
+  BackgroundColor<<servicio>> #FFF2CC
+  BorderColor<<servicio>>     #B8860B
+  BackgroundColor<<modelo>>   #FDF6E3
+  BorderColor<<modelo>>       #C9A227
+  BackgroundColor<<driven>>   #E6F6E6
+  BorderColor<<driven>>       #3E8E41
+  BackgroundColor<<infra>>    #F7F7F7
+  BorderColor<<infra>>        #999999
+  BackgroundColor<<arranque>> #FFFDE7
+  BorderColor<<arranque>>     #B8A848
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 11
+}
+skinparam interface {
+  BackgroundColor #FFFFFF
+  BorderColor #2E86AB
+  FontSize 11
+}
+
+' ============================================================
+' 1. CLIENTES  (fuera del sistema)
+' ============================================================
+rectangle "Clientes" <<externo>> {
+  component "Navegador"          as CliWeb
+  component "App de escritorio"  as CliDesk
+  component "App movil"          as CliMobile
+  component "Terminal / scripts" as CliCli
+}
+
+' ============================================================
+' 2. CAPA DE PRESENTACION  (adaptadores primarios / driving)
+' ============================================================
+rectangle "Capa de presentacion\n(adaptadores primarios / driving)" <<present>> {
+  component "Adaptador Web UI\n<<controlador HTTP>>"            as AdWeb
+  component "Adaptador Desktop\n<<controlador local>>"          as AdDesk
+  component "Adaptador Mobile\n<<controlador movil>>"           as AdMobile
+  component "Adaptador CLI\n<<controlador>>"                    as AdCli
+  component "Adaptador API REST\n<<controlador>>"               as AdApi
+  component "Adaptador Programador\n<<tareas programadas>>"     as AdProg
+}
+
+' ============================================================
+' 3. PUERTOS DE ENTRADA  (los provee el dominio)
+' ============================================================
+rectangle "Puertos de entrada" <<dominio>> {
+  interface "IGestionCatalogo" as PIN_CAT
+  interface "IBusqueda"        as PIN_BUS
+  interface "IReproduccion"    as PIN_REP
+  interface "IControlAcceso"   as PIN_ACC
+  interface "ISincronizacion"  as PIN_SIN
+  interface "IDespachoEventos" as PIN_DES
+}
+
+' ============================================================
+' 4. DOMINIO
+' ============================================================
+rectangle "Dominio" <<dominio>> {
+
+  rectangle "Servicios de dominio" <<servicio>> {
+    component "Servicio de Catalogo\n..\ningestarArchivo()\nsubirArchivo()\nreindexarBiblioteca()"          as SvCat
+    component "Servicio de Busqueda\n..\nbuscarContenido()\nfiltrarPorCriterios()\ngestionarColecciones()" as SvBus
+    component "Servicio de Reproduccion\n..\nabrirSesion()\nsolicitarStream()\nregistrarProgreso()"        as SvRep
+    component "Servicio de Acceso\n..\nautenticarUsuario()\ncrearUsuario()\ncompartirColeccion()"          as SvAcc
+    component "Servicio de Sincronizacion\n..\nsincronizarCambios()\ncachearContenido()"                    as SvSin
+    component "Servicio de Despacho de Eventos\n..\npublicarPendientes()"                                   as SvDes
+    component "Observador de Sincronizacion\n<<observer>>\n..\nalCambiarCatalogo()"                         as SvObs
+  }
+
+  rectangle "Modelo de dominio" <<modelo>> {
+    component "CatalogoIndice\n<<aggregate root>>"       as EnCatalogo
+    component "ArchivoMultimedia\n<<entity>>"            as EnArchivo
+    component "Metadato\n<<value object>>"               as EnMeta
+    component "Coleccion\n<<entity>>"                    as EnColeccion
+    component "Etiqueta\n<<value object>>"               as EnEtiqueta
+    component "Usuario\n<<aggregate root>>"              as EnUsuario
+    component "Permiso\n<<value object>>"                as EnPermiso
+    component "EnlaceCompartido\n<<aggregate root>>"     as EnEnlace
+    component "SesionReproduccion\n<<aggregate root>>"   as EnSesion
+    component "Eventos de dominio\n<<event>>"            as EnEventos
+    component "Politicas de dominio\n<<policy>>"         as EnReglas
+  }
+}
+
+' ============================================================
+' 5. PUERTOS DE SALIDA  (los define el dominio)
+' ============================================================
+rectangle "Puertos de salida" <<dominio>> {
+  interface "IRepositorioCatalogo"    as POUT_REPO
+  interface "IRepositorioSesiones"    as POUT_SES
+  interface "IRepositorioUsuarios"    as POUT_USR
+  interface "IRepositorioEnlaces"     as POUT_ENL
+  interface "IRegistroCambios"        as POUT_CAMB
+  interface "IRepositorioOutbox"      as POUT_OUT
+  interface "IUnidadDeTrabajo"        as POUT_UOW
+  interface "IRepositorioTokens"      as POUT_TOK
+  interface "IAlmacenamientoArchivos" as POUT_FS
+  interface "IExtractorMetadatos"     as POUT_META
+  interface "ITranscodificador"       as POUT_TRANS
+  interface "IProveedorIdentidad"     as POUT_IDP
+  interface "IRegistroCredenciales"   as POUT_CRED
+  interface "IPublicadorEventos"      as POUT_PUB
+  interface "ISuscriptorEventos"      as POUT_SUS
+}
+
+' ============================================================
+' 6. ADAPTADORES SECUNDARIOS  (driven)
+' ============================================================
+rectangle "Infraestructura\n(adaptadores secundarios / driven)" <<driven>> {
+  component "Adaptador de persistencia\n<<JDBC: SQLite / PostgreSQL>>" as AdRepo
+  component "Adaptador de archivos\n<<FS local / NAS / SMB>>"         as AdFs
+  component "Adaptador de metadatos\n<<FFprobe / ExifTool>>"          as AdMeta
+  component "Adaptador de transcodificacion\n<<FFmpeg>>"              as AdTrans
+  component "Adaptador de identidad\n<<local / OIDC>>"                as AdIdp
+  component "Adaptador de tokens\n<<en memoria>>"                     as AdTok
+  component "Adaptador de eventos\n<<bus en memoria>>"                as AdEvt
+}
+
+' ============================================================
+' 7. RECURSOS EXTERNOS
+' ============================================================
+rectangle "Recursos externos" <<infra>> {
+  database  "Base de datos\ne indice"               as DbIndice
+  folder    "Biblioteca de archivos\n(NAS / disco)" as FsBiblioteca
+  component "Proveedor de identidad\nexterno"       as IdpExterno
+}
+
+' ============================================================
+' 8. ARRANQUE  (fuera de las capas)
+' ============================================================
+rectangle "Arranque" <<arranque>> {
+  component "Composicion raiz\n<<composition root>>\n..\nfabrica Local / Servidor" as Composicion
+}
+
+' ============================================================
+' CLIENTES -> PRESENTACION
+' ============================================================
+CliWeb    --> AdWeb
+CliDesk   --> AdDesk
+CliMobile --> AdMobile
+CliCli    --> AdCli
+AdWeb     --> AdApi : HTTP/JSON
+AdDesk    --> AdApi : HTTP/IPC
+AdMobile  --> AdApi : HTTP/JSON
+
+' ============================================================
+' PRESENTACION -> PUERTOS DE ENTRADA  (consume)
+' ============================================================
+AdApi    ..> PIN_CAT
+AdApi    ..> PIN_BUS
+AdApi    ..> PIN_REP
+AdApi    ..> PIN_ACC
+AdCli    ..> PIN_CAT
+AdDesk   ..> PIN_CAT
+AdDesk   ..> PIN_SIN
+AdMobile ..> PIN_SIN
+AdProg   ..> PIN_CAT : reindexar / respaldar
+AdProg   ..> PIN_DES : sincronizar
+
+' ============================================================
+' DOMINIO -- PUERTOS DE ENTRADA  (provee)
+' ============================================================
+SvCat -up- PIN_CAT
+SvBus -up- PIN_BUS
+SvRep -up- PIN_REP
+SvAcc -up- PIN_ACC
+SvSin -up- PIN_SIN
+SvDes -up- PIN_DES
+
+' ============================================================
+' SERVICIOS -> MODELO DE DOMINIO
+' ============================================================
+SvCat --> EnCatalogo
+SvBus --> EnCatalogo
+SvRep --> EnSesion
+SvAcc --> EnUsuario
+SvAcc --> EnEnlace
+SvObs --> EnEventos : recibe
+SvDes --> EnEventos : publica
+
+' --- relaciones internas del modelo ---
+EnCatalogo *-- EnArchivo
+EnCatalogo *-- EnColeccion
+EnArchivo  *-- EnMeta
+EnArchivo  *-- EnEtiqueta
+EnUsuario  *-- EnPermiso
+EnCatalogo --> EnEventos : registra
+EnSesion   ..> EnArchivo : por id
+EnEnlace   ..> EnColeccion : por id
+EnReglas   ..> EnCatalogo : valida
+EnReglas   ..> EnPermiso  : valida
+
+' ============================================================
+' DOMINIO -> PUERTOS DE SALIDA  (consume)
+' ============================================================
+SvCat ..> POUT_REPO
+SvCat ..> POUT_SES
+SvCat ..> POUT_FS
+SvCat ..> POUT_META
+SvBus ..> POUT_REPO
+SvRep ..> POUT_SES
+SvRep ..> POUT_REPO
+SvRep ..> POUT_FS
+SvRep ..> POUT_TRANS
+SvAcc ..> POUT_USR
+SvAcc ..> POUT_IDP
+SvAcc ..> POUT_CRED
+SvAcc ..> POUT_TOK
+SvAcc ..> POUT_ENL
+SvAcc ..> POUT_UOW
+SvSin ..> POUT_CAMB
+SvSin ..> POUT_REPO
+SvSin ..> POUT_FS
+SvObs ..> POUT_CAMB
+SvDes ..> POUT_OUT
+SvDes ..> POUT_PUB
+
+' ============================================================
+' ADAPTADORES -- PUERTOS DE SALIDA  (implementa)
+' ============================================================
+AdRepo  -up- POUT_REPO
+AdRepo  -up- POUT_SES
+AdRepo  -up- POUT_USR
+AdRepo  -up- POUT_ENL
+AdRepo  -up- POUT_CAMB
+AdRepo  -up- POUT_OUT
+AdRepo  -up- POUT_UOW
+AdFs    -up- POUT_FS
+AdMeta  -up- POUT_META
+AdTrans -up- POUT_TRANS
+AdIdp   -up- POUT_IDP
+AdIdp   -up- POUT_CRED
+AdTok   -up- POUT_TOK
+AdEvt   -up- POUT_PUB
+AdEvt   -up- POUT_SUS
+
+' El bus avisa a los observadores registrados
+AdEvt ..> SvObs : notifica (IObservadorCatalogo)
+
+' ============================================================
+' ADAPTADORES -> RECURSOS EXTERNOS
+' ============================================================
+AdRepo  --> DbIndice
+AdIdp   --> DbIndice : credenciales locales
+AdFs    --> FsBiblioteca
+AdMeta  --> FsBiblioteca
+AdTrans --> FsBiblioteca
+AdIdp   --> IdpExterno : opcional (OIDC)
+
+' ============================================================
+' ARRANQUE -> CAPAS
+' ============================================================
+Composicion ..> POUT_SUS : registra observadores
+
+note right of Composicion
+  Crea los adaptadores con la fabrica del perfil
+  (Abstract Factory: Local o Servidor), arma la
+  cadena de ingesta, crea los servicios y los
+  adaptadores primarios y suscribe el observador.
+  No es una capa: nadie depende de ella.
+end note
+
+' ============================================================
+' NOTAS
+' ============================================================
+note left of PIN_CAT
+  **Puertos de entrada (driving)**
+  Los PROVEE el dominio (linea solida).
+  Los CONSUME la presentacion (flecha punteada).
+end note
+
+note left of POUT_REPO
+  **Puertos de salida (driven)**
+  Los NECESITA el dominio (flecha punteada).
+  Los IMPLEMENTA la infraestructura (linea solida).
+  Aqui se invierte la dependencia: cambiar SQLite
+  por PostgreSQL no toca el dominio.
+  Todos los servicios salvo el de despacho usan
+  IRepositorioUsuarios a traves de su clase base
+  de autorizacion; solo se dibuja la de Acceso.
+end note
+
+@enduml

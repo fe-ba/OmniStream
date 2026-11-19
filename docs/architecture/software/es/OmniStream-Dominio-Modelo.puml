@@ -1,0 +1,493 @@
+@startuml OmniStream-Dominio-Modelo
+' ============================================================
+'  OmniStream - Diagrama de clases
+'  Capa de DOMINIO, vista de MODELO (entidades, reglas y eventos)
+'  Modulo: omnistream-domain
+'
+'  Alcance: solo el modelo. Los servicios de dominio estan en
+'  OmniStream-Servicios.puml y los puertos en
+'  OmniStream-PuertosAdaptadores.puml.
+'
+'  Reglas aplicadas:
+'   - Un paquete por agregado; las referencias entre agregados
+'     son POR IDENTIFICADOR, nunca por objeto.
+'   - Los objetos de valor son inmutables y no tienen identidad.
+'   - No hay getters/setters: cada metodo expresa una regla.
+'   - Todo cambio del catalogo pasa por su raiz, que registra
+'     el evento de dominio correspondiente.
+'   - Cero dependencias de frameworks, persistencia o HTTP.
+' ============================================================
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #666666
+skinparam ArrowFontSize 11
+skinparam PackageFontStyle bold
+skinparam nodesep 25
+skinparam ranksep 55
+' Los paquetes son solo agrupaciones visuales, no espacios de nombres.
+set separator none
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+  FontSize 12
+  AttributeFontSize 11
+  BackgroundColor<<aggregate root>> #FFE8B5
+  BorderColor<<aggregate root>>     #B8860B
+  BackgroundColor<<entity>>         #FFF7E0
+  BorderColor<<entity>>             #C9A227
+  BackgroundColor<<value object>>   #E8F4FD
+  BorderColor<<value object>>       #2E86AB
+  BackgroundColor<<abstract>>       #F0E6FA
+  BorderColor<<abstract>>           #8E44AD
+  BackgroundColor<<policy>>         #E6F6E6
+  BorderColor<<policy>>             #3E8E41
+  BackgroundColor<<event>>          #ECE4F8
+  BorderColor<<event>>              #9673A6
+}
+skinparam enum {
+  BackgroundColor #F7F7F7
+  BorderColor #888888
+  FontSize 11
+}
+skinparam package {
+  BackgroundColor #FCFCFC
+  BorderColor #AAAAAA
+}
+
+' ============================================================
+' AGREGADO  CATALOGO     raiz: CatalogoIndice
+' ============================================================
+package "Agregado Catalogo" {
+
+  class CatalogoIndice <<aggregate root>> {
+    - id : CatalogoId
+    - nombre : String
+    - archivos : Map<HuellaDigital, ArchivoMultimedia>
+    - colecciones : List<Coleccion>
+    - eventos : List<EventoCatalogo>
+    __
+    + ingestar(archivo : ArchivoMultimedia) : ResultadoIngesta
+    + buscarPorHuella(h : HuellaDigital) : Optional<ArchivoMultimedia>
+    + buscarElemento(id : ElementoId) : Optional<ElementoCatalogo>
+    + existeDuplicado(h : HuellaDigital) : boolean
+    + editarMetadato(id : ElementoId, m : Metadato) : void
+    + etiquetar(id : ElementoId, e : Etiqueta) : void
+    + eliminar(id : ElementoId) : void
+    + crearColeccion(nombre : String) : Coleccion
+    + agregarAColeccion(coleccion : ElementoId, elemento : ElementoId) : void
+    + totalArchivos() : int
+    + extraerEventos() : List<EventoCatalogo>
+    - registrar(e : EventoCatalogo) : void
+  }
+
+  abstract class ElementoCatalogo <<abstract>> {
+    # id : ElementoId
+    # nombre : String
+    __
+    + {abstract} tamanioTotal() : long
+    + {abstract} contarArchivos() : int
+    + {abstract} contiene(e : ElementoCatalogo) : boolean
+    + renombrar(nombre : String) : void
+  }
+
+  class ArchivoMultimedia <<entity>> {
+    - ruta : Path
+    - huella : HuellaDigital
+    - tipo : TipoMedio
+    - tamanioBytes : long
+    - duracion : Duration
+    - estado : EstadoIndexacion
+    - fechaIngesta : Instant
+    __
+    + esDuplicadoDe(otro : ArchivoMultimedia) : boolean
+    + agregarMetadato(m : Metadato) : void
+    + metadato(clave : String) : Optional<Metadato>
+    + etiquetar(e : Etiqueta) : void
+    + marcarIndexado() : void
+    + marcarError(causa : String) : void
+    + tamanioTotal() : long
+    + contarArchivos() : int
+    + contiene(e : ElementoCatalogo) : boolean
+  }
+
+  class Coleccion <<entity>> {
+    - descripcion : String
+    __
+    + agregar(e : ElementoCatalogo) : void
+    + quitar(e : ElementoCatalogo) : void
+    + tamanioTotal() : long
+    + contarArchivos() : int
+    + contiene(e : ElementoCatalogo) : boolean
+    + profundidad() : int
+    - generariaCiclo(e : ElementoCatalogo) : boolean
+  }
+
+  class Metadato <<value object>> {
+    - clave : String
+    - valor : String
+    - origen : OrigenMetadato
+    __
+    + esManual() : boolean
+    + conValor(v : String) : Metadato
+  }
+
+  class HuellaDigital <<value object>> {
+    - algoritmo : String
+    - valor : String
+    __
+    + coincideCon(otra : HuellaDigital) : boolean
+  }
+
+  class Etiqueta <<value object>> {
+    - nombre : String
+    __
+    + normalizada() : String
+  }
+
+  class ResultadoIngesta <<value object>> {
+    - archivoId : ElementoId
+    - duplicado : boolean
+    - accion : AccionDuplicado
+    __
+    + fueIndexado() : boolean
+  }
+
+  class CatalogoId <<value object>> {
+    - valor : UUID
+  }
+
+  class ElementoId <<value object>> {
+    - valor : UUID
+  }
+}
+
+' ============================================================
+' AGREGADO  ACCESO       raiz: Usuario
+' ============================================================
+package "Agregado Acceso" {
+
+  class Usuario <<aggregate root>> {
+    - id : UsuarioId
+    - nombreUsuario : String
+    - rol : Rol
+    - permisos : Set<Permiso>
+    - identidades : Set<IdentidadVinculada>
+    - activo : boolean
+    __
+    + {static} crear(nombreUsuario : String, rol : Rol, i : IdentidadVinculada) : Usuario
+    + {static} crearInvitado(recurso : ElementoId, nivel : NivelPermiso) : Usuario
+    + puedeAcceder(recurso : ElementoId, acceso : TipoAcceso) : boolean
+    + otorgar(p : Permiso) : void
+    + revocar(p : Permiso) : void
+    + cambiarRol(r : Rol) : void
+    + vincular(i : IdentidadVinculada) : void
+    + esAdministrador() : boolean
+    + desactivar() : void
+  }
+
+  class Permiso <<value object>> {
+    - recurso : ElementoId
+    - nivel : NivelPermiso
+    __
+    + permite(acceso : TipoAcceso) : boolean
+    + aplicaA(recurso : ElementoId) : boolean
+  }
+
+  class IdentidadVinculada <<value object>> {
+    - emisor : String
+    - sujeto : String
+    __
+    + esLocal() : boolean
+  }
+
+  class UsuarioId <<value object>> {
+    - valor : UUID
+  }
+}
+
+' ============================================================
+' AGREGADO  ENLACE COMPARTIDO   raiz: EnlaceCompartido
+' ============================================================
+package "Agregado Enlace compartido" {
+
+  class EnlaceCompartido <<aggregate root>> {
+    - id : EnlaceId
+    - token : String
+    - coleccionId : ElementoId
+    - invitadoId : UsuarioId
+    - nivel : NivelPermiso
+    - creadoPor : UsuarioId
+    - expiraEn : Instant
+    - revocado : boolean
+    __
+    + {static} crear(coleccion : ElementoId, invitado : UsuarioId, nivel : NivelPermiso, creadoPor : UsuarioId, vigencia : Duration) : EnlaceCompartido
+    + estaVigente(ahora : Instant) : boolean
+    + revocar() : void
+  }
+
+  class EnlaceId <<value object>> {
+    - valor : UUID
+  }
+}
+
+' ============================================================
+' AGREGADO  REPRODUCCION    raiz: SesionReproduccion
+' ============================================================
+package "Agregado Reproduccion" {
+
+  class SesionReproduccion <<aggregate root>> {
+    - id : SesionId
+    - archivoId : ElementoId
+    - usuarioId : UsuarioId
+    - posicion : Duration
+    - duracionTotal : Duration
+    - estado : EstadoSesion
+    - iniciadaEn : Instant
+    __
+    + avanzar(delta : Duration) : void
+    + pausar() : void
+    + reanudar() : void
+    + finalizar() : void
+    + estaCompletada() : boolean
+    + puedeReanudarse() : boolean
+    + porcentajeVisto() : double
+  }
+
+  class SesionId <<value object>> {
+    - valor : UUID
+  }
+}
+
+' ============================================================
+' EVENTOS DE DOMINIO
+' ============================================================
+package "Eventos de dominio" {
+
+  abstract class EventoDominio <<event>> {
+    - id : EventoId
+    - ocurridoEn : Instant
+    __
+    + tipo() : String
+  }
+
+  abstract class EventoCatalogo <<event>> {
+    - elementoId : ElementoId
+    __
+    + elemento() : ElementoId
+    + {abstract} tipoCambio() : TipoCambio
+  }
+
+  class ArchivoIngestado <<event>> {
+    + tipoCambio() : TipoCambio
+  }
+  class ArchivoModificado <<event>> {
+    + tipoCambio() : TipoCambio
+  }
+  class ArchivoEliminado <<event>> {
+    + tipoCambio() : TipoCambio
+  }
+  class ColeccionCreada <<event>> {
+    + tipoCambio() : TipoCambio
+  }
+  class ColeccionModificada <<event>> {
+    + tipoCambio() : TipoCambio
+  }
+
+  class EventoId <<value object>> {
+    - valor : UUID
+  }
+}
+
+' ============================================================
+' POLITICAS DE DOMINIO   (reglas sin estado)
+' ============================================================
+package "Politicas de dominio" {
+
+  class PoliticaDeduplicacion <<policy>> {
+    + esDuplicado(a : ArchivoMultimedia, c : CatalogoIndice) : boolean
+    + resolver(nuevo : ArchivoMultimedia, existente : ArchivoMultimedia) : AccionDuplicado
+  }
+
+  class PoliticaAcceso <<policy>> {
+    + autoriza(u : Usuario, recurso : ElementoId, acceso : TipoAcceso) : boolean
+    + nivelEfectivo(u : Usuario, recurso : ElementoId) : NivelPermiso
+  }
+}
+
+' ============================================================
+' ENUMERADOS
+' ============================================================
+package "Enumerados" {
+  enum TipoMedio {
+    VIDEO
+    AUDIO
+    IMAGEN
+    DOCUMENTO
+  }
+  enum EstadoIndexacion {
+    PENDIENTE
+    INDEXANDO
+    INDEXADO
+    ERROR
+  }
+  enum OrigenMetadato {
+    EXTRAIDO
+    MANUAL
+  }
+  enum Rol {
+    ADMINISTRADOR
+    USUARIO
+    INVITADO
+  }
+  enum NivelPermiso {
+    LECTURA
+    ESCRITURA
+    ADMINISTRACION
+  }
+  enum TipoAcceso {
+    VER
+    DESCARGAR
+    MODIFICAR
+    ELIMINAR
+  }
+  enum EstadoSesion {
+    ACTIVA
+    PAUSADA
+    FINALIZADA
+  }
+  enum AccionDuplicado {
+    RECHAZAR
+    REEMPLAZAR
+    CONSERVAR_AMBOS
+  }
+  enum TipoCambio {
+    AGREGADO
+    MODIFICADO
+    ELIMINADO
+  }
+}
+
+' ============================================================
+' RELACIONES  -  AGREGADO CATALOGO
+' ============================================================
+
+' La raiz posee los archivos: si se borra el catalogo, se borran
+CatalogoIndice "1" *-- "0..*" ArchivoMultimedia : indexa >
+CatalogoIndice "1" *-- "0..*" Coleccion         : organiza >
+CatalogoIndice "1" *-- "1"    CatalogoId        : id >
+CatalogoIndice ..> ResultadoIngesta : produce
+
+' COMPOSITE: la coleccion agrupa elementos que existen por si solos
+ElementoCatalogo <|-- ArchivoMultimedia
+ElementoCatalogo <|-- Coleccion
+Coleccion "1" o-- "0..*" ElementoCatalogo : elementos >
+
+' El archivo posee sus metadatos, su huella y sus etiquetas
+ArchivoMultimedia "1" *-- "0..*" Metadato  : metadatos >
+ArchivoMultimedia "1" *-- "1"    HuellaDigital : huella >
+ArchivoMultimedia "1" *-- "0..*" Etiqueta  : etiquetas >
+
+ElementoCatalogo "1" *-- "1" ElementoId : id >
+
+' ============================================================
+' RELACIONES  -  AGREGADO ACCESO
+' ============================================================
+Usuario "1" *-- "0..*" Permiso   : permisos >
+Usuario "1" *-- "1..*" IdentidadVinculada : identidades >
+Usuario "1" *-- "1"    UsuarioId : id >
+
+' ============================================================
+' RELACIONES  -  AGREGADO ENLACE COMPARTIDO
+' ============================================================
+EnlaceCompartido "1" *-- "1" EnlaceId : id >
+
+' ============================================================
+' RELACIONES  -  AGREGADO REPRODUCCION
+' ============================================================
+SesionReproduccion "1" *-- "1" SesionId : id >
+
+' ============================================================
+' REFERENCIAS ENTRE AGREGADOS  -  SIEMPRE POR IDENTIFICADOR
+' ============================================================
+SesionReproduccion ..> ElementoId : <<por id>>\nreproduce
+SesionReproduccion ..> UsuarioId  : <<por id>>\npertenece a
+EnlaceCompartido   ..> ElementoId : <<por id>>\ncomparte
+EnlaceCompartido   ..> UsuarioId  : <<por id>>\ninvitado y creador
+
+' ============================================================
+' RELACIONES  -  EVENTOS
+' ============================================================
+EventoDominio <|-- EventoCatalogo
+EventoCatalogo <|-- ArchivoIngestado
+EventoCatalogo <|-- ArchivoModificado
+EventoCatalogo <|-- ArchivoEliminado
+EventoCatalogo <|-- ColeccionCreada
+EventoCatalogo <|-- ColeccionModificada
+EventoDominio "1" *-- "1" EventoId : id >
+CatalogoIndice "1" o-- "0..*" EventoCatalogo : registra >
+
+' ============================================================
+' POLITICAS
+' ============================================================
+PoliticaDeduplicacion ..> CatalogoIndice : evalua
+PoliticaAcceso        ..> Usuario        : evalua
+
+' ============================================================
+' NOTAS DE DISENO
+' ============================================================
+note top of ElementoCatalogo
+  **Patron Composite**
+  ArchivoMultimedia es la hoja y Coleccion el compuesto.
+  tamanioTotal(), contarArchivos() y contiene() se resuelven
+  por recursion sobre el arbol; en la hoja cortan la recursion.
+  Permite anidar colecciones dentro de colecciones.
+end note
+
+note right of Coleccion
+  generariaCiclo() recorre los descendientes antes de
+  agregar: una coleccion no puede contenerse a si misma
+  ni a un ancestro suyo. Invariante del Composite.
+end note
+
+note bottom of SesionReproduccion
+  Agregado aparte: referencia al archivo y al usuario
+  **por identificador**, nunca por objeto. Asi cada agregado
+  se carga y se persiste de forma independiente.
+end note
+
+note bottom of EnlaceCompartido
+  Compartir una coleccion crea un Usuario invitado
+  (Usuario.crearInvitado) con permiso sobre ella, y un
+  enlace que apunta a ese invitado. Quien entra por el
+  enlace recibe un token de ese usuario, asi que la
+  autorizacion es la misma que para cualquier otro.
+end note
+
+note bottom of EventoCatalogo
+  Cada metodo de CatalogoIndice que cambia el catalogo
+  registra un evento. El adaptador de persistencia, dentro
+  de guardar(), escribe el agregado y extraerEventos() en
+  el outbox en la misma transaccion.
+  tipoCambio() le dice al registro de cambios si el
+  elemento se agrego, se modifico o se elimino.
+end note
+
+note bottom of PoliticaDeduplicacion
+  Reglas sin estado, separadas de las entidades porque
+  necesitan ver varios objetos a la vez.
+  Las reglas que caben en una sola entidad viven en ella
+  (p. ej. esDuplicadoDe, puedeReanudarse).
+end note
+
+note bottom of IdentidadVinculada
+  (emisor, sujeto) con que un proveedor de identidad
+  reconoce al usuario: "local" + nombre de usuario, o
+  el emisor OIDC + su "sub". La clave nunca entra al
+  dominio: la guarda el adaptador de identidad local.
+end note
+
+@enduml
