@@ -25,6 +25,8 @@ decision changes, a new ADR supersedes the old one.
 | [0015](0015-plain-jdbc-for-persistence.md) | Plain JDBC for persistence | Accepted |
 | [0016](0016-automatic-classification.md) | Automatic classification | Accepted |
 | [0017](0017-docker-image-after-version-1-0.md) | Docker image after version 1.0 | Accepted |
+| [0018](0018-in-memory-implementations-in-domain-tests.md) | In-memory implementations in the domain tests | Accepted |
+| [0019](0019-package-structure.md) | Package structure | Accepted |
 
 ## Adding an ADR
 
