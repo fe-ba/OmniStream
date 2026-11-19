@@ -19,7 +19,7 @@ architecture, to the implementation.
 | Stage                    | Status      | Location                         |
 |--------------------------|-------------|----------------------------------|
 | Enterprise architecture  | Done        | `docs/architecture/empresarial/` |
-| Software architecture    | Not started | `docs/architecture/`             |
+| Software architecture    | In progress | `docs/architecture/software/`    |
 | Implementation (Java)    | Not started | `src/`                           |
 
 ## Repository structure

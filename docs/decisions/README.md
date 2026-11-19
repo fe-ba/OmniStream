@@ -14,6 +14,8 @@ decision changes, a new ADR supersedes the old one.
 | [0004](0004-version-diagrams-as-svg.md) | Version diagrams as SVG | Accepted |
 | [0005](0005-build-the-poster-in-ci.md) | Build the poster in CI | Accepted |
 | [0006](0006-english-and-conventional-commits.md) | English and Conventional Commits | Accepted |
+| [0007](0007-render-software-diagrams-in-ci.md) | Render software diagrams in CI | Accepted |
+| [0008](0008-keep-spanish-originals-of-software-diagrams.md) | Keep Spanish originals of the software diagrams | Accepted |
 
 ## Adding an ADR
 
