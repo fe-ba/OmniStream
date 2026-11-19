@@ -16,6 +16,13 @@ decision changes, a new ADR supersedes the old one.
 | [0006](0006-english-and-conventional-commits.md) | English and Conventional Commits | Accepted |
 | [0007](0007-render-software-diagrams-in-ci.md) | Render software diagrams in CI | Accepted |
 | [0008](0008-keep-spanish-originals-of-software-diagrams.md) | Keep Spanish originals of the software diagrams | Accepted |
+| [0009](0009-scope-of-version-1-0.md) | Scope of version 1.0 | Accepted |
+| [0010](0010-desktop-app-is-the-local-server.md) | Desktop app is the server in local mode | Accepted |
+| [0011](0011-snapshots-to-expose-aggregate-state.md) | Snapshots to expose aggregate state | Accepted |
+| [0012](0012-java-25-and-maven.md) | Java 25 and Maven | Accepted |
+| [0013](0013-one-maven-module-per-layer.md) | One Maven module per layer | Accepted |
+| [0014](0014-javalin-for-http.md) | Javalin for HTTP | Accepted |
+| [0015](0015-plain-jdbc-for-persistence.md) | Plain JDBC for persistence | Accepted |
 
 ## Adding an ADR
 
