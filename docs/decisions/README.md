@@ -23,6 +23,8 @@ decision changes, a new ADR supersedes the old one.
 | [0013](0013-one-maven-module-per-layer.md) | One Maven module per layer | Accepted |
 | [0014](0014-javalin-for-http.md) | Javalin for HTTP | Accepted |
 | [0015](0015-plain-jdbc-for-persistence.md) | Plain JDBC for persistence | Accepted |
+| [0016](0016-automatic-classification.md) | Automatic classification | Accepted |
+| [0017](0017-docker-image-after-version-1-0.md) | Docker image after version 1.0 | Accepted |
 
 ## Adding an ADR
 
