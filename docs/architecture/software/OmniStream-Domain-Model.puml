@@ -19,6 +19,7 @@
 '     (Memento, ADR 0011). Methods that timestamp something receive
 '     the instant (now) from the service's clock.
 '   - Zero dependencies on frameworks, persistence or HTTP.
+'   - Dashed border: outside the scope of version 1.0 (ADR 0009).
 ' ============================================================
 
 skinparam backgroundColor #FFFFFF
@@ -84,6 +85,7 @@ package "Catalog aggregate" {
     + hasDuplicate(h : Fingerprint) : boolean
     + editMetadata(id : ItemId, m : MetadataEntry, now : Instant) : void
     + tag(id : ItemId, e : Tag, now : Instant) : void
+    + applyClassification(id : ItemId, c : Classification, now : Instant) : void
     + delete(id : ItemId, now : Instant) : void
     + createCollection(name : String, now : Instant) : Collection
     + addToCollection(collection : ItemId, item : ItemId, now : Instant) : void
@@ -119,6 +121,7 @@ package "Catalog aggregate" {
     + addMetadata(m : MetadataEntry) : void
     + metadataEntry(key : String) : Optional<MetadataEntry>
     + tag(e : Tag) : void
+    + replaceAutomaticTags(newTags : Set<Tag>) : void
     + markIndexed() : void
     + markFailed(cause : String) : void
     + totalSize() : long
@@ -158,8 +161,10 @@ package "Catalog aggregate" {
 
   class Tag <<value object>> {
     - name : String
+    - source : TagSource
     __
     + normalized() : String
+    + isAutomatic() : boolean
   }
 
   class IngestionResult <<value object>> {
@@ -284,6 +289,33 @@ package "Playback aggregate" {
 }
 
 ' ============================================================
+' AUTOMATIC CLASSIFICATION   (ADR 0016)
+' ============================================================
+package "Automatic classification" {
+
+  class Classification <<value object>> {
+    - tags : Set<Tag>
+    - collections : Set<ItemId>
+    __
+    + {static} empty() : Classification
+    + combine(other : Classification) : Classification
+    + isEmpty() : boolean
+  }
+
+  class ClassificationCriterion <<value object>> #E8F4FD;line.dashed;line:999999 {
+    - name : String
+    - field : String
+    - operator : RuleOperator
+    - value : String
+    - tag : Tag
+    - collection : Optional<ItemId>
+    __
+    + matches(a : MediaFileSnapshot) : boolean
+    + result() : Classification
+  }
+}
+
+' ============================================================
 ' DOMAIN EVENTS
 ' ============================================================
 package "Domain events" {
@@ -315,6 +347,9 @@ package "Domain events" {
     + changeType() : ChangeType
   }
   class CollectionModified <<event>> {
+    + changeType() : ChangeType
+  }
+  class FileClassified <<event>> {
     + changeType() : ChangeType
   }
 
@@ -443,6 +478,16 @@ package "Enumerations" {
     EXTRACTED
     MANUAL
   }
+  enum TagSource {
+    AUTOMATIC
+    MANUAL
+  }
+  enum RuleOperator #F7F7F7;line.dashed;line:999999 {
+    EQUALS
+    CONTAINS
+    GREATER_THAN
+    LESS_THAN
+  }
   enum Role {
     ADMIN
     USER
@@ -532,8 +577,16 @@ CatalogEvent <|-- FileModified
 CatalogEvent <|-- FileDeleted
 CatalogEvent <|-- CollectionCreated
 CatalogEvent <|-- CollectionModified
+CatalogEvent <|-- FileClassified
 DomainEvent "1" *-- "1" EventId : id >
 CatalogIndex "1" o-- "0..*" CatalogEvent : records >
+
+' ============================================================
+' RELATIONS  -  AUTOMATIC CLASSIFICATION
+' ============================================================
+Classification "1" o-- "0..*" Tag : tags >
+CatalogIndex ..> Classification : applies
+ClassificationCriterion ..> Classification : produces
 
 ' ============================================================
 ' RELATIONS  -  SNAPSHOTS (Memento)
@@ -622,6 +675,16 @@ note top of CatalogSnapshot
   through them.
   version enables optimistic locking: save() fails with
   VersionConflict if someone else changed it first.
+end note
+
+note bottom of Classification
+  Result of the classification rules (ADR 0016).
+  applyClassification() replaces only the file's
+  AUTOMATIC tags and adds it to the given
+  collections; MANUAL tags are left untouched.
+  Records FileClassified.
+  ClassificationCriterion is a rule defined by the
+  administrator (version 2.0).
 end note
 
 note bottom of DomainException

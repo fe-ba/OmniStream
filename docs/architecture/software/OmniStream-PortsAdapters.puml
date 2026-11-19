@@ -195,6 +195,12 @@ package "Driving ports (domain)" #E8F5E9 {
    interface IEventDispatch <<driving port>> {
      + publishPending(limit : int) : int
    }
+   interface IRuleManagement <<driving port>> #E8F5E9;line.dashed;line:999999 {
+     + createRule(admin : UserId, c : ClassificationCriterion) : void
+     + deleteRule(admin : UserId, name : String) : void
+     + listRules(admin : UserId) : List<ClassificationCriterion>
+     + reclassifyLibrary(admin : UserId) : int
+   }
  }
 
 ' ============================================================
@@ -208,6 +214,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
    class AccessService <<domain service>>
    class SyncService <<domain service>>
    class EventDispatchService <<domain service>>
+   class ClassificationService <<domain service>> #FCE8B4;line.dashed;line:999999
    interface ICatalogObserver <<observer>> {
      + onCatalogChanged(e : DomainEvent) : void
    }
@@ -221,6 +228,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  IAccessControl <|.. AccessService
  ISync <|.. SyncService
  IEventDispatch <|.. EventDispatchService
+ IRuleManagement <|.. ClassificationService
 
  CliAdapter --> ICatalogManagement : invokes
  RestApiAdapter --> ICatalogManagement : invokes
@@ -228,6 +236,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  RestApiAdapter --> IPlayback : invokes
  RestApiAdapter --> IAccessControl : invokes
  RestApiAdapter --> ISync : invokes
+ RestApiAdapter ..> IRuleManagement : invokes (2.0)
  SchedulerAdapter ..> ScheduledTask : fires
  ReindexTask --> ICatalogManagement : invokes
  BackupTask --> ICatalogManagement : invokes
@@ -311,6 +320,11 @@ package "Driven ports (domain)" #F3E5F5 {
      + getLibraryPath() : Path
      + saveLibraryPath(path : Path) : void
    }
+   interface IRuleRepository <<driven port>> #F3E5F5;line.dashed;line:999999 {
+     + findAll() : List<ClassificationCriterion>
+     + save(c : ClassificationCriterion) : void
+     + delete(name : String) : void
+   }
    interface IEventPublisher <<driven port>> {
      + publish(e : DomainEvent) : void
    }
@@ -346,6 +360,8 @@ package "Driven ports (domain)" #F3E5F5 {
  SyncObserver ..> IChangeLog : records changes
  EventDispatchService ..> IOutboxRepository : fetches and marks pending
  EventDispatchService ..> IEventPublisher : publishes events
+ ClassificationService ..> IRuleRepository : reads / saves rules
+ ClassificationService ..> ICatalogRepository : reclassifies the catalog
  IEventSubscriber ..> ICatalogObserver : registers
 
 ' ============================================================
@@ -489,6 +505,10 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      + toEvent(row : ResultSet) : DomainEvent
      + bind(statement : PreparedStatement, e : DomainEvent) : void
    }
+   class CriterionMapper <<mapper>> #F7F7F7;line.dashed;line:999999 {
+     + toValue(row : ResultSet) : ClassificationCriterion
+     + bind(statement : PreparedStatement, c : ClassificationCriterion) : void
+   }
    class CachedCatalogRepository <<decorator>> {
      - delegate : ICatalogRepository
      - cache : CatalogIndex
@@ -541,6 +561,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
  IUnitOfWork <|.. JdbcPersistenceAdapter
  IDataBackup <|.. JdbcPersistenceAdapter
  IConfigurationRepository <|.. JdbcPersistenceAdapter
+ IRuleRepository <|.. JdbcPersistenceAdapter
  IFileStorage <|.. LocalFileStorageAdapter
  IFileStorage <|.. NetworkFileStorageAdapter
  IMetadataExtractor <|.. MetadataAdapter
@@ -568,6 +589,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
  JdbcPersistenceAdapter ..> SessionMapper : uses
  JdbcPersistenceAdapter ..> SharedLinkMapper : uses
  JdbcPersistenceAdapter ..> EventMapper : uses
+ JdbcPersistenceAdapter ..> CriterionMapper : uses (2.0)
  EventBusAdapter ..> ICatalogObserver : notifies
 
 ' ============================================================
@@ -705,6 +727,9 @@ package "Composition (bootstrap)" #FFFDE7 {
    one query per table, converts the rows with the
    mappers and returns fromSnapshot(...). The change log
    stores events and reuses EventMapper.
+   In 2.0 it also implements IRuleRepository, with
+   CriterionMapper; the factory provides it like the
+   other persistence ports.
  end note
 
  note bottom of MediaFileMapper

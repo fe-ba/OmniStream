@@ -195,6 +195,12 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
    interface IDespachoEventos <<driving port>> {
      + publicarPendientes(limite : int) : int
    }
+   interface IGestionReglas <<driving port>> #E8F5E9;line.dashed;line:999999 {
+     + crearRegla(admin : UsuarioId, c : CriterioClasificacion) : void
+     + eliminarRegla(admin : UsuarioId, nombre : String) : void
+     + listarReglas(admin : UsuarioId) : List<CriterioClasificacion>
+     + reclasificarBiblioteca(admin : UsuarioId) : int
+   }
  }
 
 ' ============================================================
@@ -208,6 +214,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
    class ServicioAcceso <<domain service>>
    class ServicioSincronizacion <<domain service>>
    class ServicioDespachoEventos <<domain service>>
+   class ServicioClasificacion <<domain service>> #FCE8B4;line.dashed;line:999999
    interface IObservadorCatalogo <<observer>> {
      + alCambiarCatalogo(e : EventoDominio) : void
    }
@@ -221,6 +228,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  IControlAcceso <|.. ServicioAcceso
  ISincronizacion <|.. ServicioSincronizacion
  IDespachoEventos <|.. ServicioDespachoEventos
+ IGestionReglas <|.. ServicioClasificacion
 
  AdaptadorCLI --> IGestionCatalogo : invoca
  AdaptadorApiRest --> IGestionCatalogo : invoca
@@ -228,6 +236,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  AdaptadorApiRest --> IReproduccion : invoca
  AdaptadorApiRest --> IControlAcceso : invoca
  AdaptadorApiRest --> ISincronizacion : invoca
+ AdaptadorApiRest ..> IGestionReglas : invoca (2.0)
  AdaptadorProgramador ..> TareaProgramada : dispara
  TareaReindexar --> IGestionCatalogo : invoca
  TareaRespaldar --> IGestionCatalogo : invoca
@@ -311,6 +320,11 @@ package "Puertos de salida (dominio)" #F3E5F5 {
      + obtenerRutaBiblioteca() : Path
      + guardarRutaBiblioteca(ruta : Path) : void
    }
+   interface IRepositorioReglas <<driven port>> #F3E5F5;line.dashed;line:999999 {
+     + obtenerTodas() : List<CriterioClasificacion>
+     + guardar(c : CriterioClasificacion) : void
+     + eliminar(nombre : String) : void
+   }
    interface IPublicadorEventos <<driven port>> {
      + publicar(e : EventoDominio) : void
    }
@@ -346,6 +360,8 @@ package "Puertos de salida (dominio)" #F3E5F5 {
  ObservadorSincronizacion ..> IRegistroCambios : registra cambios
  ServicioDespachoEventos ..> IRepositorioOutbox : obtiene y marca pendientes
  ServicioDespachoEventos ..> IPublicadorEventos : publica eventos
+ ServicioClasificacion ..> IRepositorioReglas : lee / guarda reglas
+ ServicioClasificacion ..> IRepositorioCatalogo : reclasifica el catalogo
  ISuscriptorEventos ..> IObservadorCatalogo : registra
 
 ' ============================================================
@@ -489,6 +505,10 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      + aEvento(fila : ResultSet) : EventoDominio
      + asignar(sentencia : PreparedStatement, e : EventoDominio) : void
    }
+   class MapeadorCriterio <<mapper>> #F7F7F7;line.dashed;line:999999 {
+     + aValor(fila : ResultSet) : CriterioClasificacion
+     + asignar(sentencia : PreparedStatement, c : CriterioClasificacion) : void
+   }
    class RepositorioCatalogoConCache <<decorator>> {
      - delegado : IRepositorioCatalogo
      - cache : CatalogoIndice
@@ -541,6 +561,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
  IUnidadDeTrabajo <|.. AdaptadorPersistenciaJdbc
  IRespaldoDatos <|.. AdaptadorPersistenciaJdbc
  IRepositorioConfiguracion <|.. AdaptadorPersistenciaJdbc
+ IRepositorioReglas <|.. AdaptadorPersistenciaJdbc
  IAlmacenamientoArchivos <|.. AdaptadorArchivosLocal
  IAlmacenamientoArchivos <|.. AdaptadorArchivosRed
  IExtractorMetadatos <|.. AdaptadorMetadatos
@@ -568,6 +589,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
  AdaptadorPersistenciaJdbc ..> MapeadorSesion : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorEnlace : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorEvento : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorCriterio : utiliza (2.0)
  AdaptadorBusEventos ..> IObservadorCatalogo : notifica
 
 ' ============================================================
@@ -705,6 +727,9 @@ package "Composicion (arranque)" #FFFDE7 {
    una consulta por tabla, convierte las filas con los
    mapeadores y entrega desdeInstantanea(...). El registro
    de cambios guarda eventos y reutiliza MapeadorEvento.
+   En la 2.0 implementa tambien IRepositorioReglas, con
+   MapeadorCriterio; la fabrica lo entrega igual que los
+   demas puertos de persistencia.
  end note
 
  note bottom of MapeadorArchivo

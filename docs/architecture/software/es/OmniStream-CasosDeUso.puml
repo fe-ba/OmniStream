@@ -67,6 +67,7 @@ package "Gestion de contenido" {
   usecase "Detectar duplicados"                   as UC5 <<opcional>>
   usecase "Editar metadatos\nmanualmente"         as UC6
   usecase "Eliminar archivo\ndel catalogo"        as UC7
+  usecase "Clasificar\nautomaticamente"         as UC25 <<incluido>>
 }
 
 ' ============================================================
@@ -110,6 +111,8 @@ package "Administracion del servidor" {
   usecase "Configurar rutas\nde biblioteca"   as UC22 <<admin>>
   usecase "Respaldar catalogo"                as UC23 <<admin>>
   usecase "Monitorear estado\ndel servidor"   as UC24 <<admin>>
+  usecase "Gestionar reglas\nde clasificacion" as UC26 <<admin>> #F5F5F5;line.dashed;line:999999
+  usecase "Reclasificar\nbiblioteca"          as UC27 <<admin>> #F5F5F5;line.dashed;line:999999
 }
 
 ' ============================================================
@@ -143,6 +146,8 @@ Admin --> UC21
 Admin --> UC22
 Admin --> UC23
 Admin --> UC24
+Admin --> UC26
+Admin --> UC27
 
 ' ============================================================
 ' ASOCIACIONES - ACTORES SECUNDARIOS
@@ -163,6 +168,9 @@ UC1  ..> UC3  : <<include>>
 UC1  ..> UC4  : <<include>>
 UC2  ..> UC3  : <<include>>
 UC2  ..> UC4  : <<include>>
+UC1  ..> UC25 : <<include>>
+UC2  ..> UC25 : <<include>>
+UC27 ..> UC25 : <<include>>
 UC6  ..> UC4  : <<include>>
 UC7  ..> UC4  : <<include>>
 UC11 ..> UC4  : <<include>>

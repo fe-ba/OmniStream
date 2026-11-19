@@ -89,6 +89,7 @@ rectangle "Puertos de entrada" <<dominio>> {
   interface "IControlAcceso"   as PIN_ACC
   interface "ISincronizacion"  as PIN_SIN
   interface "IDespachoEventos" as PIN_DES
+  interface "IGestionReglas"   as PIN_REG #FFFFFF;line.dashed;line:999999
 }
 
 ' ============================================================
@@ -104,6 +105,7 @@ rectangle "Dominio" <<dominio>> {
     component "Servicio de Sincronizacion\n..\nsincronizarCambios()\ncachearContenido()"                    as SvSin
     component "Servicio de Despacho de Eventos\n..\npublicarPendientes()"                                   as SvDes
     component "Observador de Sincronizacion\n<<observer>>\n..\nalCambiarCatalogo()"                         as SvObs
+    component "Servicio de Clasificacion\n..\ncrearRegla()\nreclasificarBiblioteca()"                      as SvCla #FFFFFF;line.dashed;line:999999
   }
 
   rectangle "Modelo de dominio" <<modelo>> {
@@ -112,6 +114,7 @@ rectangle "Dominio" <<dominio>> {
     component "Metadato\n<<value object>>"               as EnMeta
     component "Coleccion\n<<entity>>"                    as EnColeccion
     component "Etiqueta\n<<value object>>"               as EnEtiqueta
+    component "Reglas de clasificacion\n<<strategy>>"     as EnClasif
     component "Usuario\n<<aggregate root>>"              as EnUsuario
     component "Permiso\n<<value object>>"                as EnPermiso
     component "EnlaceCompartido\n<<aggregate root>>"     as EnEnlace
@@ -140,6 +143,7 @@ rectangle "Puertos de salida" <<dominio>> {
   interface "IRegistroCredenciales"   as POUT_CRED
   interface "IRespaldoDatos"          as POUT_RESP
   interface "IRepositorioConfiguracion" as POUT_CONF
+  interface "IRepositorioReglas"      as POUT_REG #FFFFFF;line.dashed;line:999999
   interface "IPublicadorEventos"      as POUT_PUB
   interface "ISuscriptorEventos"      as POUT_SUS
 }
@@ -189,6 +193,7 @@ AdApi    ..> PIN_BUS
 AdApi    ..> PIN_REP
 AdApi    ..> PIN_ACC
 AdApi    ..> PIN_SIN
+AdApi    ..> PIN_REG
 AdCli    ..> PIN_CAT
 AdProg   ..> PIN_CAT : reindexar / respaldar
 AdProg   ..> PIN_DES : sincronizar
@@ -202,6 +207,7 @@ SvRep -up- PIN_REP
 SvAcc -up- PIN_ACC
 SvSin -up- PIN_SIN
 SvDes -up- PIN_DES
+SvCla -up- PIN_REG
 
 ' ============================================================
 ' SERVICIOS -> MODELO DE DOMINIO
@@ -213,12 +219,15 @@ SvAcc --> EnUsuario
 SvAcc --> EnEnlace
 SvObs --> EnEventos : recibe
 SvDes --> EnEventos : publica
+SvCat --> EnClasif : clasifica al ingerir
+SvCla --> EnClasif
 
 ' --- relaciones internas del modelo ---
 EnCatalogo *-- EnArchivo
 EnCatalogo *-- EnColeccion
 EnArchivo  *-- EnMeta
 EnArchivo  *-- EnEtiqueta
+EnClasif   ..> EnEtiqueta : asigna
 EnUsuario  *-- EnPermiso
 EnCatalogo --> EnEventos : registra
 EnSesion   ..> EnArchivo : por id
@@ -252,6 +261,8 @@ SvSin ..> POUT_FS
 SvObs ..> POUT_CAMB
 SvDes ..> POUT_OUT
 SvDes ..> POUT_PUB
+SvCla ..> POUT_REG
+SvCla ..> POUT_REPO
 
 ' ============================================================
 ' ADAPTADORES -- PUERTOS DE SALIDA  (implementa)
@@ -265,6 +276,7 @@ AdRepo  -up- POUT_OUT
 AdRepo  -up- POUT_UOW
 AdRepo  -up- POUT_RESP
 AdRepo  -up- POUT_CONF
+AdRepo  -up- POUT_REG
 AdFs    -up- POUT_FS
 AdMeta  -up- POUT_META
 AdTrans -up- POUT_TRANS

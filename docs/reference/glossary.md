@@ -32,6 +32,11 @@ below.
 | `InstantaneaCatalogo` | `CatalogSnapshot` | Domain model |
 | `TipoCambio` | `ChangeType` | Domain model |
 | `EstadoCircuito` | `CircuitState` | Ports and adapters |
+| `Clasificacion` | `Classification` | Domain model |
+| `CriterioClasificacion` | `ClassificationCriterion` | Domain model |
+| `ReglaClasificacion` | `ClassificationRule` | Services |
+| `ServicioClasificacion` | `ClassificationService` | Services |
+| `PasoClasificacion` | `ClassificationStep` | Services |
 | `AdaptadorCLI` | `CliAdapter` | Ports and adapters |
 | `Coleccion` | `Collection` | Domain model |
 | `ComandoColeccion` | `CollectionCommand` | Services |
@@ -41,7 +46,9 @@ below.
 | `InstantaneaColeccion` | `CollectionSnapshot` | Domain model |
 | `ComposicionRaiz` | `CompositionRoot` | Ports and adapters |
 | `Credenciales` | `Credentials` | Services |
+| `MapeadorCriterio` | `CriterionMapper` | Ports and adapters |
 | `ColeccionCiclica` | `CyclicCollection` | Domain model |
+| `ReglaPorFecha` | `DateRule` | Services |
 | `PoliticaDeduplicacion` | `DeduplicationPolicy` | Domain model |
 | `StreamDirecto` | `DirectStream` | Services |
 | `EventoDominio` | `DomainEvent` | Domain model |
@@ -54,6 +61,7 @@ below.
 | `MapeadorEvento` | `EventMapper` | Ports and adapters |
 | `EnlaceVencido` | `ExpiredLink` | Domain model |
 | `PasoExtraccion` | `ExtractionStep` | Services |
+| `ArchivoClasificado` | `FileClassified` | Domain model |
 | `ArchivoEliminado` | `FileDeleted` | Domain model |
 | `ArchivoIngestado` | `FileIngested` | Domain model |
 | `ArchivoModificado` | `FileModified` | Domain model |
@@ -84,6 +92,8 @@ below.
 | `CredencialesInvalidas` | `InvalidCredentials` | Domain model |
 | `IRepositorioOutbox` | `IOutboxRepository` | Ports and adapters |
 | `IReproduccion` | `IPlayback` | Ports and adapters |
+| `IGestionReglas` | `IRuleManagement` | Ports and adapters |
+| `IRepositorioReglas` | `IRuleRepository` | Ports and adapters |
 | `IBusqueda` | `ISearch` | Ports and adapters |
 | `IRepositorioSesiones` | `ISessionRepository` | Ports and adapters |
 | `IRepositorioEnlaces` | `ISharedLinkRepository` | Ports and adapters |
@@ -105,6 +115,7 @@ below.
 | `InstantaneaArchivo` | `MediaFileSnapshot` | Domain model |
 | `FlujoMultimedia` | `MediaStream` | Services |
 | `TipoMedio` | `MediaType` | Domain model |
+| `ReglaPorTipo` | `MediaTypeRule` | Services |
 | `AdaptadorMetadatos` | `MetadataAdapter` | Ports and adapters |
 | `Metadato` | `MetadataEntry` | Domain model |
 | `MapeadorMetadato` | `MetadataEntryMapper` | Ports and adapters |
@@ -125,6 +136,7 @@ below.
 | `RecursoNoEncontrado` | `ResourceNotFound` | Domain model |
 | `AdaptadorApiRest` | `RestApiAdapter` | Ports and adapters |
 | `Rol` | `Role` | Domain model |
+| `OperadorRegla` | `RuleOperator` | Domain model |
 | `TareaProgramada` | `ScheduledTask` | Ports and adapters |
 | `AdaptadorProgramador` | `SchedulerAdapter` | Ports and adapters |
 | `CriterioBusqueda` | `SearchCriteria` | Services |
@@ -147,9 +159,11 @@ below.
 | `ServicioSincronizacion` | `SyncService` | Services |
 | `TareaSincronizar` | `SyncTask` | Ports and adapters |
 | `Etiqueta` | `Tag` | Domain model |
+| `OrigenEtiqueta` | `TagSource` | Domain model |
 | `StreamTranscodificado` | `TranscodedStream` | Services |
 | `AdaptadorTranscodificacion` | `TranscodingAdapter` | Ports and adapters |
 | `Usuario` | `User` | Domain model |
+| `ReglasDelUsuario` | `UserDefinedRules` | Services |
 | `UsuarioId` | `UserId` | Domain model |
 | `MapeadorUsuario` | `UserMapper` | Ports and adapters |
 | `InstantaneaUsuario` | `UserSnapshot` | Domain model |
@@ -209,5 +223,10 @@ below.
 | `CERRADO` | `CLOSED` |
 | `ABIERTO` | `OPEN` |
 | `SEMI_ABIERTO` | `HALF_OPEN` |
+| `AUTOMATICA` | `AUTOMATIC` |
+| `IGUAL` | `EQUALS` |
+| `CONTIENE` | `CONTAINS` |
+| `MAYOR_QUE` | `GREATER_THAN` |
+| `MENOR_QUE` | `LESS_THAN` |
 
 Constants not listed (`VIDEO`, `AUDIO`, `ERROR`, `MANUAL`) are the same in both languages.

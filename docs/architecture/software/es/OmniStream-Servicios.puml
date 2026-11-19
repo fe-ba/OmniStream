@@ -185,20 +185,78 @@ package "Catalogo e ingesta" {
     # procesar(ctx : ContextoIngesta) : boolean
   }
 
+  class PasoClasificacion <<handler>> {
+    - reglas : List<ReglaClasificacion>
+    __
+    # procesar(ctx : ContextoIngesta) : boolean
+  }
+
   class PasoIndexacion <<handler>> {
     # procesar(ctx : ContextoIngesta) : boolean
   }
 
   note left of PasoIngesta
     **Patron Chain of Responsibility:**
-    Extraccion -> Duplicados -> Indexacion.
+    Extraccion -> Duplicados -> Clasificacion -> Indexacion.
     ejecutar() llama a procesar() y, si devuelve
     true, pasa al siguiente (Template Method).
     PasoExtraccion crea el ArchivoMultimedia con su
     huella y metadatos; PasoDuplicados corta la cadena
-    si la politica dice RECHAZAR; PasoIndexacion llama
-    a CatalogoIndice.ingestar(). La cadena la arma
+    si la politica dice RECHAZAR; PasoClasificacion deja
+    en el contexto lo que deciden las reglas;
+    PasoIndexacion llama a CatalogoIndice.ingestar() y
+    aplicarClasificacion(). La cadena la arma
     ComposicionRaiz.
+  end note
+}
+
+' ============================================================
+' CLASIFICACION AUTOMATICA   (ADR 0016)
+' ============================================================
+package "Clasificacion automatica" {
+
+  interface ReglaClasificacion <<strategy>> #E4F4E4;line:6FA86F {
+    + aplica(a : InstantaneaArchivo) : boolean
+    + clasificar(a : InstantaneaArchivo) : Clasificacion
+  }
+
+  class ReglaPorTipo <<strategy>> {
+    + aplica(a : InstantaneaArchivo) : boolean
+    + clasificar(a : InstantaneaArchivo) : Clasificacion
+  }
+
+  class ReglaPorFecha <<strategy>> {
+    + aplica(a : InstantaneaArchivo) : boolean
+    + clasificar(a : InstantaneaArchivo) : Clasificacion
+  }
+
+  class ReglasDelUsuario <<strategy>> #FCF4E0;line.dashed;line:999999 {
+    - repositorioReglas : IRepositorioReglas
+    __
+    + aplica(a : InstantaneaArchivo) : boolean
+    + clasificar(a : InstantaneaArchivo) : Clasificacion
+  }
+
+  class ServicioClasificacion <<domain service>> #FCE8B4;line.dashed;line:999999 {
+    - repositorioReglas : IRepositorioReglas
+    - repositorioCatalogo : IRepositorioCatalogo
+    - reglas : List<ReglaClasificacion>
+    __
+    + crearRegla(admin : UsuarioId, c : CriterioClasificacion) : void
+    + eliminarRegla(admin : UsuarioId, nombre : String) : void
+    + listarReglas(admin : UsuarioId) : List<CriterioClasificacion>
+    + reclasificarBiblioteca(admin : UsuarioId) : int
+  }
+
+  note right of ReglaClasificacion
+    **Patron Strategy (clasificacion, ADR 0016):**
+    cada regla decide si aplica al archivo y que
+    etiquetas o colecciones le corresponden;
+    PasoClasificacion combina el resultado de todas.
+    En la 1.0 hay reglas fijas por tipo de medio y por
+    fecha. ReglasDelUsuario (2.0) aplica los criterios
+    que define el administrador: se agrega a la lista
+    sin cambiar la cadena ni las otras reglas.
   end note
 }
 
@@ -316,6 +374,7 @@ package "Modelo (ver diagrama de dominio)" {
   class PoliticaDeduplicacion <<policy>>
   class Usuario <<aggregate root>>
   class CatalogoIndice <<aggregate root>>
+  class Clasificacion <<value object>>
   class EnlaceCompartido <<aggregate root>>
   class SesionReproduccion <<aggregate root>>
   abstract class EventoDominio <<event>>
@@ -354,6 +413,7 @@ package "DTOs y comandos de los puertos" {
     + catalogo : CatalogoIndice
     + ruta : Path
     + archivo : ArchivoMultimedia
+    + clasificacion : Clasificacion
     + resultado : ResultadoIngesta
   }
 
@@ -414,6 +474,7 @@ ServicioAutorizado <|-- ServicioCatalogo
 ServicioAutorizado <|-- ServicioBusqueda
 ServicioAutorizado <|-- ServicioSincronizacion
 ServicioAutorizado <|-- ServicioReproduccion
+ServicioAutorizado <|-- ServicioClasificacion
 ServicioAutorizado --> "1" PoliticaAcceso : politicaAcceso
 ServicioAutorizado ..> Usuario : <<carga>>
 
@@ -431,6 +492,7 @@ ServicioCatalogo "1" *-- "1" PasoIngesta : cadenaIngesta
 PasoIngesta --> "0..1" PasoIngesta : siguiente
 PasoIngesta <|-- PasoExtraccion
 PasoIngesta <|-- PasoDuplicados
+PasoIngesta <|-- PasoClasificacion
 PasoIngesta <|-- PasoIndexacion
 PasoIngesta ..> ContextoIngesta : <<procesa>>
 PasoDuplicados --> "1" PoliticaDeduplicacion : politica
@@ -438,6 +500,17 @@ PasoIndexacion ..> CatalogoIndice : <<ingestar>>
 ServicioCatalogo --> "1" PoliticaDeduplicacion : politicaDeduplicacion
 ServicioCatalogo ..> CatalogoIndice : <<modifica>>
 ServicioBusqueda ..> CatalogoIndice : <<consulta / modifica>>
+
+' ============================================================
+' RELACIONES - CLASIFICACION AUTOMATICA (Strategy)
+' ============================================================
+PasoClasificacion "1" o-- "1..*" ReglaClasificacion : reglas
+ReglaClasificacion <|.. ReglaPorTipo
+ReglaClasificacion <|.. ReglaPorFecha
+ReglaClasificacion <|.. ReglasDelUsuario
+ReglaClasificacion ..> Clasificacion : <<produce>>
+ServicioClasificacion "1" o-- "1..*" ReglaClasificacion : reglas
+ServicioClasificacion ..> CatalogoIndice : <<reclasifica>>
 
 ' ============================================================
 ' RELACIONES - SINCRONIZACION Y EVENTOS (Observer)
@@ -472,6 +545,7 @@ note as NotaPuertos
   ServicioAcceso          -> IControlAcceso
   ServicioSincronizacion  -> ISincronizacion
   ServicioDespachoEventos -> IDespachoEventos
+  ServicioClasificacion   -> IGestionReglas (2.0)
   Los metodos publicos de cada servicio son exactamente
   los de su puerto.
 end note

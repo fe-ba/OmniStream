@@ -185,20 +185,78 @@ package "Catalog and ingestion" {
     # process(ctx : IngestionContext) : boolean
   }
 
+  class ClassificationStep <<handler>> {
+    - rules : List<ClassificationRule>
+    __
+    # process(ctx : IngestionContext) : boolean
+  }
+
   class IndexingStep <<handler>> {
     # process(ctx : IngestionContext) : boolean
   }
 
   note left of IngestionStep
     **Chain of Responsibility pattern:**
-    Extraction -> Duplicates -> Indexing.
+    Extraction -> Duplicates -> Classification -> Indexing.
     execute() calls process() and, if it returns
     true, moves on to the next one (Template Method).
     ExtractionStep creates the MediaFile with its
     fingerprint and metadata; DuplicatesStep stops the chain
-    if the policy says REJECT; IndexingStep calls
-    CatalogIndex.ingest(). The chain is built by
+    if the policy says REJECT; ClassificationStep leaves
+    in the context what the rules decide;
+    IndexingStep calls CatalogIndex.ingest() and
+    applyClassification(). The chain is built by
     CompositionRoot.
+  end note
+}
+
+' ============================================================
+' AUTOMATIC CLASSIFICATION   (ADR 0016)
+' ============================================================
+package "Automatic classification" {
+
+  interface ClassificationRule <<strategy>> #E4F4E4;line:6FA86F {
+    + appliesTo(a : MediaFileSnapshot) : boolean
+    + classify(a : MediaFileSnapshot) : Classification
+  }
+
+  class MediaTypeRule <<strategy>> {
+    + appliesTo(a : MediaFileSnapshot) : boolean
+    + classify(a : MediaFileSnapshot) : Classification
+  }
+
+  class DateRule <<strategy>> {
+    + appliesTo(a : MediaFileSnapshot) : boolean
+    + classify(a : MediaFileSnapshot) : Classification
+  }
+
+  class UserDefinedRules <<strategy>> #FCF4E0;line.dashed;line:999999 {
+    - ruleRepository : IRuleRepository
+    __
+    + appliesTo(a : MediaFileSnapshot) : boolean
+    + classify(a : MediaFileSnapshot) : Classification
+  }
+
+  class ClassificationService <<domain service>> #FCE8B4;line.dashed;line:999999 {
+    - ruleRepository : IRuleRepository
+    - catalogRepository : ICatalogRepository
+    - rules : List<ClassificationRule>
+    __
+    + createRule(admin : UserId, c : ClassificationCriterion) : void
+    + deleteRule(admin : UserId, name : String) : void
+    + listRules(admin : UserId) : List<ClassificationCriterion>
+    + reclassifyLibrary(admin : UserId) : int
+  }
+
+  note right of ClassificationRule
+    **Strategy pattern (classification, ADR 0016):**
+    each rule decides whether it applies to the file and
+    which tags or collections it gets;
+    ClassificationStep combines the result of all of them.
+    Version 1.0 has fixed rules by media type and by
+    date. UserDefinedRules (2.0) applies the criteria
+    defined by the administrator: it is added to the list
+    without changing the chain or the other rules.
   end note
 }
 
@@ -316,6 +374,7 @@ package "Model (see domain diagram)" {
   class DeduplicationPolicy <<policy>>
   class User <<aggregate root>>
   class CatalogIndex <<aggregate root>>
+  class Classification <<value object>>
   class SharedLink <<aggregate root>>
   class PlaybackSession <<aggregate root>>
   abstract class DomainEvent <<event>>
@@ -354,6 +413,7 @@ package "Port DTOs and commands" {
     + catalog : CatalogIndex
     + path : Path
     + file : MediaFile
+    + classification : Classification
     + result : IngestionResult
   }
 
@@ -414,6 +474,7 @@ AuthorizedService <|-- CatalogService
 AuthorizedService <|-- SearchService
 AuthorizedService <|-- SyncService
 AuthorizedService <|-- PlaybackService
+AuthorizedService <|-- ClassificationService
 AuthorizedService --> "1" AccessPolicy : accessPolicy
 AuthorizedService ..> User : <<loads>>
 
@@ -431,6 +492,7 @@ CatalogService "1" *-- "1" IngestionStep : ingestionChain
 IngestionStep --> "0..1" IngestionStep : next
 IngestionStep <|-- ExtractionStep
 IngestionStep <|-- DuplicatesStep
+IngestionStep <|-- ClassificationStep
 IngestionStep <|-- IndexingStep
 IngestionStep ..> IngestionContext : <<processes>>
 DuplicatesStep --> "1" DeduplicationPolicy : policy
@@ -438,6 +500,17 @@ IndexingStep ..> CatalogIndex : <<ingest>>
 CatalogService --> "1" DeduplicationPolicy : deduplicationPolicy
 CatalogService ..> CatalogIndex : <<modifies>>
 SearchService ..> CatalogIndex : <<queries / modifies>>
+
+' ============================================================
+' RELATIONS - AUTOMATIC CLASSIFICATION (Strategy)
+' ============================================================
+ClassificationStep "1" o-- "1..*" ClassificationRule : rules
+ClassificationRule <|.. MediaTypeRule
+ClassificationRule <|.. DateRule
+ClassificationRule <|.. UserDefinedRules
+ClassificationRule ..> Classification : <<produces>>
+ClassificationService "1" o-- "1..*" ClassificationRule : rules
+ClassificationService ..> CatalogIndex : <<reclassifies>>
 
 ' ============================================================
 ' RELATIONS - SYNCHRONIZATION AND EVENTS (Observer)
@@ -472,6 +545,7 @@ note as PortsNote
   AccessService        -> IAccessControl
   SyncService          -> ISync
   EventDispatchService -> IEventDispatch
+  ClassificationService   -> IRuleManagement (2.0)
   The public methods of each service are exactly
   those of its port.
 end note

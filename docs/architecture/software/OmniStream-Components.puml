@@ -89,6 +89,7 @@ rectangle "Driving ports" <<domain>> {
   interface "IAccessControl"   as PIN_ACC
   interface "ISync"  as PIN_SYNC
   interface "IEventDispatch" as PIN_DISPATCH
+  interface "IRuleManagement"   as PIN_RULES #FFFFFF;line.dashed;line:999999
 }
 
 ' ============================================================
@@ -104,6 +105,7 @@ rectangle "Domain" <<domain>> {
     component "Sync service\n..\nsyncChanges()\ncacheContent()"                    as SvSync
     component "Event dispatch service\n..\npublishPending()"                                   as SvDispatch
     component "Sync observer\n<<observer>>\n..\nonCatalogChanged()"                         as SvObserver
+    component "Classification service\n..\ncreateRule()\nreclassifyLibrary()"                      as SvClassification #FFFFFF;line.dashed;line:999999
   }
 
   rectangle "Domain model" <<model>> {
@@ -112,6 +114,7 @@ rectangle "Domain" <<domain>> {
     component "MetadataEntry\n<<value object>>"               as ModelMetadata
     component "Collection\n<<entity>>"                    as ModelCollection
     component "Tag\n<<value object>>"               as ModelTag
+    component "Classification rules\n<<strategy>>"     as ModelRules
     component "User\n<<aggregate root>>"              as ModelUser
     component "Permission\n<<value object>>"                as ModelPermission
     component "SharedLink\n<<aggregate root>>"     as ModelSharedLink
@@ -140,6 +143,7 @@ rectangle "Driven ports" <<domain>> {
   interface "ICredentialRegistry"   as POUT_CRED
   interface "IDataBackup"          as POUT_BACKUP
   interface "IConfigurationRepository" as POUT_CONFIG
+  interface "IRuleRepository"      as POUT_RULES #FFFFFF;line.dashed;line:999999
   interface "IEventPublisher"      as POUT_PUB
   interface "IEventSubscriber"      as POUT_SUB
 }
@@ -189,6 +193,7 @@ AdApi    ..> PIN_SEARCH
 AdApi    ..> PIN_PLAY
 AdApi    ..> PIN_ACC
 AdApi    ..> PIN_SYNC
+AdApi    ..> PIN_RULES
 AdCli    ..> PIN_CAT
 AdScheduler   ..> PIN_CAT : reindex / back up
 AdScheduler   ..> PIN_DISPATCH : sync
@@ -202,6 +207,7 @@ SvPlayback -up- PIN_PLAY
 SvAccess -up- PIN_ACC
 SvSync -up- PIN_SYNC
 SvDispatch -up- PIN_DISPATCH
+SvClassification -up- PIN_RULES
 
 ' ============================================================
 ' SERVICES -> DOMAIN MODEL
@@ -213,12 +219,15 @@ SvAccess --> ModelUser
 SvAccess --> ModelSharedLink
 SvObserver --> ModelEvents : receives
 SvDispatch --> ModelEvents : publishes
+SvCatalog --> ModelRules : classifies on ingestion
+SvClassification --> ModelRules
 
 ' --- relations inside the model ---
 ModelCatalog *-- ModelFile
 ModelCatalog *-- ModelCollection
 ModelFile  *-- ModelMetadata
 ModelFile  *-- ModelTag
+ModelRules   ..> ModelTag : assigns
 ModelUser  *-- ModelPermission
 ModelCatalog --> ModelEvents : records
 ModelSession   ..> ModelFile : by id
@@ -252,6 +261,8 @@ SvSync ..> POUT_FS
 SvObserver ..> POUT_CHANGES
 SvDispatch ..> POUT_OUT
 SvDispatch ..> POUT_PUB
+SvClassification ..> POUT_RULES
+SvClassification ..> POUT_REPO
 
 ' ============================================================
 ' ADAPTERS -- DRIVEN PORTS  (implements)
@@ -265,6 +276,7 @@ AdPersistence  -up- POUT_OUT
 AdPersistence  -up- POUT_UOW
 AdPersistence  -up- POUT_BACKUP
 AdPersistence  -up- POUT_CONFIG
+AdPersistence  -up- POUT_RULES
 AdFs    -up- POUT_FS
 AdMeta  -up- POUT_META
 AdTrans -up- POUT_TRANS

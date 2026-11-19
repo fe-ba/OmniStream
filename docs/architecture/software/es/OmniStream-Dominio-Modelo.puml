@@ -19,6 +19,7 @@
 '     (Memento, ADR 0011). Los metodos que fechan algo reciben
 '     el instante (ahora) del reloj del servicio.
 '   - Cero dependencias de frameworks, persistencia o HTTP.
+'   - Borde punteado: fuera del alcance de la version 1.0 (ADR 0009).
 ' ============================================================
 
 skinparam backgroundColor #FFFFFF
@@ -84,6 +85,7 @@ package "Agregado Catalogo" {
     + existeDuplicado(h : HuellaDigital) : boolean
     + editarMetadato(id : ElementoId, m : Metadato, ahora : Instant) : void
     + etiquetar(id : ElementoId, e : Etiqueta, ahora : Instant) : void
+    + aplicarClasificacion(id : ElementoId, c : Clasificacion, ahora : Instant) : void
     + eliminar(id : ElementoId, ahora : Instant) : void
     + crearColeccion(nombre : String, ahora : Instant) : Coleccion
     + agregarAColeccion(coleccion : ElementoId, elemento : ElementoId, ahora : Instant) : void
@@ -119,6 +121,7 @@ package "Agregado Catalogo" {
     + agregarMetadato(m : Metadato) : void
     + metadato(clave : String) : Optional<Metadato>
     + etiquetar(e : Etiqueta) : void
+    + reemplazarEtiquetasAutomaticas(nuevas : Set<Etiqueta>) : void
     + marcarIndexado() : void
     + marcarError(causa : String) : void
     + tamanioTotal() : long
@@ -158,8 +161,10 @@ package "Agregado Catalogo" {
 
   class Etiqueta <<value object>> {
     - nombre : String
+    - origen : OrigenEtiqueta
     __
     + normalizada() : String
+    + esAutomatica() : boolean
   }
 
   class ResultadoIngesta <<value object>> {
@@ -284,6 +289,33 @@ package "Agregado Reproduccion" {
 }
 
 ' ============================================================
+' CLASIFICACION AUTOMATICA   (ADR 0016)
+' ============================================================
+package "Clasificacion automatica" {
+
+  class Clasificacion <<value object>> {
+    - etiquetas : Set<Etiqueta>
+    - colecciones : Set<ElementoId>
+    __
+    + {static} vacia() : Clasificacion
+    + combinar(otra : Clasificacion) : Clasificacion
+    + estaVacia() : boolean
+  }
+
+  class CriterioClasificacion <<value object>> #E8F4FD;line.dashed;line:999999 {
+    - nombre : String
+    - campo : String
+    - operador : OperadorRegla
+    - valor : String
+    - etiqueta : Etiqueta
+    - coleccion : Optional<ElementoId>
+    __
+    + cumple(a : InstantaneaArchivo) : boolean
+    + resultado() : Clasificacion
+  }
+}
+
+' ============================================================
 ' EVENTOS DE DOMINIO
 ' ============================================================
 package "Eventos de dominio" {
@@ -315,6 +347,9 @@ package "Eventos de dominio" {
     + tipoCambio() : TipoCambio
   }
   class ColeccionModificada <<event>> {
+    + tipoCambio() : TipoCambio
+  }
+  class ArchivoClasificado <<event>> {
     + tipoCambio() : TipoCambio
   }
 
@@ -443,6 +478,16 @@ package "Enumerados" {
     EXTRAIDO
     MANUAL
   }
+  enum OrigenEtiqueta {
+    AUTOMATICA
+    MANUAL
+  }
+  enum OperadorRegla #F7F7F7;line.dashed;line:999999 {
+    IGUAL
+    CONTIENE
+    MAYOR_QUE
+    MENOR_QUE
+  }
   enum Rol {
     ADMINISTRADOR
     USUARIO
@@ -532,8 +577,16 @@ EventoCatalogo <|-- ArchivoModificado
 EventoCatalogo <|-- ArchivoEliminado
 EventoCatalogo <|-- ColeccionCreada
 EventoCatalogo <|-- ColeccionModificada
+EventoCatalogo <|-- ArchivoClasificado
 EventoDominio "1" *-- "1" EventoId : id >
 CatalogoIndice "1" o-- "0..*" EventoCatalogo : registra >
+
+' ============================================================
+' RELACIONES  -  CLASIFICACION AUTOMATICA
+' ============================================================
+Clasificacion "1" o-- "0..*" Etiqueta : etiquetas >
+CatalogoIndice ..> Clasificacion : aplica
+CriterioClasificacion ..> Clasificacion : produce
 
 ' ============================================================
 ' RELACIONES  -  INSTANTANEAS (Memento)
@@ -622,6 +675,16 @@ note top of InstantaneaCatalogo
   con ellas.
   version permite bloqueo optimista: guardar() falla con
   ConflictoDeVersion si otro la cambio antes.
+end note
+
+note bottom of Clasificacion
+  Resultado de las reglas de clasificacion (ADR 0016).
+  aplicarClasificacion() reemplaza solo las etiquetas
+  AUTOMATICAS del archivo y lo agrega a las colecciones
+  indicadas; las etiquetas MANUALES no se tocan.
+  Registra ArchivoClasificado.
+  CriterioClasificacion es una regla definida por el
+  administrador (version 2.0).
 end note
 
 note bottom of ExcepcionDominio
