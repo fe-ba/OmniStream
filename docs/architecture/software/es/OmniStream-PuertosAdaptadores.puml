@@ -598,6 +598,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
 package "Composicion (arranque)" #FFFDE7 {
    class ConfiguracionApp <<dto>> {
      - perfil : String
+     - puertoHttp : int
      - rutaBiblioteca : Path
      - rutaBaseDatos : Path
      - urlBaseDatos : Optional<URI>

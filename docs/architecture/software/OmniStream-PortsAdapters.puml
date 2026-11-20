@@ -598,6 +598,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
 package "Composition (bootstrap)" #FFFDE7 {
    class AppConfiguration <<dto>> {
      - profile : String
+     - httpPort : int
      - libraryPath : Path
      - databasePath : Path
      - databaseUrl : Optional<URI>
