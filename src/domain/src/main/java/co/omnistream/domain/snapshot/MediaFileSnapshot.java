@@ -12,7 +12,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
-/** Immutable snapshot of an aggregate's state (Memento, ADR 0011). */
+/**
+ * State of a {@code MediaFile} (Memento, ADR 0011).
+ *
+ * @param id the file
+ * @param name name shown to users
+ * @param path where the file is stored
+ * @param fingerprint digest of its content
+ * @param type kind of content
+ * @param sizeBytes size in bytes
+ * @param duration length; zero for images and documents
+ * @param status where it is in the ingestion process
+ * @param ingestedAt when it entered the catalog
+ * @param metadata its metadata entries
+ * @param tags its tags
+ */
 public record MediaFileSnapshot(
     ItemId id,
     String name,
@@ -25,4 +39,10 @@ public record MediaFileSnapshot(
     Instant ingestedAt,
     List<MetadataEntry> metadata,
     Set<Tag> tags)
-    implements CatalogItemSnapshot {}
+    implements CatalogItemSnapshot {
+
+  public MediaFileSnapshot {
+    metadata = List.copyOf(metadata);
+    tags = Set.copyOf(tags);
+  }
+}

@@ -2,9 +2,12 @@ package co.omnistream.domain.snapshot;
 
 import co.omnistream.domain.model.catalog.ItemId;
 
-/** Immutable snapshot of an aggregate's state (Memento, ADR 0011). */
+/** State shared by the snapshots of files and collections (Memento, ADR 0011). */
 public interface CatalogItemSnapshot {
+
+  /** The item. */
   ItemId id();
 
+  /** Name of the item. */
   String name();
 }
