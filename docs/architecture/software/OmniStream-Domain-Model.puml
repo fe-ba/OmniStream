@@ -456,7 +456,7 @@ package "Domain policies" {
 
   class AccessPolicy <<policy>> {
     + authorizes(u : User, resource : ItemId, access : AccessType) : boolean
-    + effectiveLevel(u : User, resource : ItemId) : PermissionLevel
+    + effectiveLevel(u : User, resource : ItemId) : Optional<PermissionLevel>
   }
 }
 

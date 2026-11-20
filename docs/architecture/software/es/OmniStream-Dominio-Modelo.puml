@@ -456,7 +456,7 @@ package "Politicas de dominio" {
 
   class PoliticaAcceso <<policy>> {
     + autoriza(u : Usuario, recurso : ElementoId, acceso : TipoAcceso) : boolean
-    + nivelEfectivo(u : Usuario, recurso : ElementoId) : NivelPermiso
+    + nivelEfectivo(u : Usuario, recurso : ElementoId) : Optional<NivelPermiso>
   }
 }
 
