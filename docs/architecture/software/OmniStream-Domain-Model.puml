@@ -170,7 +170,7 @@ package "Catalog aggregate" {
   class IngestionResult <<value object>> {
     - fileId : ItemId
     - duplicate : boolean
-    - action : DuplicateAction
+    - action : Optional<DuplicateAction>
     __
     + wasIndexed() : boolean
   }

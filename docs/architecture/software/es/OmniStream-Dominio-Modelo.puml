@@ -170,7 +170,7 @@ package "Agregado Catalogo" {
   class ResultadoIngesta <<value object>> {
     - archivoId : ElementoId
     - duplicado : boolean
-    - accion : AccionDuplicado
+    - accion : Optional<AccionDuplicado>
     __
     + fueIndexado() : boolean
   }
