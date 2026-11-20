@@ -73,10 +73,13 @@ target/
 # IDEs and editors
 # =====================================================================
 
-# IntelliJ IDEA
+# IntelliJ IDEA (its build output only at the top levels; a bare "out/" would
+# also hide the domain package co.omnistream.domain.port.out)
 .idea/
 *.iml
-out/
+/out/
+/src/out/
+/src/*/out/
 
 # Eclipse
 .classpath
