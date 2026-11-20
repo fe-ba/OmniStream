@@ -10,8 +10,16 @@ import java.util.Optional;
 
 /** Driven port: defined by the domain, implemented by secondary adapters. */
 public interface ICatalogRepository {
+  /**
+   * The catalog. The first time, when nothing is stored yet, build it with {@code
+   * CatalogIndex.fromSnapshot} from an empty snapshot with version 0.
+   */
   CatalogIndex getCatalog();
 
+  /**
+   * Saves the catalog if its {@code version} is still the stored one, and stores it with {@code
+   * version + 1}; otherwise throws {@code VersionConflict}. The domain never changes the version.
+   */
   void save(CatalogIndex c);
 
   Optional<MediaFileSnapshot> findFile(ItemId id);

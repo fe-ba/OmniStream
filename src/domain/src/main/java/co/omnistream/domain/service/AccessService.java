@@ -63,6 +63,12 @@ public final class AccessService extends AuthorizedService implements IAccessCon
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * Finds the link by its token ({@code ResourceNotFound} if there is none) and throws {@code
+   * ExpiredLink} if {@code !link.isValidAt(clock.instant())}, which also covers revoked links. The
+   * link itself only answers whether it is valid. If it is, issue a token for its guest user, so
+   * that from then on the guest is authorized like anyone else.
+   */
   @Override
   public SessionToken accessWithLink(String link) {
     throw new UnsupportedOperationException("Not implemented yet");
@@ -73,17 +79,33 @@ public final class AccessService extends AuthorizedService implements IAccessCon
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * Nobody shares with more rights than they have: if {@code accessPolicy.effectiveLevel(u, col)}
+   * is empty or below {@code level}, throw {@code AccessDenied}. Then, in one unit of work: {@code
+   * User.createGuest(col, level)} and save it, {@code SharedLink.create(col, <guest id>, level, u,
+   * lifetime, clock.instant())} and save it too.
+   */
   @Override
   public SharedLinkSnapshot shareCollection(
       UserId u, ItemId col, PermissionLevel level, Duration lifetime) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * The password goes to {@link ICredentialRegistry#register}, which returns the local identity;
+   * the user is created with that identity and never sees the password.
+   */
   @Override
   public UserId createUser(UserId admin, String username, String password, Role role) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * {@code User.changeRole} throws {@code IllegalArgumentException} for {@code Role.GUEST} and
+   * {@code IllegalStateException} if the target is a guest. Both can come from the request, so
+   * check them here and answer with a business error before calling it. The same goes for granting
+   * or revoking permissions of a guest.
+   */
   @Override
   public void manageRoles(UserId admin, UserId target, Role role) {
     throw new UnsupportedOperationException("Not implemented yet");

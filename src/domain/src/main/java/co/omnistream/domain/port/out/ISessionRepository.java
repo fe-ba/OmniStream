@@ -12,7 +12,9 @@ public interface ISessionRepository {
 
   Optional<PlaybackSession> findById(SessionId id);
 
+  /** The most recent session (latest {@code startedAt}) of {@code u} on file {@code a}. */
   Optional<PlaybackSession> findLastSession(UserId u, ItemId a);
 
+  /** Sessions that are not finished: those in {@code ACTIVE} or {@code PAUSED} status. */
   int countActive();
 }

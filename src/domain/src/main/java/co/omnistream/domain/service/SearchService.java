@@ -43,6 +43,10 @@ public final class SearchService extends AuthorizedService implements ISearch {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * When the command creates a collection, grant its creator {@code PermissionLevel.MANAGE} on it,
+   * for the same reason as in {@code CatalogService.ingestFile}: access is denied by default.
+   */
   @Override
   public CollectionSnapshot manageCollections(UserId u, CollectionCommand cmd) {
     throw new UnsupportedOperationException("Not implemented yet");

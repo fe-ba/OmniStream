@@ -52,6 +52,12 @@ public final class CatalogService extends AuthorizedService implements ICatalogM
     this.deduplicationPolicy = deduplicationPolicy;
   }
 
+  /**
+   * Access is denied by default ({@code AccessPolicy}): a regular user without a permission on the
+   * new file could not even see it. When a file is indexed, grant its uploader {@code
+   * PermissionLevel.MANAGE} on it ({@code user.grant}, then save the user) in the same unit of
+   * work. The same applies to {@link #uploadFile}.
+   */
   @Override
   public IngestionResult ingestFile(UserId u, Path path) {
     throw new UnsupportedOperationException("Not implemented yet");
