@@ -16,6 +16,8 @@ public interface ISearch {
 
   List<MediaFileSnapshot> filterByCriteria(UserId u, SearchCriteria c);
 
+  List<CatalogItemSnapshot> browseLibrary(UserId u);
+
   List<CatalogItemSnapshot> browseLibrary(UserId u, ItemId col);
 
   CollectionSnapshot manageCollections(UserId u, CollectionCommand cmd);

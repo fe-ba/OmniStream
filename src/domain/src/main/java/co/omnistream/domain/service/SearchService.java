@@ -38,6 +38,15 @@ public final class SearchService extends AuthorizedService implements ISearch {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * The top level of the library: the files and collections that are not inside any collection,
+   * only those {@code u} may view ({@code AccessType.VIEW}).
+   */
+  @Override
+  public List<CatalogItemSnapshot> browseLibrary(UserId u) {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
   @Override
   public List<CatalogItemSnapshot> browseLibrary(UserId u, ItemId col) {
     throw new UnsupportedOperationException("Not implemented yet");

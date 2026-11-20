@@ -270,6 +270,7 @@ package "Search and organization" {
     __
     + searchContent(u : UserId, txt : String) : List<CatalogItemSnapshot>
     + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFileSnapshot>
+    + browseLibrary(u : UserId) : List<CatalogItemSnapshot>
     + browseLibrary(u : UserId, col : ItemId) : List<CatalogItemSnapshot>
     + manageCollections(u : UserId, cmd : CollectionCommand) : CollectionSnapshot
     + tagFile(u : UserId, id : ItemId, e : Tag) : void
@@ -333,10 +334,11 @@ package "Playback" {
     __
     + openSession(u : UserId, id : ItemId) : PlaybackSessionSnapshot
     + resumeFromLastPosition(u : UserId, id : ItemId) : PlaybackSessionSnapshot
-    + requestStream(s : SessionId, p : StreamProfile) : MediaStream
-    + recordProgress(s : SessionId, pos : Duration) : void
-    + pauseSession(s : SessionId) : void
-    + finishSession(s : SessionId) : void
+    + requestStream(u : UserId, s : SessionId, p : StreamProfile) : MediaStream
+    + recordProgress(u : UserId, s : SessionId, pos : Duration) : void
+    + pauseSession(u : UserId, s : SessionId) : void
+    + resumeSession(u : UserId, s : SessionId) : void
+    + finishSession(u : UserId, s : SessionId) : void
     - selectStream(a : MediaFileSnapshot, p : StreamProfile) : StreamStrategy
   }
 

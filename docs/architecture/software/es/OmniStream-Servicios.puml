@@ -270,6 +270,7 @@ package "Busqueda y organizacion" {
     __
     + buscarContenido(u : UsuarioId, txt : String) : List<InstantaneaElemento>
     + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<InstantaneaArchivo>
+    + explorarBiblioteca(u : UsuarioId) : List<InstantaneaElemento>
     + explorarBiblioteca(u : UsuarioId, col : ElementoId) : List<InstantaneaElemento>
     + gestionarColecciones(u : UsuarioId, cmd : ComandoColeccion) : InstantaneaColeccion
     + etiquetarArchivo(u : UsuarioId, id : ElementoId, e : Etiqueta) : void
@@ -333,10 +334,11 @@ package "Reproduccion" {
     __
     + abrirSesion(u : UsuarioId, id : ElementoId) : InstantaneaSesion
     + reanudarDesdeUltimaPosicion(u : UsuarioId, id : ElementoId) : InstantaneaSesion
-    + solicitarStream(s : SesionId, p : PerfilStream) : FlujoMultimedia
-    + registrarProgreso(s : SesionId, pos : Duration) : void
-    + pausarSesion(s : SesionId) : void
-    + finalizarSesion(s : SesionId) : void
+    + solicitarStream(u : UsuarioId, s : SesionId, p : PerfilStream) : FlujoMultimedia
+    + registrarProgreso(u : UsuarioId, s : SesionId, pos : Duration) : void
+    + pausarSesion(u : UsuarioId, s : SesionId) : void
+    + reanudarSesion(u : UsuarioId, s : SesionId) : void
+    + finalizarSesion(u : UsuarioId, s : SesionId) : void
     - seleccionarStream(a : InstantaneaArchivo, p : PerfilStream) : EstrategiaStream
   }
 

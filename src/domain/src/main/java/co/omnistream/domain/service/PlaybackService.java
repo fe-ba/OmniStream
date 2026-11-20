@@ -51,8 +51,14 @@ public final class PlaybackService extends AuthorizedService implements IPlaybac
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * Every method that receives a {@code SessionId} first loads the session ({@code
+   * ResourceNotFound} if it does not exist) and throws {@code AccessDenied} if its {@code userId}
+   * is not {@code u}: a session is controlled only by the user who opened it, administrators
+   * included.
+   */
   @Override
-  public MediaStream requestStream(SessionId s, StreamProfile p) {
+  public MediaStream requestStream(UserId u, SessionId s, StreamProfile p) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
@@ -64,17 +70,26 @@ public final class PlaybackService extends AuthorizedService implements IPlaybac
    * IllegalStateException}: check the status first, because the request can come late.
    */
   @Override
-  public void recordProgress(SessionId s, Duration pos) {
+  public void recordProgress(UserId u, SessionId s, Duration pos) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
   @Override
-  public void pauseSession(SessionId s) {
+  public void pauseSession(UserId u, SessionId s) {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
+  /**
+   * Goes on playing a paused session ({@code PlaybackSession.resume()}). Not to be confused with
+   * {@link #resumeFromLastPosition}, which starts a new session where the last one stopped.
+   */
+  @Override
+  public void resumeSession(UserId u, SessionId s) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
   @Override
-  public void finishSession(SessionId s) {
+  public void finishSession(UserId u, SessionId s) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 

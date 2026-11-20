@@ -107,7 +107,8 @@ and the desktop app, which run on that machine, call it.
 |---|---|---|---|---|
 | `GET /search?q=text` | `searchContent` | user | | 200 `[CatalogItemSnapshot]` |
 | `GET /files?text=&type=VIDEO&tag=jazz&tag=live` | `filterByCriteria` | user | every parameter optional | 200 `[MediaFileSnapshot]` |
-| `GET /collections/{id}/items` | `browseLibrary` | user | | 200 `[CatalogItemSnapshot]` |
+| `GET /library` | `browseLibrary(u)` | user | | 200 `[CatalogItemSnapshot]`, the top level: what is not inside any collection |
+| `GET /collections/{id}/items` | `browseLibrary(u, col)` | user | | 200 `[CatalogItemSnapshot]` |
 | `POST /collections` | `manageCollections` | user | `{"name", "itemsToAdd": [ids]}` | 201 `CollectionSnapshot` |
 | `PATCH /collections/{id}` | `manageCollections` | user | `{"name"?, "itemsToAdd"?}` | 200 `CollectionSnapshot` |
 | `POST /files/{id}/tags` | `tagFile` | user | `{"name": "jazz"}` | 204 |
@@ -121,7 +122,13 @@ and the desktop app, which run on that machine, call it.
 | `GET /sessions/{id}/stream?codec=&bitrateKbps=&resolution=` | `requestStream` | user | parameters optional; `Range` header supported | 200 or 206, the media bytes with their MIME type |
 | `PUT /sessions/{id}/position` | `recordProgress` | user | `{"position": 754.2}` | 204 |
 | `POST /sessions/{id}/pause` | `pauseSession` | user | | 204 |
+| `POST /sessions/{id}/resume` | `resumeSession` | user | | 204 |
 | `POST /sessions/{id}/finish` | `finishSession` | user | | 204 |
+
+Only the user who opened a session can use it: for any other user, the routes
+under `/sessions/{id}` answer 403. `resumeSession` goes on with a paused session;
+`POST /files/{id}/sessions/resume` instead starts a new one where the last
+session on that file stopped.
 
 ### Synchronization (`ISync`)
 
@@ -132,19 +139,3 @@ and the desktop app, which run on that machine, call it.
 | `GET /files/{id}/offline` | `cacheContent` | user | | 200, the file as an attachment; its metadata is in the file's snapshot |
 
 `IEventDispatch` has no route: the scheduler calls it.
-
-## Open points
-
-These come from the current driving ports and need a decision in the ports
-review (issue #5) before the routes involved are built:
-
-1. **Sessions do not know who is asking.** `requestStream`, `recordProgress`,
-   `pauseSession` and `finishSession` take only a `SessionId`, so the service
-   cannot check that the session belongs to the user of the token. Proposal:
-   add `UserId u` as their first parameter.
-2. **A paused session cannot go on.** `PlaybackSession.resume()` exists, but
-   `IPlayback` has no method for it. Proposal: `resumeSession(UserId u,
-   SessionId s)`, route `POST /sessions/{id}/resume`.
-3. **The top level of the library cannot be browsed.** `browseLibrary` needs a
-   collection. Proposal: `browseLibrary(UserId u)`, which returns the files and
-   collections that are not inside another collection, route `GET /library`.

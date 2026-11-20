@@ -14,11 +14,13 @@ public interface IPlayback {
 
   PlaybackSessionSnapshot resumeFromLastPosition(UserId u, ItemId id);
 
-  MediaStream requestStream(SessionId s, StreamProfile p);
+  MediaStream requestStream(UserId u, SessionId s, StreamProfile p);
 
-  void recordProgress(SessionId s, Duration pos);
+  void recordProgress(UserId u, SessionId s, Duration pos);
 
-  void pauseSession(SessionId s);
+  void pauseSession(UserId u, SessionId s);
 
-  void finishSession(SessionId s);
+  void resumeSession(UserId u, SessionId s);
+
+  void finishSession(UserId u, SessionId s);
 }
