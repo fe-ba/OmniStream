@@ -32,6 +32,7 @@
     <!-- Test libraries -->
     <junit.version>6.1.3</junit.version>
     <assertj.version>3.27.7</assertj.version>
+    <archunit.version>1.5.1</archunit.version>
 
     <!-- Plugins -->
     <maven-compiler-plugin.version>3.15.0</maven-compiler-plugin.version>
@@ -40,6 +41,7 @@
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
     <spotless-maven-plugin.version>3.11.0</spotless-maven-plugin.version>
     <google-java-format.version>2.0.0</google-java-format.version>
+    <jacoco-maven-plugin.version>0.8.16</jacoco-maven-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -80,6 +82,12 @@
         <groupId>org.assertj</groupId>
         <artifactId>assertj-core</artifactId>
         <version>${assertj.version}</version>
+      </dependency>
+      <!-- Architecture rules as tests (ADR 0020) -->
+      <dependency>
+        <groupId>com.tngtech.archunit</groupId>
+        <artifactId>archunit</artifactId>
+        <version>${archunit.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -135,6 +143,11 @@
           <artifactId>spotless-maven-plugin</artifactId>
           <version>${spotless-maven-plugin.version}</version>
         </plugin>
+        <plugin>
+          <groupId>org.jacoco</groupId>
+          <artifactId>jacoco-maven-plugin</artifactId>
+          <version>${jacoco-maven-plugin.version}</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -189,6 +202,30 @@
             <id>check-format</id>
             <goals>
               <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Test coverage (ADR 0020). The agent runs with the tests; the report is
+        in <module>/target/site/jacoco/index.html after "./mvnw verify".
+      -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>report</goal>
             </goals>
           </execution>
         </executions>

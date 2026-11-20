@@ -27,6 +27,7 @@ decision changes, a new ADR supersedes the old one.
 | [0017](0017-docker-image-after-version-1-0.md) | Docker image after version 1.0 | Accepted |
 | [0018](0018-in-memory-implementations-in-domain-tests.md) | In-memory implementations in the domain tests | Accepted |
 | [0019](0019-package-structure.md) | Package structure | Accepted |
+| [0020](0020-architecture-tests-and-coverage.md) | Architecture tests and coverage | Accepted |
 
 ## Adding an ADR
 

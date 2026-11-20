@@ -36,9 +36,39 @@ jobs:
           cache: maven
           cache-dependency-path: 'src/**/pom.xml'
 
-      # Format check, tests and layer rules, with the Maven version pinned by the wrapper
+      # Format check, tests, architecture rules and coverage, with the Maven
+      # version pinned by the wrapper
       - name: Verify
         run: ./mvnw --batch-mode --no-transfer-progress verify
+
+      # Line and branch coverage per module, shown on the run's summary page (ADR 0020)
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Test coverage"
+            echo ""
+            echo "| Module | Lines | Branches |"
+            echo "|---|---|---|"
+            for csv in */target/site/jacoco/jacoco.csv; do
+              [ -f "$csv" ] || continue
+              awk -F, -v module="${csv%%/*}" 'NR > 1 { bm += $6; bc += $7; lm += $8; lc += $9 }
+                END {
+                  lines = (lm + lc) ? sprintf("%.1f %%", 100 * lc / (lm + lc)) : "n/a"
+                  branches = (bm + bc) ? sprintf("%.1f %%", 100 * bc / (bm + bc)) : "n/a"
+                  printf "| %s | %s | %s |\n", module, lines, branches
+                }' "$csv"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: src/*/target/site/jacoco/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload test reports
         if: failure()

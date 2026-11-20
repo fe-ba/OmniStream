@@ -13,6 +13,15 @@
   <artifactId>omnistream-domain</artifactId>
   <name>OmniStream Domain</name>
   <description>Model, events, policies, snapshots, domain services and ports</description>
+
+  <dependencies>
+    <!-- Architecture rules as tests (ADR 0020) -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
   <build>
     <plugins>
       <!-- Dependency rule of the hexagonal architecture (ADR 0013) -->

@@ -200,6 +200,9 @@ Services receive a `java.time.Clock` in their constructor and pass
 - A driven port with behaviour has a contract test. The in-memory version
   extends it in the domain module; the real adapter extends it in the
   infrastructure module.
+- `ArchitectureTest` (domain module) checks the architecture rules of
+  sections 1 to 7 with ArchUnit (ADR 0020). If it fails, the message names the
+  rule and why it exists: fix the code, or discuss changing the rule.
 
 ```java
 public abstract class SessionRepositoryContract {
@@ -244,6 +247,10 @@ Spotless. Nobody formats by hand. From `src/`:
 | `./mvnw verify` | Format check, layer rules, compilation and all tests |
 | `./mvnw -pl domain verify` | The same, only for the domain module |
 | `./mvnw -pl domain test -Dtest=TagTest` | One test class |
+
+After `./mvnw verify`, each module's coverage report is in
+`target/site/jacoco/index.html` (ADR 0020). On GitHub, the summary page of each
+*Build* run shows the coverage per module.
 
 In IntelliJ IDEA, the *google-java-format* plugin formats on save with the same
 rules. With other editors, run `./mvnw spotless:apply` before committing.
