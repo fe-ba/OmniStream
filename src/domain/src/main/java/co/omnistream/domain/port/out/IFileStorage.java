@@ -1,0 +1,25 @@
+package co.omnistream.domain.port.out;
+
+import co.omnistream.domain.model.catalog.Fingerprint;
+import java.io.InputStream;
+import java.nio.file.Path;
+import java.util.List;
+
+/** Driven port: defined by the domain, implemented by secondary adapters. */
+public interface IFileStorage {
+  InputStream read(Path path);
+
+  void write(Path path, InputStream data);
+
+  void delete(Path path);
+
+  boolean exists(Path path);
+
+  List<Path> list(Path root);
+
+  Fingerprint computeFingerprint(Path path);
+
+  Path copy(Path source, Path destination);
+
+  long freeSpace();
+}
