@@ -91,7 +91,7 @@ package "Primary adapters (presentation)" #EAF3F8 {
    }
    class WebUiAdapter <<primary adapter>> {
      - staticDirectory : Path
-     + registerRoutes(app : Javalin) : void
+     + registerRoutes(config : JavalinConfig) : void
    }
    class RestApiAdapter <<primary adapter>> {
      - catalogManagement : ICatalogManagement
@@ -99,10 +99,16 @@ package "Primary adapters (presentation)" #EAF3F8 {
      - search : ISearch
      - accessControl : IAccessControl
      - sync : ISync
-     + registerRoutes(app : Javalin) : void
+     + registerRoutes(config : JavalinConfig) : void
      - authenticateRequest(ctx : Context) : SessionToken
      - sendStream(ctx : Context, f : MediaStream) : void
-     - mapError(e : DomainException, ctx : Context) : void
+   }
+   class ApiJson <<adapter helper>> {
+     + {static} mapper() : JsonMapper
+     + {static} forJavalin() : JavalinJackson3
+   }
+   class ApiErrors <<adapter helper>> {
+     + {static} register(config : JavalinConfig) : void
    }
    class SchedulerAdapter <<primary adapter>> {
      - tasks : Map<String,ScheduledTask>
@@ -233,6 +239,8 @@ package "Domain services (see services diagram)" #FFF8E1 {
  IRuleManagement <|.. ClassificationService
 
  CliAdapter --> ICatalogManagement : invokes
+ RestApiAdapter ..> ApiJson : configures JSON
+ RestApiAdapter ..> ApiErrors : registers error responses
  RestApiAdapter --> ICatalogManagement : invokes
  RestApiAdapter --> ISearch : invokes
  RestApiAdapter --> IPlayback : invokes

@@ -91,7 +91,7 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
    }
    class AdaptadorWebUI <<primary adapter>> {
      - directorioEstatico : Path
-     + registrarRutas(app : Javalin) : void
+     + registrarRutas(cfg : JavalinConfig) : void
    }
    class AdaptadorApiRest <<primary adapter>> {
      - gestionCatalogo : IGestionCatalogo
@@ -99,10 +99,16 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      - busqueda : IBusqueda
      - controlAcceso : IControlAcceso
      - sincronizacion : ISincronizacion
-     + registrarRutas(app : Javalin) : void
+     + registrarRutas(cfg : JavalinConfig) : void
      - autenticarPeticion(ctx : Context) : TokenSesion
      - enviarStream(ctx : Context, f : FlujoMultimedia) : void
-     - mapearError(e : ExcepcionDominio, ctx : Context) : void
+   }
+   class JsonApi <<adapter helper>> {
+     + {static} mapeador() : JsonMapper
+     + {static} paraJavalin() : JavalinJackson3
+   }
+   class ErroresApi <<adapter helper>> {
+     + {static} registrar(cfg : JavalinConfig) : void
    }
    class AdaptadorProgramador <<primary adapter>> {
      - tareas : Map<String,TareaProgramada>
@@ -233,6 +239,8 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  IGestionReglas <|.. ServicioClasificacion
 
  AdaptadorCLI --> IGestionCatalogo : invoca
+ AdaptadorApiRest ..> JsonApi : configura el JSON
+ AdaptadorApiRest ..> ErroresApi : registra las respuestas de error
  AdaptadorApiRest --> IGestionCatalogo : invoca
  AdaptadorApiRest --> IBusqueda : invoca
  AdaptadorApiRest --> IReproduccion : invoca

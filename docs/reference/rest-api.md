@@ -37,10 +37,11 @@ The bodies are the snapshots and DTOs of the domain, serialized as they are
 | `Set`, `List` | arrays | |
 | `Path` | string | |
 | Other records (`Tag`, `MetadataEntry`, `Fingerprint`, `Permission`...) | object with the record's components | `{"name": "jazz", "source": "MANUAL"}` |
-| `CatalogItemSnapshot` | the file or collection snapshot plus `"kind": "file"` or `"kind": "collection"` | |
+| `MediaFileSnapshot`, `CollectionSnapshot` | the snapshot, starting with `"kind": "file"` or `"kind": "collection"`, so the items of a mixed list (`CatalogItemSnapshot`) can be told apart | |
 
-Names are the record components, in camelCase. Lists are not paginated in
-version 1.0.
+Names are the record components, in camelCase; other methods of a record, such
+as `Tag.isAutomatic()`, do not appear. Lists are not paginated in version 1.0.
+`ApiJson` implements these rules.
 
 ## Errors
 
@@ -60,11 +61,14 @@ Every error answers this body, with the status from the table:
 | `CyclicCollection` | 409 | `CyclicCollection` |
 | `ExpiredLink` | 410 | `ExpiredLink` |
 | `FileRejected` | 422 | `FileRejected` |
-| Malformed body or parameter, `IllegalArgumentException` | 400 | `BadRequest` |
+| Malformed body or parameter (JSON that cannot be read), `IllegalArgumentException` | 400 | `BadRequest` |
 | `IllegalStateException` (the object cannot do that now) | 409 | `Conflict` |
+| A route that does not exist | 404 | `NotFound` |
+| Any other HTTP error of the server (405...) | its status | the status name without spaces (`MethodNotAllowed`) |
 | Anything else | 500 | `InternalError`, with no details; they go to the log |
 
-A new domain exception needs a row here before it reaches the API.
+`ApiErrors` implements this table. A new domain exception needs a row here, and
+in `ApiErrors`, before it reaches the API; until then it answers 500.
 
 ## Routes
 
