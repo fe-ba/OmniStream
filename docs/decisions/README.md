@@ -34,6 +34,7 @@ decision changes, a new ADR supersedes the old one.
 | [0024](0024-delegate-permissions-per-collection.md) | Delegate permissions per collection | Accepted |
 | [0025](0025-audit-trail-with-decorators.md) | Audit trail with decorators | Accepted |
 | [0026](0026-live-catalog-changes.md) | Live catalog changes over server-sent events | Accepted |
+| [0027](0027-collaborative-text-editing.md) | Collaborative editing of text files | Accepted (implementation pending) |
 
 ## Adding an ADR
 
