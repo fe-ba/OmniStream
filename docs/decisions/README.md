@@ -33,6 +33,7 @@ decision changes, a new ADR supersedes the old one.
 | [0023](0023-rest-api-contract.md) | REST API contract | Accepted |
 | [0024](0024-delegate-permissions-per-collection.md) | Delegate permissions per collection | Accepted |
 | [0025](0025-audit-trail-with-decorators.md) | Audit trail with decorators | Accepted |
+| [0026](0026-live-catalog-changes.md) | Live catalog changes over server-sent events | Accepted |
 
 ## Adding an ADR
 

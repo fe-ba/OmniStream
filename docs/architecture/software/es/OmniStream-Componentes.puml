@@ -90,6 +90,7 @@ rectangle "Puertos de entrada" <<dominio>> {
   interface "ISincronizacion"  as PIN_SIN
   interface "IDespachoEventos" as PIN_DES
   interface "IHistorialAuditoria" as PIN_AUD
+  interface "IFlujoCatalogo"      as PIN_FLU
   interface "IGestionReglas"   as PIN_REG #FFFFFF;line.dashed;line:999999
 }
 
@@ -108,6 +109,7 @@ rectangle "Dominio" <<dominio>> {
     component "Observador de Sincronizacion\n<<observer>>\n..\nalCambiarCatalogo()"                         as SvObs
     component "Servicio de Clasificacion\n..\ncrearRegla()\nreclasificarBiblioteca()"                      as SvCla #FFFFFF;line.dashed;line:999999
     component "Servicio de Auditoria\n..\nhistorial()"                                         as SvAud
+    component "Servicio de Flujo del Catalogo\n..\nseguir()"                                  as SvFlu
     component "Decoradores de auditoria\n<<decorator>>\n..\nregistran cada cambio"           as DecAud
   }
 
@@ -200,6 +202,7 @@ AdApi    ..> PIN_ACC
 AdApi    ..> PIN_SIN
 AdApi    ..> PIN_REG
 AdApi    ..> PIN_AUD
+AdApi    ..> PIN_FLU : cambios en vivo (SSE)
 AdCli    ..> PIN_CAT
 AdProg   ..> PIN_CAT : reindexar / respaldar
 AdProg   ..> PIN_DES : sincronizar
@@ -215,6 +218,7 @@ SvSin -up- PIN_SIN
 SvDes -up- PIN_DES
 SvCla -up- PIN_REG
 SvAud -up- PIN_AUD
+SvFlu -up- PIN_FLU
 
 ' ============================================================
 ' SERVICIOS -> MODELO DE DOMINIO
@@ -278,6 +282,8 @@ SvDes ..> POUT_PUB
 SvCla ..> POUT_REG
 SvCla ..> POUT_REPO
 SvAud ..> POUT_AUD
+SvFlu ..> POUT_SUS
+SvFlu ..> POUT_REPO
 DecAud ..> POUT_AUD
 DecAud ..> POUT_UOW
 

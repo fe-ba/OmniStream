@@ -6,10 +6,16 @@ import co.omnistream.domain.model.access.PermissionLevel;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.catalog.ItemId;
+import co.omnistream.domain.snapshot.CatalogSnapshot;
+import co.omnistream.domain.snapshot.CollectionSnapshot;
 import co.omnistream.domain.snapshot.UserSnapshot;
+import java.util.ArrayDeque;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -24,8 +30,9 @@ import java.util.stream.Stream;
  *       Permission#allows}). Without a permission on it, nothing.
  * </ol>
  *
- * <p>It looks only at the resource it is given. Whether a permission on a collection covers the
- * files inside it is resolved by the services, which can see the catalog.
+ * <p>A permission on a collection also covers what the collection contains, directly or through
+ * other collections. The overloads that take a {@link CatalogSnapshot} resolve that; the others
+ * look only at the resource they are given.
  *
  * <p>It also decides who may hand permissions to others ({@link #mayDelegate}, ADR 0024): an
  * administrator on everything, and whoever manages a resource on that resource, up to {@code
@@ -68,6 +75,48 @@ public final class AccessPolicy {
         .filter(permission -> permission.appliesTo(resource))
         .map(Permission::level)
         .max(Comparator.naturalOrder());
+  }
+
+  /**
+   * The highest level {@code u} has on {@code resource} or on any collection of {@code catalog}
+   * that contains it, directly or through other collections: what the user can really do with it.
+   * Empty if the user can do nothing with it.
+   */
+  public Optional<PermissionLevel> effectiveLevel(
+      User u, ItemId resource, CatalogSnapshot catalog) {
+    Objects.requireNonNull(u, "u");
+    Objects.requireNonNull(catalog, "catalog");
+    return withContainers(Objects.requireNonNull(resource, "resource"), catalog).stream()
+        .map(item -> effectiveLevel(u, item))
+        .flatMap(Optional::stream)
+        .max(Comparator.naturalOrder());
+  }
+
+  /** Whether {@code u} may do {@code access} on {@code resource}, counting its collections. */
+  public boolean authorizes(User u, ItemId resource, AccessType access, CatalogSnapshot catalog) {
+    Objects.requireNonNull(access, "access");
+    return effectiveLevel(u, resource, catalog)
+        .map(level -> new Permission(resource, level).allows(access))
+        .orElse(false);
+  }
+
+  /** {@code resource} and every collection above it. Safe even if a stored catalog had a cycle. */
+  private static Set<ItemId> withContainers(ItemId resource, CatalogSnapshot catalog) {
+    Set<ItemId> found = new LinkedHashSet<>();
+    Deque<ItemId> pending = new ArrayDeque<>();
+    pending.push(resource);
+    while (!pending.isEmpty()) {
+      ItemId current = pending.pop();
+      if (!found.add(current)) {
+        continue;
+      }
+      for (CollectionSnapshot collection : catalog.collections()) {
+        if (collection.items().contains(current)) {
+          pending.push(collection.id());
+        }
+      }
+    }
+    return found;
   }
 
   /**

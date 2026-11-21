@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import co.omnistream.domain.port.dto.OfflinePackage;
 import co.omnistream.domain.port.dto.SyncDelta;
 import co.omnistream.domain.port.in.IAuditTrail;
+import co.omnistream.domain.port.in.ICatalogFeed;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -39,7 +40,8 @@ class RestApiSyncTest {
             Unused.port(ISearch.class),
             new FakeAccessControl(),
             sync.port(),
-            Unused.port(IAuditTrail.class));
+            Unused.port(IAuditTrail.class),
+            Unused.port(ICatalogFeed.class));
     return Javalin.create(adapter::registerRoutes);
   }
 

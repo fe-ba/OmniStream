@@ -45,6 +45,8 @@ skinparam class {
   AttributeFontSize 11
   BackgroundColor<<primary adapter>>   #EAF3F8
   BorderColor<<primary adapter>>       #2E86AB
+  BackgroundColor<<callback>>          #ECE4F8
+  BorderColor<<callback>>              #9673A6
   BackgroundColor<<driving port>>      #E8F5E9
   BorderColor<<driving port>>          #3E8E41
   BackgroundColor<<domain service>>    #FCE8B4
@@ -101,6 +103,7 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      - controlAcceso : IControlAcceso
      - sincronizacion : ISincronizacion
      - historialAuditoria : IHistorialAuditoria
+     - flujoCatalogo : IFlujoCatalogo
      + registrarRutas(cfg : JavalinConfig) : void
      - autenticarPeticion(ctx : Context) : TokenSesion
      - enviarStream(ctx : Context, f : FlujoMultimedia) : void
@@ -212,6 +215,17 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
    interface IHistorialAuditoria <<driving port>> {
      + historial(u : UsuarioId, q : ConsultaAuditoria) : List<EntradaAuditoria>
    }
+   interface IFlujoCatalogo <<driving port>> {
+     + seguir(u : UsuarioId, oyente : OyenteCambiosCatalogo) : SuscripcionFlujo
+   }
+   interface OyenteCambiosCatalogo <<callback>> {
+     + alCambiar(c : CambioCatalogo) : void
+   }
+   interface SuscripcionFlujo <<callback>> {
+     + cerrar() : void
+   }
+   IFlujoCatalogo ..> OyenteCambiosCatalogo : avisa
+   IFlujoCatalogo ..> SuscripcionFlujo : devuelve
    interface IGestionReglas <<driving port>> #E8F5E9;line.dashed;line:999999 {
      + crearRegla(admin : UsuarioId, c : CriterioClasificacion) : void
      + eliminarRegla(admin : UsuarioId, nombre : String) : void
@@ -237,6 +251,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
    }
    class ObservadorSincronizacion <<observer>>
    class ServicioAuditoria <<domain service>>
+   class ServicioFlujoCatalogo <<domain service>>
    abstract class DecoradorAuditoria <<decorator>>
    class ControlAccesoAuditado <<decorator>>
    class GestionCatalogoAuditada <<decorator>>
@@ -253,6 +268,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  IDespachoEventos <|.. ServicioDespachoEventos
  IGestionReglas <|.. ServicioClasificacion
  IHistorialAuditoria <|.. ServicioAuditoria
+ IFlujoCatalogo <|.. ServicioFlujoCatalogo
  IControlAcceso <|.. ControlAccesoAuditado
  IGestionCatalogo <|.. GestionCatalogoAuditada
  IBusqueda <|.. BusquedaAuditada
@@ -271,6 +287,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  AdaptadorApiRest --> IControlAcceso : invoca
  AdaptadorApiRest --> ISincronizacion : invoca
  AdaptadorApiRest --> IHistorialAuditoria : invoca
+ AdaptadorApiRest --> IFlujoCatalogo : sigue (eventos enviados por el servidor)
  AdaptadorApiRest ..> IGestionReglas : invoca (2.0)
  AdaptadorProgramador ..> TareaProgramada : dispara
  TareaReindexar --> IGestionCatalogo : invoca
@@ -404,6 +421,8 @@ ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredad
  ServicioClasificacion ..> IRepositorioReglas : lee / guarda reglas
  ServicioClasificacion ..> IRepositorioCatalogo : reclasifica el catalogo
  ServicioAuditoria ..> IRegistroAuditoria : lee el historial
+ ServicioFlujoCatalogo ..> ISuscriptorEventos : suscribe a cada seguidor
+ ServicioFlujoCatalogo ..> IRepositorioCatalogo : revisa que puede ver cada seguidor
  DecoradorAuditoria ..> IRegistroAuditoria : anexa entradas
  DecoradorAuditoria ..> IUnidadDeTrabajo : cambio y entrada juntos
  ControlAccesoAuditado ..> IRepositorioUsuarios : nombra inicios fallidos
@@ -813,6 +832,8 @@ package "Composicion (arranque)" #FFFDE7 {
    Parte servidor del caso de uso "Sincronizar cambios":
    publica los eventos pendientes para que IRegistroCambios
    quede al dia. Los clientes leen el delta con ISincronizacion.
+   Corre cada dos segundos: el flujo en vivo
+   (IFlujoCatalogo, ADR 0026) se entera de los cambios entonces.
  end note
 
  note bottom of ServicioDespachoEventos

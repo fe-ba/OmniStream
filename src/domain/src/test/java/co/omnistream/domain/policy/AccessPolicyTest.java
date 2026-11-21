@@ -11,8 +11,12 @@ import co.omnistream.domain.model.access.PermissionLevel;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
+import co.omnistream.domain.model.catalog.CatalogId;
 import co.omnistream.domain.model.catalog.ItemId;
+import co.omnistream.domain.snapshot.CatalogSnapshot;
+import co.omnistream.domain.snapshot.CollectionSnapshot;
 import co.omnistream.domain.snapshot.UserSnapshot;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -244,5 +248,77 @@ class AccessPolicyTest {
 
   private static Permission writeOn(ItemId resource) {
     return new Permission(resource, PermissionLevel.WRITE);
+  }
+
+  // ------------------------------------------------------------------ through collections
+
+  private static CatalogSnapshot catalogWith(CollectionSnapshot... collections) {
+    return new CatalogSnapshot(
+        new CatalogId(UUID.randomUUID()), "library", 1, List.of(), List.of(collections));
+  }
+
+  private static CollectionSnapshot collection(ItemId id, ItemId... items) {
+    return new CollectionSnapshot(id, "collection", "", List.of(items));
+  }
+
+  @Test
+  void aPermissionOnACollectionReachesWhatItContainsAtAnyDepth() {
+    ItemId outer = item();
+    ItemId inner = item();
+    CatalogSnapshot catalog = catalogWith(collection(outer, inner), collection(inner, resource));
+    User user = user("ana", Role.USER);
+    user.grant(new Permission(outer, PermissionLevel.WRITE));
+
+    assertThat(policy.effectiveLevel(user, resource, catalog)).contains(PermissionLevel.WRITE);
+    assertThat(policy.authorizes(user, resource, AccessType.MODIFY, catalog)).isTrue();
+    assertThat(policy.authorizes(user, resource, AccessType.DELETE, catalog)).isFalse();
+    assertThat(policy.authorizes(user, resource, AccessType.VIEW)).isFalse();
+  }
+
+  @Test
+  void theHighestLevelOnTheWayUpWins() {
+    ItemId shelf = item();
+    CatalogSnapshot catalog = catalogWith(collection(shelf, resource));
+    User user = user("ana", Role.USER);
+    user.grant(new Permission(resource, PermissionLevel.MANAGE));
+    user.grant(new Permission(shelf, PermissionLevel.READ));
+
+    assertThat(policy.effectiveLevel(user, resource, catalog)).contains(PermissionLevel.MANAGE);
+    assertThat(policy.effectiveLevel(user, shelf, catalog)).contains(PermissionLevel.READ);
+  }
+
+  @Test
+  void aCollectionThatDoesNotContainTheResourceGivesNothing() {
+    ItemId other = item();
+    CatalogSnapshot catalog = catalogWith(collection(other, item()));
+    User user = user("ana", Role.USER);
+    user.grant(new Permission(other, PermissionLevel.MANAGE));
+
+    assertThat(policy.effectiveLevel(user, resource, catalog)).isEmpty();
+    assertThat(policy.authorizes(user, resource, AccessType.VIEW, catalog)).isFalse();
+  }
+
+  @Test
+  void administratorsAndDeactivatedUsersAreTheSameWithACatalog() {
+    ItemId shelf = item();
+    CatalogSnapshot catalog = catalogWith(collection(shelf, resource));
+    User admin = user("root", Role.ADMIN);
+    User gone = user("ana", Role.USER);
+    gone.grant(new Permission(shelf, PermissionLevel.MANAGE));
+    gone.deactivate();
+
+    assertThat(policy.authorizes(admin, resource, AccessType.DELETE, catalog)).isTrue();
+    assertThat(policy.effectiveLevel(gone, resource, catalog)).isEmpty();
+  }
+
+  @Test
+  void aStoredCycleDoesNotLoopForever() {
+    ItemId a = item();
+    ItemId b = item();
+    CatalogSnapshot catalog = catalogWith(collection(a, b), collection(b, a, resource));
+    User user = user("ana", Role.USER);
+    user.grant(new Permission(a, PermissionLevel.READ));
+
+    assertThat(policy.effectiveLevel(user, resource, catalog)).contains(PermissionLevel.READ);
   }
 }

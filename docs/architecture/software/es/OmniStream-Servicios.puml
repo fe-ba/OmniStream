@@ -57,6 +57,8 @@ skinparam class {
   BorderColor<<dto>>                     #C4A868
   BackgroundColor<<command>>             #FCF4E0
   BorderColor<<command>>                 #C4A868
+  BackgroundColor<<callback>>            #ECE4F8
+  BorderColor<<callback>>                #9673A6
   BackgroundColor<<decorator>>           #E4F4E4
   BorderColor<<decorator>>               #6FA86F
   BackgroundColor<<event>>               #ECE4F8
@@ -335,6 +337,32 @@ package "Sincronizacion y eventos" {
     EventoCatalogo escribe en IRegistroCambios, de donde
     lee ServicioSincronizacion. Los dos no se conocen.
   end note
+
+  class ServicioFlujoCatalogo <<domain service>> {
+    - suscriptorEventos : ISuscriptorEventos
+    - repositorioCatalogo : IRepositorioCatalogo
+    __
+    + seguir(u : UsuarioId, oyente : OyenteCambiosCatalogo) : SuscripcionFlujo
+    - usuarioActivo(u : UsuarioId) : Optional<Usuario>
+  }
+
+  class Seguidor <<observer>> {
+    - u : UsuarioId
+    - oyente : OyenteCambiosCatalogo
+    __
+    + alCambiarCatalogo(e : EventoDominio) : void
+    - puedeVer(elemento : ElementoId) : boolean
+    + detener() : void
+  }
+
+  note bottom of Seguidor
+    **Flujo en vivo (ADR 0026):** cada persona que sigue
+    el catalogo es un observador propio en el bus, asi el
+    bus sigue siendo el unico dueno de la lista. Pasa los
+    CambioCatalogo que la persona puede ver (usuario y
+    catalogo releidos cada vez); las eliminaciones van a
+    todos. Cerrar la suscripcion lo da de baja.
+  end note
 }
 
 ' ============================================================
@@ -496,6 +524,23 @@ package "DTOs y comandos de los puertos" {
     + nivel : NivelPermiso
   }
 
+  class CambioCatalogo <<dto>> {
+    + elemento : ElementoId
+    + cambio : TipoCambio
+    + evento : String
+    + en : Instant
+    __
+    + {static} de(e : EventoCatalogo) : CambioCatalogo
+  }
+
+  interface OyenteCambiosCatalogo <<callback>> {
+    + alCambiar(c : CambioCatalogo) : void
+  }
+
+  interface SuscripcionFlujo <<callback>> {
+    + cerrar() : void
+  }
+
   class TokenSesion <<dto>> {
     + valor : String
     + usuarioId : UsuarioId
@@ -573,6 +618,7 @@ ServicioAutorizado <|-- ServicioSincronizacion
 ServicioAutorizado <|-- ServicioReproduccion
 ServicioAutorizado <|-- ServicioClasificacion
 ServicioAutorizado <|-- ServicioAuditoria
+ServicioAutorizado <|-- ServicioFlujoCatalogo
 ServicioAutorizado --> "1" PoliticaAcceso : politicaAcceso
 ServicioAutorizado ..> Usuario : <<carga>>
 
@@ -615,6 +661,10 @@ ServicioClasificacion ..> CatalogoIndice : <<reclasifica>>
 ' RELACIONES - SINCRONIZACION Y EVENTOS (Observer)
 ' ============================================================
 IObservadorCatalogo <|.. ObservadorSincronizacion
+IObservadorCatalogo <|.. Seguidor
+ServicioFlujoCatalogo *-- "0..*" Seguidor : crea por seguir()
+Seguidor --> OyenteCambiosCatalogo : avisa
+Seguidor ..> CambioCatalogo : <<pasa>>
 ObservadorSincronizacion ..> EventoCatalogo : <<recibe>>
 ServicioDespachoEventos ..> EventoDominio : <<publica>>
 ServicioSincronizacion ..> DeltaSincronizacion : <<entrega>>
@@ -654,6 +704,7 @@ note as NotaPuertos
   ServicioAcceso          -> IControlAcceso
   ServicioSincronizacion  -> ISincronizacion
   ServicioDespachoEventos -> IDespachoEventos
+  ServicioFlujoCatalogo   -> IFlujoCatalogo
   ServicioClasificacion   -> IGestionReglas (2.0)
   ServicioAuditoria       -> IHistorialAuditoria
   Cada decorador *Auditado/a implementa el puerto

@@ -11,6 +11,7 @@ import co.omnistream.domain.model.catalog.DuplicateAction;
 import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.port.dto.ServerStatus;
 import co.omnistream.domain.port.in.IAuditTrail;
+import co.omnistream.domain.port.in.ICatalogFeed;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -42,7 +43,8 @@ class RestApiCatalogTest {
             Unused.port(ISearch.class),
             new FakeAccessControl(),
             Unused.port(ISync.class),
-            Unused.port(IAuditTrail.class));
+            Unused.port(IAuditTrail.class),
+            Unused.port(ICatalogFeed.class));
     return Javalin.create(adapter::registerRoutes);
   }
 

@@ -57,6 +57,8 @@ skinparam class {
   BorderColor<<dto>>                     #C4A868
   BackgroundColor<<command>>             #FCF4E0
   BorderColor<<command>>                 #C4A868
+  BackgroundColor<<callback>>            #ECE4F8
+  BorderColor<<callback>>                #9673A6
   BackgroundColor<<decorator>>           #E4F4E4
   BorderColor<<decorator>>               #6FA86F
   BackgroundColor<<event>>               #ECE4F8
@@ -335,6 +337,32 @@ package "Synchronization and events" {
     CatalogEvent it writes to IChangeLog, which
     SyncService reads from. Neither knows the other.
   end note
+
+  class CatalogFeedService <<domain service>> {
+    - eventSubscriber : IEventSubscriber
+    - catalogRepository : ICatalogRepository
+    __
+    + follow(u : UserId, listener : CatalogChangeListener) : FeedSubscription
+    - activeUser(u : UserId) : Optional<User>
+  }
+
+  class Follower <<observer>> {
+    - u : UserId
+    - listener : CatalogChangeListener
+    __
+    + onCatalogChanged(e : DomainEvent) : void
+    - canSee(item : ItemId) : boolean
+    + stop() : void
+  }
+
+  note bottom of Follower
+    **Live feed (ADR 0026):** each person following the
+    catalog is an observer of its own on the bus, so the
+    bus stays the only owner of the list. It passes on
+    the CatalogChanges the person can see (user and
+    catalog read again each time); removals go to
+    everyone. Closing the subscription unsubscribes it.
+  end note
 }
 
 ' ============================================================
@@ -496,6 +524,23 @@ package "Port DTOs and commands" {
     + level : PermissionLevel
   }
 
+  class CatalogChange <<dto>> {
+    + item : ItemId
+    + change : ChangeType
+    + event : String
+    + at : Instant
+    __
+    + {static} of(e : CatalogEvent) : CatalogChange
+  }
+
+  interface CatalogChangeListener <<callback>> {
+    + onChange(c : CatalogChange) : void
+  }
+
+  interface FeedSubscription <<callback>> {
+    + close() : void
+  }
+
   class SessionToken <<dto>> {
     + value : String
     + userId : UserId
@@ -573,6 +618,7 @@ AuthorizedService <|-- SyncService
 AuthorizedService <|-- PlaybackService
 AuthorizedService <|-- ClassificationService
 AuthorizedService <|-- AuditService
+AuthorizedService <|-- CatalogFeedService
 AuthorizedService --> "1" AccessPolicy : accessPolicy
 AuthorizedService ..> User : <<loads>>
 
@@ -615,6 +661,10 @@ ClassificationService ..> CatalogIndex : <<reclassifies>>
 ' RELATIONS - SYNCHRONIZATION AND EVENTS (Observer)
 ' ============================================================
 ICatalogObserver <|.. SyncObserver
+ICatalogObserver <|.. Follower
+CatalogFeedService *-- "0..*" Follower : creates per follow()
+Follower --> CatalogChangeListener : tells
+Follower ..> CatalogChange : <<passes on>>
 SyncObserver ..> CatalogEvent : <<receives>>
 EventDispatchService ..> DomainEvent : <<publishes>>
 SyncService ..> SyncDelta : <<delivers>>
@@ -654,6 +704,7 @@ note as PortsNote
   AccessService        -> IAccessControl
   SyncService          -> ISync
   EventDispatchService -> IEventDispatch
+  CatalogFeedService   -> ICatalogFeed
   ClassificationService   -> IRuleManagement (2.0)
   AuditService         -> IAuditTrail
   Each Audited* decorator implements the port of

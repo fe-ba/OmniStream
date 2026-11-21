@@ -11,6 +11,7 @@ import co.omnistream.domain.model.audit.AuditEntry;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.port.dto.AuditQuery;
 import co.omnistream.domain.port.in.IAuditTrail;
+import co.omnistream.domain.port.in.ICatalogFeed;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -41,7 +42,8 @@ class RestApiAuditTest {
             Unused.port(ISearch.class),
             new FakeAccessControl(),
             Unused.port(ISync.class),
-            audit.port());
+            audit.port(),
+            Unused.port(ICatalogFeed.class));
     return Javalin.create(adapter::registerRoutes);
   }
 

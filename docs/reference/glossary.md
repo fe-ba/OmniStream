@@ -38,6 +38,9 @@ below.
 | `TranscodificadorConCache` | `CachedTranscoder` | Ports and adapters |
 | `EventoCatalogo` | `CatalogEvent` | Domain model |
 | `CatalogoId` | `CatalogId` | Domain model |
+| `CambioCatalogo` | `CatalogChange` | Services |
+| `OyenteCambiosCatalogo` | `CatalogChangeListener` | Ports and adapters |
+| `ServicioFlujoCatalogo` | `CatalogFeedService` | Services |
 | `CatalogoIndice` | `CatalogIndex` | Domain model |
 | `MapeadorCatalogoIndice` | `CatalogIndexMapper` | Ports and adapters |
 | `ElementoCatalogo` | `CatalogItem` | Domain model |
@@ -81,10 +84,13 @@ below.
 | `ArchivoIngestado` | `FileIngested` | Domain model |
 | `ArchivoModificado` | `FileModified` | Domain model |
 | `ArchivoRechazado` | `FileRejected` | Domain model |
+| `SuscripcionFlujo` | `FeedSubscription` | Ports and adapters |
 | `HuellaDigital` | `Fingerprint` | Domain model |
+| `Seguidor` | `Follower` | Services |
 | `IControlAcceso` | `IAccessControl` | Ports and adapters |
 | `IRegistroAuditoria` | `IAuditLog` | Ports and adapters |
 | `IHistorialAuditoria` | `IAuditTrail` | Ports and adapters |
+| `IFlujoCatalogo` | `ICatalogFeed` | Ports and adapters |
 | `IGestionCatalogo` | `ICatalogManagement` | Ports and adapters |
 | `IObservadorCatalogo` | `ICatalogObserver` | Services |
 | `IRepositorioCatalogo` | `ICatalogRepository` | Ports and adapters |
@@ -221,6 +227,15 @@ below.
 | `auditado()` / `anotar()` / `entrada()` / `delegado` | `audited()` / `record()` / `entry()` / `delegate` | `AuditingDecorator` and its subclasses |
 | `auditarPuertosEntrada()` / `crearRegistroAuditoria()` | `auditDrivingPorts()` / `createAuditLog()` | Composition |
 | `Gestionar acceso a una coleccion` (UC28) / `Consultar historial de cambios` (UC29) | `Manage access to a collection` / `Review change history` | Use cases |
+
+## Live changes (ADR 0026)
+
+| Spanish | English | Where |
+|---|---|---|
+| `seguir()` / `alCambiar()` / `cerrar()` | `follow()` / `onChange()` / `close()` | `ICatalogFeed`, `CatalogChangeListener`, `FeedSubscription` |
+| `oyente` / `flujoCatalogo` / `suscriptorEventos` | `listener` / `catalogFeed` / `eventSubscriber` | Fields and parameters |
+| `elemento` / `cambio` / `evento` | `item` / `change` / `event` | Parts of a `CatalogChange` |
+| `puedeVer()` / `detener()` / `usuarioActivo()` | `canSee()` / `stop()` / `activeUser()` | `CatalogFeedService` and its `Follower` |
 
 ## Recurring member names
 

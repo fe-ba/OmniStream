@@ -176,9 +176,9 @@ public final class AccessService extends AuthorizedService implements IAccessCon
   }
 
   /**
-   * The highest level {@code u} has on any collection that contains {@code r}, directly or through
-   * other collections, from {@code catalogRepository.getCatalog().toSnapshot().collections()}. The
-   * same walk as {@code checkAccess}; the level on {@code r} itself is added by the policy.
+   * The level {@code u} reaches on {@code r} through the collections that contain it: {@code
+   * accessPolicy.effectiveLevel(u, r, catalogRepository.getCatalog().toSnapshot())}. It also counts
+   * {@code r} itself, which {@code mayDelegate} adds anyway.
    */
   private Optional<PermissionLevel> inheritedLevel(User u, ItemId r) {
     throw new UnsupportedOperationException("Not implemented yet");

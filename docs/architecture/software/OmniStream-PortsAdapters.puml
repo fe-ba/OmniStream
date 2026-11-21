@@ -45,6 +45,8 @@ skinparam class {
   AttributeFontSize 11
   BackgroundColor<<primary adapter>>   #EAF3F8
   BorderColor<<primary adapter>>       #2E86AB
+  BackgroundColor<<callback>>          #ECE4F8
+  BorderColor<<callback>>              #9673A6
   BackgroundColor<<driving port>>      #E8F5E9
   BorderColor<<driving port>>          #3E8E41
   BackgroundColor<<domain service>>    #FCE8B4
@@ -101,6 +103,7 @@ package "Primary adapters (presentation)" #EAF3F8 {
      - accessControl : IAccessControl
      - sync : ISync
      - auditTrail : IAuditTrail
+     - catalogFeed : ICatalogFeed
      + registerRoutes(config : JavalinConfig) : void
      - authenticateRequest(ctx : Context) : SessionToken
      - sendStream(ctx : Context, f : MediaStream) : void
@@ -212,6 +215,17 @@ package "Driving ports (domain)" #E8F5E9 {
    interface IAuditTrail <<driving port>> {
      + history(u : UserId, q : AuditQuery) : List<AuditEntry>
    }
+   interface ICatalogFeed <<driving port>> {
+     + follow(u : UserId, listener : CatalogChangeListener) : FeedSubscription
+   }
+   interface CatalogChangeListener <<callback>> {
+     + onChange(c : CatalogChange) : void
+   }
+   interface FeedSubscription <<callback>> {
+     + close() : void
+   }
+   ICatalogFeed ..> CatalogChangeListener : tells
+   ICatalogFeed ..> FeedSubscription : returns
    interface IRuleManagement <<driving port>> #E8F5E9;line.dashed;line:999999 {
      + createRule(admin : UserId, c : ClassificationCriterion) : void
      + deleteRule(admin : UserId, name : String) : void
@@ -238,6 +252,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
    class SyncObserver <<observer>>
    ICatalogObserver <|.. SyncObserver
    class AuditService <<domain service>>
+   class CatalogFeedService <<domain service>>
    abstract class AuditingDecorator <<decorator>>
    class AuditedAccessControl <<decorator>>
    class AuditedCatalogManagement <<decorator>>
@@ -253,6 +268,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  IEventDispatch <|.. EventDispatchService
  IRuleManagement <|.. ClassificationService
  IAuditTrail <|.. AuditService
+ ICatalogFeed <|.. CatalogFeedService
  IAccessControl <|.. AuditedAccessControl
  ICatalogManagement <|.. AuditedCatalogManagement
  ISearch <|.. AuditedSearch
@@ -271,6 +287,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  RestApiAdapter --> IAccessControl : invokes
  RestApiAdapter --> ISync : invokes
  RestApiAdapter --> IAuditTrail : invokes
+ RestApiAdapter --> ICatalogFeed : follows (server-sent events)
  RestApiAdapter ..> IRuleManagement : invokes (2.0)
  SchedulerAdapter ..> ScheduledTask : fires
  ReindexTask --> ICatalogManagement : invokes
@@ -404,6 +421,8 @@ AccessService ..> ICatalogRepository : reads collections for inherited access
  ClassificationService ..> IRuleRepository : reads / saves rules
  ClassificationService ..> ICatalogRepository : reclassifies the catalog
  AuditService ..> IAuditLog : reads the trail
+ CatalogFeedService ..> IEventSubscriber : subscribes each follower
+ CatalogFeedService ..> ICatalogRepository : checks what each follower can see
  AuditingDecorator ..> IAuditLog : appends entries
  AuditingDecorator ..> IUnitOfWork : change and entry together
  AuditedAccessControl ..> IUserRepository : names failed logins
@@ -813,6 +832,8 @@ package "Composition (bootstrap)" #FFFDE7 {
    Server side of the "Sync changes" use case:
    publishes the pending events so that IChangeLog
    is up to date. Clients read the delta through ISync.
+   It runs every two seconds: the live feed
+   (ICatalogFeed, ADR 0026) hears changes when it does.
  end note
 
  note bottom of EventDispatchService

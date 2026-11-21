@@ -19,8 +19,10 @@ import co.omnistream.domain.port.dto.OfflinePackage;
 import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.dto.StreamProfile;
+import co.omnistream.domain.port.in.FeedSubscription;
 import co.omnistream.domain.port.in.IAccessControl;
 import co.omnistream.domain.port.in.IAuditTrail;
+import co.omnistream.domain.port.in.ICatalogFeed;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -32,6 +34,8 @@ import io.javalin.http.Cookie;
 import io.javalin.http.SameSite;
 import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.UploadedFile;
+import io.javalin.http.sse.SseClient;
+import io.javalin.http.sse.SseHandler;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -45,6 +49,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -69,6 +74,7 @@ public final class RestApiAdapter {
   private final IAccessControl accessControl;
   private final ISync sync;
   private final IAuditTrail auditTrail;
+  private final ICatalogFeed catalogFeed;
 
   public RestApiAdapter(
       ICatalogManagement catalogManagement,
@@ -76,13 +82,15 @@ public final class RestApiAdapter {
       ISearch search,
       IAccessControl accessControl,
       ISync sync,
-      IAuditTrail auditTrail) {
+      IAuditTrail auditTrail,
+      ICatalogFeed catalogFeed) {
     this.catalogManagement = Objects.requireNonNull(catalogManagement, "catalogManagement");
     this.playback = Objects.requireNonNull(playback, "playback");
     this.search = Objects.requireNonNull(search, "search");
     this.accessControl = Objects.requireNonNull(accessControl, "accessControl");
     this.sync = Objects.requireNonNull(sync, "sync");
     this.auditTrail = Objects.requireNonNull(auditTrail, "auditTrail");
+    this.catalogFeed = Objects.requireNonNull(catalogFeed, "catalogFeed");
   }
 
   /**
@@ -99,6 +107,7 @@ public final class RestApiAdapter {
     playbackRoutes(config.routes);
     syncRoutes(config.routes);
     auditRoutes(config.routes);
+    feedRoutes(config.routes);
   }
 
   // ------------------------------------------------------------------ access (IAccessControl)
@@ -435,6 +444,50 @@ public final class RestApiAdapter {
         optionalQuery(ctx, "from").map(value -> instant(value, "from")),
         optionalQuery(ctx, "to").map(value -> instant(value, "to")),
         optionalQuery(ctx, "limit").map(Integer::valueOf).orElse(DEFAULT_AUDIT_LIMIT));
+  }
+
+  // ------------------------------------------------------------------ live changes (ICatalogFeed)
+
+  /** Media type of a stream of server-sent events. */
+  static final String EVENT_STREAM = "text/event-stream";
+
+  /**
+   * A stream of server-sent events (ADR 0026): {@code ready} when it opens, then one {@code change}
+   * with a {@code CatalogChange} for each change the user can see. The browser's {@code
+   * EventSource} reconnects by itself if the connection drops, and gets a new {@code ready}: the
+   * web UI reloads what it shows then, so it misses nothing in between.
+   */
+  private void feedRoutes(RoutesConfig routes) {
+    routes.get(
+        API + "/events",
+        ctx -> {
+          UserId u = user(ctx);
+          String accept = ctx.header("Accept");
+          if (accept == null || !accept.contains(EVENT_STREAM)) {
+            throw new IllegalArgumentException(
+                "The live changes are a stream: ask with 'Accept: " + EVENT_STREAM + "'");
+          }
+          // Follow before the response starts, so an error can still answer with its status
+          AtomicReference<SseClient> stream = new AtomicReference<>();
+          FeedSubscription subscription =
+              catalogFeed.follow(
+                  u,
+                  change -> {
+                    SseClient client = stream.get();
+                    if (client != null) {
+                      client.sendEvent("change", change);
+                    }
+                  });
+          new SseHandler(
+                  0,
+                  client -> {
+                    client.onClose(subscription::close);
+                    client.keepAlive();
+                    stream.set(client);
+                    client.sendEvent("ready", Map.of());
+                  })
+              .handle(ctx);
+        });
   }
 
   /** Sends the content of an offline package as a file to save; its metadata is in the snapshot. */

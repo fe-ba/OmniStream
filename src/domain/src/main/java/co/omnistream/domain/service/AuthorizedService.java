@@ -32,11 +32,9 @@ public abstract class AuthorizedService {
   /**
    * Throws {@code AccessDenied} unless {@code u} may do {@code acc} on {@code r}.
    *
-   * <p>A permission applies only to the exact item it names ({@code Permission}), and {@link
-   * AccessPolicy} looks only at the item it is given. So a user may also reach {@code r} through
-   * any collection that contains it, directly or through other collections: ask the policy for
-   * {@code r} and then for each of those collections, which come from {@code
-   * catalog.toSnapshot().collections()} (each one lists its item ids).
+   * <p>A user may also reach {@code r} through any collection that contains it, directly or through
+   * other collections. {@code accessPolicy.authorizes(user, r, acc, catalog)} resolves that with a
+   * {@code CatalogSnapshot} of the catalog.
    */
   protected void checkAccess(UserId u, ItemId r, AccessType acc) {
     throw new UnsupportedOperationException("Not implemented yet");

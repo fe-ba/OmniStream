@@ -183,3 +183,24 @@ collection.
 changes something or matters for security: logins, links, users and
 permissions, files and collections, and the administration of the library.
 Browsing, searching and playing are not recorded.
+
+### Live changes (`ICatalogFeed`, ADR 0026)
+
+| Method and path | Port method | Who | Request | Response |
+|---|---|---|---|---|
+| `GET /events` | `follow` | user | header `Accept: text/event-stream` (400 without it) | 200, a stream of server-sent events that stays open |
+
+The stream sends `ready` (data `{}`) when it opens, then one `change` for each
+change to a file or collection the user can see:
+
+```
+event: change
+data: {"item": "3f2c...", "change": "MODIFIED", "event": "FileModified", "at": "2026-11-21T17:00:00Z"}
+```
+
+`change` is `ADDED`, `MODIFIED` or `REMOVED`; `event` is the domain event behind
+it. Removals reach everyone, with only the identifier. In the browser,
+`new EventSource("/api/v1/events")` sends the session cookie; when the
+connection drops it reconnects by itself and gets a new `ready`, which is the
+moment for the client to reload what it shows. Changes reach the stream when
+the outbox is published (`SyncTask`), within a couple of seconds.

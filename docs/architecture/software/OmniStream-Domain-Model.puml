@@ -482,6 +482,8 @@ package "Domain policies" {
   class AccessPolicy <<policy>> {
     + authorizes(u : User, resource : ItemId, access : AccessType) : boolean
     + effectiveLevel(u : User, resource : ItemId) : Optional<PermissionLevel>
+    + authorizes(u : User, resource : ItemId, access : AccessType, catalog : CatalogSnapshot) : boolean
+    + effectiveLevel(u : User, resource : ItemId, catalog : CatalogSnapshot) : Optional<PermissionLevel>
     + mayDelegate(granter : User, inheritedLevel : Optional<PermissionLevel>, target : User, p : Permission) : boolean
   }
 }
