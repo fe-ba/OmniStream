@@ -619,6 +619,9 @@ package "Composition (bootstrap)" #FFFDE7 {
      - identityFailureThreshold : int
      - tokenLifetime : Duration
    }
+   class ConfigurationLoader <<configuration>> {
+     + load(args : List<String>) : AppConfiguration
+   }
    abstract class InfrastructureFactory <<abstract factory>> {
      + {abstract} createCatalogRepository() : ICatalogRepository
      + {abstract} createSessionRepository() : ISessionRepository
@@ -655,6 +658,7 @@ package "Composition (bootstrap)" #FFFDE7 {
    InfrastructureFactory <|-- LocalFactory
    InfrastructureFactory <|-- ServerFactory
    CompositionRoot --> AppConfiguration
+   ConfigurationLoader ..> AppConfiguration : reads from omnistream.properties and the environment
    CompositionRoot --> InfrastructureFactory : selects by profile
    CompositionRoot ..> IEventSubscriber : registers observers
    CompositionRoot ..> SyncObserver : creates and subscribes

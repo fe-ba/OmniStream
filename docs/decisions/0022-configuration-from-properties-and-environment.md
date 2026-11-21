@@ -28,7 +28,8 @@ The configuration is a flat list of values.
   `OMNISTREAM_LIBRARY_PATH`.
 - The file is the one given with `--config <file>`. Without it, the file is
   `<home>/omnistream.properties`, where `<home>` is `OMNISTREAM_HOME` or, if it is
-  not set, `~/.omnistream`. A missing file is not an error: the defaults apply.
+  not set, `~/.omnistream`. A missing file in the home folder is not an error:
+  the defaults apply. A file given with `--config` must exist.
 - Keys and defaults:
 
   | Key | `AppConfiguration` | Default |
@@ -54,7 +55,8 @@ The configuration is a flat list of values.
   administrator changes it from the application (`configureLibraryPath`), the
   value stored through `IConfigurationRepository` wins.
 - `AppConfiguration` gains the `httpPort` field; the ports and adapters
-  diagrams show it.
+  diagrams show it. `ConfigurationLoader` reads it, and a leading `~/` in a
+  path means the user's home folder.
 
 ## Consequences
 

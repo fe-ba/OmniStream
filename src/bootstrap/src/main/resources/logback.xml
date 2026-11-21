@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logging of OmniStream (ADR 0021). Only the bootstrap module has Logback; everything
+  else logs through the SLF4J API.
+
+  - Console, always.
+  - A rolling file in <home>/logs, where <home> is OMNISTREAM_HOME or ~/.omnistream
+    (ADR 0022): the desktop app has no console anyone looks at.
+  - OMNISTREAM_LOG_LEVEL changes the level of OmniStream's own loggers (INFO by default).
+-->
+<configuration>
+
+  <property name="LOG_HOME" value="${OMNISTREAM_HOME:-${user.home}/.omnistream}/logs"/>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>${LOG_HOME}/omnistream.log</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>${LOG_HOME}/omnistream.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+      <maxFileSize>10MB</maxFileSize>
+      <maxHistory>14</maxHistory>
+      <totalSizeCap>200MB</totalSizeCap>
+    </rollingPolicy>
+    <encoder>
+      <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="co.omnistream" level="${OMNISTREAM_LOG_LEVEL:-INFO}"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="FILE"/>
+  </root>
+
+</configuration>

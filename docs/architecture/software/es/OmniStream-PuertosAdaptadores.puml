@@ -619,6 +619,9 @@ package "Composicion (arranque)" #FFFDE7 {
      - umbralFallosIdentidad : int
      - vigenciaToken : Duration
    }
+   class CargadorConfiguracion <<configuration>> {
+     + cargar(args : List<String>) : ConfiguracionApp
+   }
    abstract class FabricaInfraestructura <<abstract factory>> {
      + {abstract} crearRepositorioCatalogo() : IRepositorioCatalogo
      + {abstract} crearRepositorioSesiones() : IRepositorioSesiones
@@ -655,6 +658,7 @@ package "Composicion (arranque)" #FFFDE7 {
    FabricaInfraestructura <|-- FabricaLocal
    FabricaInfraestructura <|-- FabricaServidor
    ComposicionRaiz --> ConfiguracionApp
+   CargadorConfiguracion ..> ConfiguracionApp : lee de omnistream.properties y del entorno
    ComposicionRaiz --> FabricaInfraestructura : selecciona segun perfil
    ComposicionRaiz ..> ISuscriptorEventos : registra observadores
    ComposicionRaiz ..> ObservadorSincronizacion : crea y suscribe

@@ -28,8 +28,10 @@ through domain events and exceptions, not through logs.
   (ADR 0013) already keeps SLF4J out of its production code.
 - `src/bootstrap/src/main/resources/logback.xml` configures the output:
   - console, always;
-  - a rolling file in `<home>/logs/` (ADR 0022) for the `local` profile, where
-    nobody watches the console;
+  - a rolling file in `<home>/logs/` (ADR 0022), in both profiles: the desktop
+    app has no console anyone watches, and a server keeps its logs in the same
+    volume as its data. Logback cannot switch appenders by profile without an
+    extra library (Janino), so it does not try;
   - level `INFO` by default; the `OMNISTREAM_LOG_LEVEL` environment variable
     changes the level of the `co.omnistream` loggers.
 - What to log:
