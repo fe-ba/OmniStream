@@ -109,6 +109,7 @@ package "Access and security" {
     - credentialRegistry : ICredentialRegistry
     - tokenRepository : ITokenRepository
     - sharedLinkRepository : ISharedLinkRepository
+    - catalogRepository : ICatalogRepository
     - unitOfWork : IUnitOfWork
     __
     + authenticateUser(c : Credentials) : SessionToken
@@ -119,12 +120,24 @@ package "Access and security" {
     + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLinkSnapshot
     + createUser(admin : UserId, username : String, password : String, role : Role) : UserId
     + manageRoles(admin : UserId, target : UserId, role : Role) : void
-    + grantPermission(admin : UserId, u : UserId, p : Permission) : void
-    + revokePermission(admin : UserId, u : UserId, p : Permission) : void
+    + grantPermission(granter : UserId, u : UserId, p : Permission) : void
+    + revokePermission(granter : UserId, u : UserId, p : Permission) : void
     + deactivateUser(admin : UserId, u : UserId) : void
+    + listUsers(admin : UserId) : List<UserSnapshot>
+    + findUser(u : UserId, username : String) : UserId
+    + accessTo(u : UserId, resource : ItemId) : List<AccessGrant>
     - selectProvider(c : Credentials) : IIdentityProvider
     - issueToken(u : User) : SessionToken
+    - inheritedLevel(u : User, r : ItemId) : Optional<PermissionLevel>
   }
+
+  note right of AccessService
+    **Delegation (ADR 0024):** an administrator
+    grants anything; whoever manages a resource
+    (directly or through a collection) grants
+    READ or WRITE on it. AccessPolicy.mayDelegate
+    decides; inheritedLevel walks the collections.
+  end note
 
   interface IIdentityProvider <<driven port>>
 
@@ -402,6 +415,12 @@ package "Port DTOs and commands" {
     + issuer : URI
   }
 
+  class AccessGrant <<dto>> {
+    + user : UserId
+    + username : String
+    + level : PermissionLevel
+  }
+
   class SessionToken <<dto>> {
     + value : String
     + userId : UserId
@@ -487,6 +506,7 @@ AuthorizedService ..> User : <<loads>>
 AccessService "1" o-- "1..*" IIdentityProvider : providers
 AccessService ..> SharedLink : <<creates>>
 AccessService ..> SessionToken : <<issues>>
+AccessService ..> AccessGrant : <<creates>>
 
 ' ============================================================
 ' RELATIONS - CATALOG AND INGESTION (Chain of Responsibility)

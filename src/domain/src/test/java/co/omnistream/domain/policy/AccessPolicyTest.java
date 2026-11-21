@@ -13,6 +13,7 @@ import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.snapshot.UserSnapshot;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -122,5 +123,126 @@ class AccessPolicyTest {
         }
       }
     }
+  }
+
+  // ------------------------------------------------------------------ delegation (ADR 0024)
+
+  private static final Optional<PermissionLevel> NOTHING_INHERITED = Optional.empty();
+
+  private User managerOf(ItemId resource) {
+    User manager = user("marta", Role.USER);
+    manager.grant(new Permission(resource, PermissionLevel.MANAGE));
+    return manager;
+  }
+
+  @Test
+  void anAdministratorMayDelegateAnyLevelOnAnyResource() {
+    User admin = user("root", Role.ADMIN);
+    User target = user("ana", Role.USER);
+
+    for (PermissionLevel level : PermissionLevel.values()) {
+      Permission permission = new Permission(item(), level);
+      assertThat(policy.mayDelegate(admin, NOTHING_INHERITED, target, permission)).isTrue();
+    }
+  }
+
+  @Test
+  void aManagerMayHandOutReadAndWriteButNotManage() {
+    User manager = managerOf(resource);
+    User target = user("ana", Role.USER);
+
+    assertThat(policy.mayDelegate(manager, NOTHING_INHERITED, target, readOn(resource))).isTrue();
+    assertThat(policy.mayDelegate(manager, NOTHING_INHERITED, target, writeOn(resource))).isTrue();
+    assertThat(
+            policy.mayDelegate(
+                manager,
+                NOTHING_INHERITED,
+                target,
+                new Permission(resource, PermissionLevel.MANAGE)))
+        .isFalse();
+  }
+
+  @Test
+  void managingThroughACollectionCountsAsManaging() {
+    User manager = user("marta", Role.USER); // nothing on the file itself
+    User target = user("ana", Role.USER);
+
+    assertThat(
+            policy.mayDelegate(
+                manager, Optional.of(PermissionLevel.MANAGE), target, writeOn(resource)))
+        .isTrue();
+    assertThat(
+            policy.mayDelegate(
+                manager, Optional.of(PermissionLevel.WRITE), target, readOn(resource)))
+        .isFalse();
+  }
+
+  @Test
+  void writingIsNotEnoughToDelegate() {
+    User writer = user("marta", Role.USER);
+    writer.grant(writeOn(resource));
+
+    assertThat(
+            policy.mayDelegate(writer, NOTHING_INHERITED, user("ana", Role.USER), readOn(resource)))
+        .isFalse();
+  }
+
+  @Test
+  void managingOneResourceGivesNoRightsOnAnother() {
+    User manager = managerOf(resource);
+
+    assertThat(
+            policy.mayDelegate(manager, NOTHING_INHERITED, user("ana", Role.USER), readOn(item())))
+        .isFalse();
+  }
+
+  @Test
+  void aManagerMayNotChangeItsOwnPermissions() {
+    User manager = managerOf(resource);
+
+    assertThat(policy.mayDelegate(manager, NOTHING_INHERITED, manager, readOn(resource))).isFalse();
+  }
+
+  @Test
+  void aManagerMayNotTouchAnotherManagerOrAnAdministrator() {
+    User manager = managerOf(resource);
+    User otherManager = managerOf(resource);
+    User admin = user("root", Role.ADMIN);
+
+    assertThat(policy.mayDelegate(manager, NOTHING_INHERITED, otherManager, readOn(resource)))
+        .isFalse();
+    assertThat(policy.mayDelegate(manager, NOTHING_INHERITED, admin, readOn(resource))).isFalse();
+  }
+
+  @Test
+  void aDeactivatedGranterMayNotDelegateWhateverItsRole() {
+    User admin = user("root", Role.ADMIN);
+    admin.deactivate();
+    User manager = managerOf(resource);
+    manager.deactivate();
+    User target = user("ana", Role.USER);
+
+    assertThat(policy.mayDelegate(admin, NOTHING_INHERITED, target, readOn(resource))).isFalse();
+    assertThat(
+            policy.mayDelegate(
+                manager, Optional.of(PermissionLevel.MANAGE), target, readOn(resource)))
+        .isFalse();
+  }
+
+  @Test
+  void aGuestNeverDelegatesEvenWithManageFromItsLink() {
+    User guest = User.createGuest(resource, PermissionLevel.MANAGE);
+
+    assertThat(
+            policy.mayDelegate(guest, NOTHING_INHERITED, user("ana", Role.USER), readOn(resource)))
+        .isFalse();
+  }
+
+  private static Permission readOn(ItemId resource) {
+    return new Permission(resource, PermissionLevel.READ);
+  }
+
+  private static Permission writeOn(ItemId resource) {
+    return new Permission(resource, PermissionLevel.WRITE);
   }
 }

@@ -193,9 +193,12 @@ package "Driving ports (domain)" #E8F5E9 {
      + shareCollection(u : UserId, col : ItemId, level : PermissionLevel, lifetime : Duration) : SharedLinkSnapshot
      + createUser(admin : UserId, username : String, password : String, role : Role) : UserId
      + manageRoles(admin : UserId, target : UserId, role : Role) : void
-     + grantPermission(admin : UserId, u : UserId, p : Permission) : void
-     + revokePermission(admin : UserId, u : UserId, p : Permission) : void
+     + grantPermission(granter : UserId, u : UserId, p : Permission) : void
+     + revokePermission(granter : UserId, u : UserId, p : Permission) : void
      + deactivateUser(admin : UserId, u : UserId) : void
+     + listUsers(admin : UserId) : List<UserSnapshot>
+     + findUser(u : UserId, username : String) : UserId
+     + accessTo(u : UserId, resource : ItemId) : List<AccessGrant>
    }
    interface ISync <<driving port>> {
      + syncChanges(u : UserId, since : Instant) : SyncDelta
@@ -277,6 +280,7 @@ package "Driven ports (domain)" #F3E5F5 {
      + findById(id : UserId) : Optional<User>
      + findByUsername(username : String) : Optional<User>
      + findByIdentity(i : LinkedIdentity) : Optional<User>
+     + findAll() : List<User>
    }
    interface ISharedLinkRepository <<driven port>> {
      + save(e : SharedLink) : void
@@ -366,6 +370,7 @@ package "Driven ports (domain)" #F3E5F5 {
  AccessService ..> ITokenRepository : saves / validates tokens
  AccessService ..> ISharedLinkRepository : saves / finds links
  AccessService ..> IUnitOfWork : wraps transaction
+AccessService ..> ICatalogRepository : reads collections for inherited access
  SyncService ..> IChangeLog : reads changes
  SyncService ..> ICatalogRepository : builds packages
  SyncService ..> IFileStorage : reads content

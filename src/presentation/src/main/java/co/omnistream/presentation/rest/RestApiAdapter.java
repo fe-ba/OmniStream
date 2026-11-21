@@ -144,21 +144,22 @@ public final class RestApiAdapter {
           accessControl.manageRoles(admin, userId(ctx, "id"), body.role());
           ctx.status(204);
         });
+    // Administrators, and whoever manages the resource (ADR 0024)
     routes.post(
         API + "/users/{id}/permissions",
         ctx -> {
-          UserId admin = user(ctx);
+          UserId granter = user(ctx);
           Permission permission = ctx.bodyAsClass(Permission.class);
-          accessControl.grantPermission(admin, userId(ctx, "id"), permission);
+          accessControl.grantPermission(granter, userId(ctx, "id"), permission);
           ctx.status(204);
         });
     routes.delete(
         API + "/users/{id}/permissions/{resource}",
         ctx -> {
-          UserId admin = user(ctx);
+          UserId granter = user(ctx);
           PermissionLevel level = PermissionLevel.valueOf(requiredQuery(ctx, "level"));
           accessControl.revokePermission(
-              admin, userId(ctx, "id"), new Permission(itemId(ctx, "resource"), level));
+              granter, userId(ctx, "id"), new Permission(itemId(ctx, "resource"), level));
           ctx.status(204);
         });
     routes.post(
@@ -167,6 +168,20 @@ public final class RestApiAdapter {
           UserId admin = user(ctx);
           accessControl.deactivateUser(admin, userId(ctx, "id"));
           ctx.status(204);
+        });
+    routes.get(API + "/users", ctx -> ctx.json(accessControl.listUsers(user(ctx))));
+    routes.get(
+        API + "/users/by-name/{username}",
+        ctx -> {
+          UserId u = user(ctx);
+          UserId found = accessControl.findUser(u, ctx.pathParam("username"));
+          ctx.json(Map.of("id", found));
+        });
+    routes.get(
+        API + "/items/{id}/access",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.json(accessControl.accessTo(u, itemId(ctx, "id")));
         });
   }
 

@@ -109,6 +109,7 @@ package "Acceso y seguridad" {
     - registroCredenciales : IRegistroCredenciales
     - repositorioTokens : IRepositorioTokens
     - repositorioEnlaces : IRepositorioEnlaces
+    - repositorioCatalogo : IRepositorioCatalogo
     - unidadDeTrabajo : IUnidadDeTrabajo
     __
     + autenticarUsuario(c : Credenciales) : TokenSesion
@@ -119,12 +120,24 @@ package "Acceso y seguridad" {
     + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : InstantaneaEnlace
     + crearUsuario(admin : UsuarioId, nombreUsuario : String, clave : String, rol : Rol) : UsuarioId
     + gestionarRoles(admin : UsuarioId, obj : UsuarioId, rol : Rol) : void
-    + otorgarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
-    + revocarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
+    + otorgarPermiso(otorgante : UsuarioId, u : UsuarioId, p : Permiso) : void
+    + revocarPermiso(otorgante : UsuarioId, u : UsuarioId, p : Permiso) : void
     + desactivarUsuario(admin : UsuarioId, u : UsuarioId) : void
+    + listarUsuarios(admin : UsuarioId) : List<InstantaneaUsuario>
+    + buscarUsuario(u : UsuarioId, nombreUsuario : String) : UsuarioId
+    + accesoA(u : UsuarioId, recurso : ElementoId) : List<ConcesionAcceso>
     - seleccionarProveedor(c : Credenciales) : IProveedorIdentidad
     - emitirToken(u : Usuario) : TokenSesion
+    - nivelHeredado(u : Usuario, r : ElementoId) : Optional<NivelPermiso>
   }
+
+  note right of ServicioAcceso
+    **Delegacion (ADR 0024):** un administrador
+    otorga cualquier cosa; quien administra un recurso
+    (directamente o por una coleccion) otorga
+    READ o WRITE sobre el. PoliticaAcceso.puedeDelegar
+    decide; nivelHeredado recorre las colecciones.
+  end note
 
   interface IProveedorIdentidad <<driven port>>
 
@@ -402,6 +415,12 @@ package "DTOs y comandos de los puertos" {
     + emisor : URI
   }
 
+  class ConcesionAcceso <<dto>> {
+    + usuario : UsuarioId
+    + nombreUsuario : String
+    + nivel : NivelPermiso
+  }
+
   class TokenSesion <<dto>> {
     + valor : String
     + usuarioId : UsuarioId
@@ -487,6 +506,7 @@ ServicioAutorizado ..> Usuario : <<carga>>
 ServicioAcceso "1" o-- "1..*" IProveedorIdentidad : proveedores
 ServicioAcceso ..> EnlaceCompartido : <<crea>>
 ServicioAcceso ..> TokenSesion : <<emite>>
+ServicioAcceso ..> ConcesionAcceso : <<crea>>
 
 ' ============================================================
 ' RELACIONES - CATALOGO E INGESTA (Chain of Responsibility)

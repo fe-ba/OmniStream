@@ -193,9 +193,12 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
      + compartirColeccion(u : UsuarioId, col : ElementoId, niv : NivelPermiso, vigencia : Duration) : InstantaneaEnlace
      + crearUsuario(admin : UsuarioId, nombreUsuario : String, clave : String, rol : Rol) : UsuarioId
      + gestionarRoles(admin : UsuarioId, obj : UsuarioId, rol : Rol) : void
-     + otorgarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
-     + revocarPermiso(admin : UsuarioId, u : UsuarioId, p : Permiso) : void
+     + otorgarPermiso(otorgante : UsuarioId, u : UsuarioId, p : Permiso) : void
+     + revocarPermiso(otorgante : UsuarioId, u : UsuarioId, p : Permiso) : void
      + desactivarUsuario(admin : UsuarioId, u : UsuarioId) : void
+     + listarUsuarios(admin : UsuarioId) : List<InstantaneaUsuario>
+     + buscarUsuario(u : UsuarioId, nombreUsuario : String) : UsuarioId
+     + accesoA(u : UsuarioId, recurso : ElementoId) : List<ConcesionAcceso>
    }
    interface ISincronizacion <<driving port>> {
      + sincronizarCambios(u : UsuarioId, desde : Instant) : DeltaSincronizacion
@@ -277,6 +280,7 @@ package "Puertos de salida (dominio)" #F3E5F5 {
      + buscarPorId(id : UsuarioId) : Optional<Usuario>
      + buscarPorNombre(nombreUsuario : String) : Optional<Usuario>
      + buscarPorIdentidad(i : IdentidadVinculada) : Optional<Usuario>
+     + buscarTodos() : List<Usuario>
    }
    interface IRepositorioEnlaces <<driven port>> {
      + guardar(e : EnlaceCompartido) : void
@@ -366,6 +370,7 @@ package "Puertos de salida (dominio)" #F3E5F5 {
  ServicioAcceso ..> IRepositorioTokens : guarda / valida tokens
  ServicioAcceso ..> IRepositorioEnlaces : guarda / busca enlaces
  ServicioAcceso ..> IUnidadDeTrabajo : delimita transaccion
+ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredado
  ServicioSincronizacion ..> IRegistroCambios : lee cambios
  ServicioSincronizacion ..> IRepositorioCatalogo : arma paquetes
  ServicioSincronizacion ..> IAlmacenamientoArchivos : lee contenido

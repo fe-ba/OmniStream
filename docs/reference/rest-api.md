@@ -20,7 +20,9 @@ same commit.
   its `userId` to the port. A missing, unknown or expired token answers 401.
 - **Who.** *user* means any logged-in user, guests included; what they may do
   with each item is decided by the domain (`AccessPolicy`). *admin* means the
-  service requires an administrator.
+  service requires an administrator. *manager* means an administrator, or a
+  user with `MANAGE` on the resource, directly or through a collection that
+  contains it (ADR 0024).
 
 ## JSON conventions
 
@@ -85,11 +87,22 @@ in `ApiErrors`, before it reaches the API; until then it answers 500.
 | `POST /collections/{id}/links` | `shareCollection` | user | `{"level": "READ", "lifetime": 604800}` | 201 `SharedLinkSnapshot` |
 | `POST /users` | `createUser` | admin | `{"username", "password", "role"}` | 201 `{"id"}` |
 | `PUT /users/{id}/role` | `manageRoles` | admin | `{"role": "ADMIN"}` | 204 |
-| `POST /users/{id}/permissions` | `grantPermission` | admin | `{"resource", "level"}` | 204 |
-| `DELETE /users/{id}/permissions/{resource}?level=READ` | `revokePermission` | admin | | 204 |
+| `POST /users/{id}/permissions` | `grantPermission` | manager | `{"resource", "level"}` | 204 |
+| `DELETE /users/{id}/permissions/{resource}?level=READ` | `revokePermission` | manager | | 204 |
 | `POST /users/{id}/deactivate` | `deactivateUser` | admin | | 204 |
+| `GET /users` | `listUsers` | admin | | 200 list of `UserSnapshot` |
+| `GET /users/by-name/{username}` | `findUser` | admin, or anyone with `MANAGE` on something | | 200 `{"id"}` |
+| `GET /items/{id}/access` | `accessTo` | manager of the item | | 200 list of `AccessGrant` |
 
-`SessionToken` is `{"value", "userId", "role", "expiresAt"}`. The web UI opens a
+`SessionToken` is `{"value", "userId", "role", "expiresAt"}`. `UserSnapshot` is
+`{"id", "username", "role", "permissions": [{"resource", "level"}],
+"identities": [{"issuer", "subject"}], "active"}`; guests are not listed.
+`AccessGrant` is `{"user", "username", "level"}`: who has a permission on the
+item itself, not through a collection that contains it.
+
+A manager who is not an administrator may only give or take `READ` and `WRITE`,
+not change its own permissions, and not touch another manager of the same
+resource; otherwise 403 `AccessDenied`. The web UI opens a
 shared link as `/s/{token}`, a page that calls `POST /links/{token}/access`.
 
 ### Catalog (`ICatalogManagement`)

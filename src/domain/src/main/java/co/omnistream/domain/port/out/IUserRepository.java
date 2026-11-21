@@ -3,6 +3,7 @@ package co.omnistream.domain.port.out;
 import co.omnistream.domain.model.access.LinkedIdentity;
 import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
+import java.util.List;
 import java.util.Optional;
 
 /** Driven port: defined by the domain, implemented by secondary adapters. */
@@ -18,4 +19,10 @@ public interface IUserRepository {
    * so this works the same for every user.
    */
   Optional<User> findByIdentity(LinkedIdentity i);
+
+  /**
+   * Every user, guests and deactivated ones included, in no particular order. A server has tens of
+   * users, not thousands, so the services filter this list instead of asking for narrower queries.
+   */
+  List<User> findAll();
 }

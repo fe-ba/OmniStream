@@ -8,9 +8,11 @@ import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.policy.AccessPolicy;
+import co.omnistream.domain.port.dto.AccessGrant;
 import co.omnistream.domain.port.dto.Credentials;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.in.IAccessControl;
+import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.ICredentialRegistry;
 import co.omnistream.domain.port.out.IIdentityProvider;
 import co.omnistream.domain.port.out.ISharedLinkRepository;
@@ -18,6 +20,7 @@ import co.omnistream.domain.port.out.ITokenRepository;
 import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
 import co.omnistream.domain.snapshot.SharedLinkSnapshot;
+import co.omnistream.domain.snapshot.UserSnapshot;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -29,6 +32,7 @@ public final class AccessService extends AuthorizedService implements IAccessCon
   private final ICredentialRegistry credentialRegistry;
   private final ITokenRepository tokenRepository;
   private final ISharedLinkRepository sharedLinkRepository;
+  private final ICatalogRepository catalogRepository;
   private final IUnitOfWork unitOfWork;
 
   public AccessService(
@@ -39,12 +43,14 @@ public final class AccessService extends AuthorizedService implements IAccessCon
       ICredentialRegistry credentialRegistry,
       ITokenRepository tokenRepository,
       ISharedLinkRepository sharedLinkRepository,
+      ICatalogRepository catalogRepository,
       IUnitOfWork unitOfWork) {
     super(userRepository, accessPolicy, clock);
     this.providers = providers;
     this.credentialRegistry = credentialRegistry;
     this.tokenRepository = tokenRepository;
     this.sharedLinkRepository = sharedLinkRepository;
+    this.catalogRepository = catalogRepository;
     this.unitOfWork = unitOfWork;
   }
 
@@ -111,18 +117,70 @@ public final class AccessService extends AuthorizedService implements IAccessCon
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * Delegation (ADR 0024): load both users, and throw {@code AccessDenied} unless {@code
+   * accessPolicy.mayDelegate(granter, inheritedLevel(granter, p.resource()), target, p)}. Then
+   * {@code target.grant(p)} and save it. A guest target makes {@code grant} throw {@code
+   * IllegalStateException}; see {@link #manageRoles} for answering that with a business error.
+   */
   @Override
-  public void grantPermission(UserId admin, UserId u, Permission p) {
+  public void grantPermission(UserId granter, UserId u, Permission p) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
+  /**
+   * Same rule as {@link #grantPermission}, asked about the permission being taken away: who may
+   * give it may take it back.
+   */
   @Override
-  public void revokePermission(UserId admin, UserId u, Permission p) {
+  public void revokePermission(UserId granter, UserId u, Permission p) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
   @Override
   public void deactivateUser(UserId admin, UserId u) {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
+  /**
+   * For the administration screen: {@code requireAdmin(admin)}, then {@code
+   * userRepository.findAll()} without the guests (they belong to their shared links), as snapshots
+   * sorted by username.
+   */
+  @Override
+  public List<UserSnapshot> listUsers(UserId admin) {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
+  /**
+   * Lets whoever manages something find the person to share it with, without listing the users.
+   * {@code u} must be an administrator or hold {@code MANAGE} on at least one resource, otherwise
+   * {@code AccessDenied}. Answers {@code ResourceNotFound} if there is no active, non-guest user
+   * with that username.
+   */
+  @Override
+  public UserId findUser(UserId u, String username) {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
+  /**
+   * Who has a permission on the resource itself (not through a collection that contains it): the
+   * access list that its managers see. {@code u} must reach {@code MANAGE} on it, counting {@link
+   * #inheritedLevel}, otherwise {@code AccessDenied}. From {@code userRepository.findAll()}: the
+   * active, non-guest users with a permission that {@code appliesTo(resource)}, sorted by username.
+   * Administrators are left out unless they have one: they reach everything anyway.
+   */
+  @Override
+  public List<AccessGrant> accessTo(UserId u, ItemId resource) {
+    throw new UnsupportedOperationException("Not implemented yet");
+  }
+
+  /**
+   * The highest level {@code u} has on any collection that contains {@code r}, directly or through
+   * other collections, from {@code catalogRepository.getCatalog().toSnapshot().collections()}. The
+   * same walk as {@code checkAccess}; the level on {@code r} itself is added by the policy.
+   */
+  private Optional<PermissionLevel> inheritedLevel(User u, ItemId r) {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 

@@ -14,6 +14,7 @@ below.
 | Spanish | English | Defined in |
 |---|---|---|
 | `AccesoDenegado` | `AccessDenied` | Domain model |
+| `ConcesionAcceso` | `AccessGrant` | Services |
 | `PoliticaAcceso` | `AccessPolicy` | Domain model |
 | `ServicioAcceso` | `AccessService` | Services |
 | `TipoAcceso` | `AccessType` | Domain model |
@@ -184,6 +185,16 @@ below.
 | `agregar` | `add` | Method `Collection.add()` |
 | `registra` | `registers` | `IEventSubscriber` registering observers |
 | `registra` | `records` | Aggregates and the change log recording events |
+
+## Delegation (ADR 0024)
+
+| Spanish | English | Where |
+|---|---|---|
+| `otorgante` | `granter` | Who gives or takes a permission: `grantPermission(granter, ...)`, `revokePermission(granter, ...)` |
+| `puedeDelegar()` | `mayDelegate()` | `AccessPolicy` |
+| `nivelHeredado` | `inheritedLevel` | Level reached through the collections that contain a resource |
+| `accesoA()` | `accessTo()` | Access list of a resource |
+| `listarUsuarios()` / `buscarUsuario()` / `buscarTodos()` | `listUsers()` / `findUser()` / `findAll()` | Administration and user lookup |
 
 ## Recurring member names
 

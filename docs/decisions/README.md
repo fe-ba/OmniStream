@@ -31,6 +31,7 @@ decision changes, a new ADR supersedes the old one.
 | [0021](0021-logging-with-slf4j-and-logback.md) | Logging with SLF4J and Logback | Accepted |
 | [0022](0022-configuration-from-properties-and-environment.md) | Configuration from a properties file and the environment | Accepted |
 | [0023](0023-rest-api-contract.md) | REST API contract | Accepted |
+| [0024](0024-delegate-permissions-per-collection.md) | Delegate permissions per collection | Accepted |
 
 ## Adding an ADR
 

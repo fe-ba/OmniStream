@@ -236,6 +236,57 @@ class RestApiAccessTest {
   }
 
   @Test
+  void anAdministratorListsTheUsersWithTheirPermissions() {
+    JavalinTest.test(
+        app(),
+        (server, client) -> {
+          var response = client.get(API + "/users", bearer(TOKEN));
+
+          assertThat(response.code()).isEqualTo(200);
+          JsonNode user = json(response.body().string()).get(0);
+          assertThat(user.get("id").asString()).isEqualTo(CREATED.value().toString());
+          assertThat(user.get("username").asString()).isEqualTo("luis");
+          assertThat(user.get("role").asString()).isEqualTo("USER");
+          assertThat(user.get("active").asBoolean()).isTrue();
+          JsonNode permission = user.get("permissions").get(0);
+          assertThat(permission.get("resource").asString()).isEqualTo(ITEM);
+          assertThat(permission.get("level").asString()).isEqualTo("WRITE");
+          assertThat(access.calls).containsExactly("listUsers " + ADMIN.value());
+        });
+  }
+
+  @Test
+  void aUserIsFoundByItsUsername() {
+    JavalinTest.test(
+        app(),
+        (server, client) -> {
+          var found = client.get(API + "/users/by-name/luis", bearer(TOKEN));
+          var missing = client.get(API + "/users/by-name/nadie", bearer(TOKEN));
+
+          assertThat(found.code()).isEqualTo(200);
+          assertThat(json(found.body().string()).get("id").asString())
+              .isEqualTo(CREATED.value().toString());
+          assertThat(missing.code()).isEqualTo(404);
+        });
+  }
+
+  @Test
+  void theAccessListOfAnItemNamesEachUserAndLevel() {
+    JavalinTest.test(
+        app(),
+        (server, client) -> {
+          var response = client.get(API + "/items/" + ITEM + "/access", bearer(TOKEN));
+
+          assertThat(response.code()).isEqualTo(200);
+          JsonNode grant = json(response.body().string()).get(0);
+          assertThat(grant.get("user").asString()).isEqualTo(CREATED.value().toString());
+          assertThat(grant.get("username").asString()).isEqualTo("luis");
+          assertThat(grant.get("level").asString()).isEqualTo("WRITE");
+          assertThat(access.calls).containsExactly("accessTo " + ADMIN.value() + " " + ITEM);
+        });
+  }
+
+  @Test
   void revokingNeedsTheLevel() {
     JavalinTest.test(
         app(),
