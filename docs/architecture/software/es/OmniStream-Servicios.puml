@@ -440,9 +440,9 @@ package "DTOs y comandos de los puertos" {
   }
 
   class PerfilStream <<dto>> {
-    + codec : String
-    + bitrateKbps : int
-    + resolucion : String
+    + codec : Optional<String>
+    + bitrateKbps : Optional<Integer>
+    + resolucion : Optional<String>
     __
     + esDirectPlay() : boolean
   }
@@ -451,6 +451,7 @@ package "DTOs y comandos de los puertos" {
     + datos : InputStream
     + mime : String
     + transcodificado : boolean
+    + tamanioBytes : Optional<Long>
   }
 
   class DeltaSincronizacion <<dto>> {
