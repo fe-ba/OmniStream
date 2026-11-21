@@ -9,10 +9,14 @@ import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.model.catalog.Tag;
 import co.omnistream.domain.model.catalog.TagSource;
+import co.omnistream.domain.model.playback.SessionId;
 import co.omnistream.domain.port.dto.CollectionCommand;
 import co.omnistream.domain.port.dto.LocalCredentials;
+import co.omnistream.domain.port.dto.MediaStream;
+import co.omnistream.domain.port.dto.OfflinePackage;
 import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
+import co.omnistream.domain.port.dto.StreamProfile;
 import co.omnistream.domain.port.in.IAccessControl;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
@@ -25,9 +29,13 @@ import io.javalin.http.Cookie;
 import io.javalin.http.SameSite;
 import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.UploadedFile;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -82,6 +90,8 @@ public final class RestApiAdapter {
     accessRoutes(config.routes);
     catalogRoutes(config.routes);
     searchRoutes(config.routes);
+    playbackRoutes(config.routes);
+    syncRoutes(config.routes);
   }
 
   // ------------------------------------------------------------------ access (IAccessControl)
@@ -281,6 +291,110 @@ public final class RestApiAdapter {
         });
   }
 
+  // ------------------------------------------------------------------ playback (IPlayback)
+
+  private void playbackRoutes(RoutesConfig routes) {
+    routes.post(
+        API + "/files/{id}/sessions",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.status(201).json(playback.openSession(u, itemId(ctx, "id")));
+        });
+    routes.post(
+        API + "/files/{id}/sessions/resume",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.status(201).json(playback.resumeFromLastPosition(u, itemId(ctx, "id")));
+        });
+    routes.get(
+        API + "/sessions/{id}/stream",
+        ctx -> {
+          UserId u = user(ctx);
+          sendStream(ctx, playback.requestStream(u, sessionId(ctx, "id"), streamProfile(ctx)));
+        });
+    routes.put(
+        API + "/sessions/{id}/position",
+        ctx -> {
+          UserId u = user(ctx);
+          PositionRequest body = ctx.bodyAsClass(PositionRequest.class);
+          playback.recordProgress(u, sessionId(ctx, "id"), body.position());
+          ctx.status(204);
+        });
+    routes.post(
+        API + "/sessions/{id}/pause",
+        ctx -> {
+          playback.pauseSession(user(ctx), sessionId(ctx, "id"));
+          ctx.status(204);
+        });
+    routes.post(
+        API + "/sessions/{id}/resume",
+        ctx -> {
+          playback.resumeSession(user(ctx), sessionId(ctx, "id"));
+          ctx.status(204);
+        });
+    routes.post(
+        API + "/sessions/{id}/finish",
+        ctx -> {
+          playback.finishSession(user(ctx), sessionId(ctx, "id"));
+          ctx.status(204);
+        });
+  }
+
+  /**
+   * Sends media to the client. A file sent as it is has a known size, so it answers HTTP range
+   * requests and the player can jump to any position; a transcoded stream is sent as it is
+   * produced, starting at the session's position.
+   */
+  private static void sendStream(Context ctx, MediaStream stream) {
+    if (!stream.transcoded() && stream.sizeBytes().isPresent()) {
+      ctx.writeSeekableStream(stream.data(), stream.mime(), stream.sizeBytes().get());
+    } else {
+      ctx.contentType(stream.mime());
+      ctx.result(stream.data());
+    }
+  }
+
+  private static StreamProfile streamProfile(Context ctx) {
+    return new StreamProfile(
+        optionalQuery(ctx, "codec"),
+        optionalQuery(ctx, "bitrateKbps").map(Integer::valueOf),
+        optionalQuery(ctx, "resolution"));
+  }
+
+  // ------------------------------------------------------------------ synchronization (ISync)
+
+  private void syncRoutes(RoutesConfig routes) {
+    routes.get(
+        API + "/sync/changes",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.json(sync.syncChanges(u, instantQuery(ctx, "since")));
+        });
+    routes.get(
+        API + "/sync/pending",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.json(Map.of("pending", sync.hasPendingChanges(u, instantQuery(ctx, "since"))));
+        });
+    routes.get(
+        API + "/files/{id}/offline",
+        ctx -> {
+          UserId u = user(ctx);
+          sendAttachment(ctx, sync.cacheContent(u, itemId(ctx, "id")));
+        });
+  }
+
+  /** Sends the content of an offline package as a file to save; its metadata is in the snapshot. */
+  private static void sendAttachment(Context ctx, OfflinePackage pack) throws IOException {
+    Path content = pack.content();
+    String fileName = content.getFileName().toString().replace("\"", "_");
+    String type = Files.probeContentType(content);
+    ctx.header("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+    ctx.header("Content-Length", Long.toString(Files.size(content)));
+    ctx.contentType(type == null ? "application/octet-stream" : type);
+    ctx.result(Files.newInputStream(content));
+  }
+
   /** Answers a login with its token, and hands it to the web UI as an {@code HttpOnly} cookie. */
   private static void startSession(Context ctx, SessionToken token) {
     ctx.cookie(
@@ -323,6 +437,10 @@ public final class RestApiAdapter {
     return new ItemId(uuid(ctx.pathParam(name), name));
   }
 
+  private static SessionId sessionId(Context ctx, String name) {
+    return new SessionId(uuid(ctx.pathParam(name), name));
+  }
+
   private static UserId userId(Context ctx, String name) {
     return new UserId(uuid(ctx.pathParam(name), name));
   }
@@ -345,6 +463,16 @@ public final class RestApiAdapter {
 
   private static Optional<String> optionalQuery(Context ctx, String name) {
     return Optional.ofNullable(ctx.queryParam(name)).filter(value -> !value.isBlank());
+  }
+
+  private static Instant instantQuery(Context ctx, String name) {
+    String value = requiredQuery(ctx, name);
+    try {
+      return Instant.parse(value);
+    } catch (DateTimeParseException e) {
+      throw new IllegalArgumentException(
+          "'" + name + "' must be an ISO-8601 instant, such as 2026-11-20T15:04:05Z: " + value, e);
+    }
   }
 
   private static <T> T required(T value, String name) {
@@ -424,6 +552,15 @@ public final class RestApiAdapter {
   record TagRequest(String name) {
     TagRequest {
       required(name, "name");
+    }
+  }
+
+  /** Body of {@code PUT /sessions/{id}/position}: seconds from the beginning of the file. */
+  record PositionRequest(Duration position) {
+    PositionRequest {
+      if (required(position, "position").isNegative()) {
+        throw new IllegalArgumentException("A position cannot be negative");
+      }
     }
   }
 

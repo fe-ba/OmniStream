@@ -126,8 +126,8 @@ and the desktop app, which run on that machine, call it.
 |---|---|---|---|---|
 | `POST /files/{id}/sessions` | `openSession` | user | | 201 `PlaybackSessionSnapshot` |
 | `POST /files/{id}/sessions/resume` | `resumeFromLastPosition` | user | | 201 `PlaybackSessionSnapshot` |
-| `GET /sessions/{id}/stream?codec=&bitrateKbps=&resolution=` | `requestStream` | user | parameters optional; `Range` header supported | 200 or 206, the media bytes with their MIME type |
-| `PUT /sessions/{id}/position` | `recordProgress` | user | `{"position": 754.2}` | 204 |
+| `GET /sessions/{id}/stream?codec=&bitrateKbps=&resolution=` | `requestStream` | user | parameters optional; none means "as it is" (`StreamProfile.isDirectPlay`) | 200, or 206 for a `Range`; the media bytes with their MIME type |
+| `PUT /sessions/{id}/position` | `recordProgress` | user | `{"position": 754.2}`, not negative | 204 |
 | `POST /sessions/{id}/pause` | `pauseSession` | user | | 204 |
 | `POST /sessions/{id}/resume` | `resumeSession` | user | | 204 |
 | `POST /sessions/{id}/finish` | `finishSession` | user | | 204 |
@@ -137,12 +137,17 @@ under `/sessions/{id}` answer 403. `resumeSession` goes on with a paused session
 `POST /files/{id}/sessions/resume` instead starts a new one where the last
 session on that file stopped.
 
+A file sent as it is has a known size (`MediaStream.sizeBytes`), so the stream
+answers HTTP range requests (`Accept-Ranges: bytes`) and the player can jump to
+any position. A transcoded stream has no size: it is sent as it is produced,
+without ranges, starting at the session's position.
+
 ### Synchronization (`ISync`)
 
 | Method and path | Port method | Who | Request | Response |
 |---|---|---|---|---|
-| `GET /sync/changes?since=<instant>` | `syncChanges` | user | | 200 `SyncDelta` |
-| `GET /sync/pending?since=<instant>` | `hasPendingChanges` | user | | 200 `{"pending": true}` |
+| `GET /sync/changes?since=<instant>` | `syncChanges` | user | `since` required, ISO-8601 | 200 `SyncDelta` |
+| `GET /sync/pending?since=<instant>` | `hasPendingChanges` | user | `since` required, ISO-8601 | 200 `{"pending": true}` |
 | `GET /files/{id}/offline` | `cacheContent` | user | | 200, the file as an attachment; its metadata is in the file's snapshot |
 
 `IEventDispatch` has no route: the scheduler calls it.

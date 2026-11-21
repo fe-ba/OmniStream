@@ -440,9 +440,9 @@ package "Port DTOs and commands" {
   }
 
   class StreamProfile <<dto>> {
-    + codec : String
-    + bitrateKbps : int
-    + resolution : String
+    + codec : Optional<String>
+    + bitrateKbps : Optional<Integer>
+    + resolution : Optional<String>
     __
     + isDirectPlay() : boolean
   }
@@ -451,6 +451,7 @@ package "Port DTOs and commands" {
     + data : InputStream
     + mime : String
     + transcoded : boolean
+    + sizeBytes : Optional<Long>
   }
 
   class SyncDelta <<dto>> {
