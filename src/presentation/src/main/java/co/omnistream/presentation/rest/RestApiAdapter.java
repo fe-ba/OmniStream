@@ -4,12 +4,14 @@ import co.omnistream.domain.model.access.Permission;
 import co.omnistream.domain.model.access.PermissionLevel;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.UserId;
+import co.omnistream.domain.model.audit.AuditAction;
 import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.model.catalog.Tag;
 import co.omnistream.domain.model.catalog.TagSource;
 import co.omnistream.domain.model.playback.SessionId;
+import co.omnistream.domain.port.dto.AuditQuery;
 import co.omnistream.domain.port.dto.CollectionCommand;
 import co.omnistream.domain.port.dto.LocalCredentials;
 import co.omnistream.domain.port.dto.MediaStream;
@@ -18,6 +20,7 @@ import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.dto.StreamProfile;
 import co.omnistream.domain.port.in.IAccessControl;
+import co.omnistream.domain.port.in.IAuditTrail;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -65,18 +68,21 @@ public final class RestApiAdapter {
   private final ISearch search;
   private final IAccessControl accessControl;
   private final ISync sync;
+  private final IAuditTrail auditTrail;
 
   public RestApiAdapter(
       ICatalogManagement catalogManagement,
       IPlayback playback,
       ISearch search,
       IAccessControl accessControl,
-      ISync sync) {
+      ISync sync,
+      IAuditTrail auditTrail) {
     this.catalogManagement = Objects.requireNonNull(catalogManagement, "catalogManagement");
     this.playback = Objects.requireNonNull(playback, "playback");
     this.search = Objects.requireNonNull(search, "search");
     this.accessControl = Objects.requireNonNull(accessControl, "accessControl");
     this.sync = Objects.requireNonNull(sync, "sync");
+    this.auditTrail = Objects.requireNonNull(auditTrail, "auditTrail");
   }
 
   /**
@@ -92,6 +98,7 @@ public final class RestApiAdapter {
     searchRoutes(config.routes);
     playbackRoutes(config.routes);
     syncRoutes(config.routes);
+    auditRoutes(config.routes);
   }
 
   // ------------------------------------------------------------------ access (IAccessControl)
@@ -399,6 +406,37 @@ public final class RestApiAdapter {
         });
   }
 
+  // ------------------------------------------------------------------ audit trail (IAuditTrail)
+
+  /** Entries a query returns when it does not say how many. */
+  static final int DEFAULT_AUDIT_LIMIT = 100;
+
+  private void auditRoutes(RoutesConfig routes) {
+    routes.get(
+        API + "/audit",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.json(auditTrail.history(u, auditQuery(ctx)));
+        });
+  }
+
+  /** Every filter is optional; {@code action} may be repeated (ADR 0025). */
+  private static AuditQuery auditQuery(Context ctx) {
+    Set<AuditAction> actions =
+        ctx.queryParams("action").stream()
+            .filter(value -> !value.isBlank())
+            .map(AuditAction::valueOf)
+            .collect(Collectors.toSet());
+    return new AuditQuery(
+        optionalQuery(ctx, "actor").map(value -> new UserId(uuid(value, "actor"))),
+        optionalQuery(ctx, "resource").map(value -> new ItemId(uuid(value, "resource"))),
+        optionalQuery(ctx, "subject").map(value -> new UserId(uuid(value, "subject"))),
+        actions,
+        optionalQuery(ctx, "from").map(value -> instant(value, "from")),
+        optionalQuery(ctx, "to").map(value -> instant(value, "to")),
+        optionalQuery(ctx, "limit").map(Integer::valueOf).orElse(DEFAULT_AUDIT_LIMIT));
+  }
+
   /** Sends the content of an offline package as a file to save; its metadata is in the snapshot. */
   private static void sendAttachment(Context ctx, OfflinePackage pack) throws IOException {
     Path content = pack.content();
@@ -481,7 +519,10 @@ public final class RestApiAdapter {
   }
 
   private static Instant instantQuery(Context ctx, String name) {
-    String value = requiredQuery(ctx, name);
+    return instant(requiredQuery(ctx, name), name);
+  }
+
+  private static Instant instant(String value, String name) {
     try {
       return Instant.parse(value);
     } catch (DateTimeParseException e) {

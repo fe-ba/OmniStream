@@ -100,6 +100,7 @@ package "Primary adapters (presentation)" #EAF3F8 {
      - search : ISearch
      - accessControl : IAccessControl
      - sync : ISync
+     - auditTrail : IAuditTrail
      + registerRoutes(config : JavalinConfig) : void
      - authenticateRequest(ctx : Context) : SessionToken
      - sendStream(ctx : Context, f : MediaStream) : void
@@ -208,6 +209,9 @@ package "Driving ports (domain)" #E8F5E9 {
    interface IEventDispatch <<driving port>> {
      + publishPending(limit : int) : int
    }
+   interface IAuditTrail <<driving port>> {
+     + history(u : UserId, q : AuditQuery) : List<AuditEntry>
+   }
    interface IRuleManagement <<driving port>> #E8F5E9;line.dashed;line:999999 {
      + createRule(admin : UserId, c : ClassificationCriterion) : void
      + deleteRule(admin : UserId, name : String) : void
@@ -233,6 +237,12 @@ package "Domain services (see services diagram)" #FFF8E1 {
    }
    class SyncObserver <<observer>>
    ICatalogObserver <|.. SyncObserver
+   class AuditService <<domain service>>
+   abstract class AuditingDecorator <<decorator>>
+   class AuditedAccessControl <<decorator>>
+   class AuditedCatalogManagement <<decorator>>
+   class AuditedSearch <<decorator>>
+   class AuditedSync <<decorator>>
  }
 
  ICatalogManagement <|.. CatalogService
@@ -242,6 +252,15 @@ package "Domain services (see services diagram)" #FFF8E1 {
  ISync <|.. SyncService
  IEventDispatch <|.. EventDispatchService
  IRuleManagement <|.. ClassificationService
+ IAuditTrail <|.. AuditService
+ IAccessControl <|.. AuditedAccessControl
+ ICatalogManagement <|.. AuditedCatalogManagement
+ ISearch <|.. AuditedSearch
+ ISync <|.. AuditedSync
+ AuditedAccessControl --> IAccessControl : delegate (AccessService)
+ AuditedCatalogManagement --> ICatalogManagement : delegate (CatalogService)
+ AuditedSearch --> ISearch : delegate (SearchService)
+ AuditedSync --> ISync : delegate (SyncService)
 
  CliAdapter --> ICatalogManagement : invokes
  RestApiAdapter ..> ApiJson : configures JSON
@@ -251,6 +270,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  RestApiAdapter --> IPlayback : invokes
  RestApiAdapter --> IAccessControl : invokes
  RestApiAdapter --> ISync : invokes
+ RestApiAdapter --> IAuditTrail : invokes
  RestApiAdapter ..> IRuleManagement : invokes (2.0)
  SchedulerAdapter ..> ScheduledTask : fires
  ReindexTask --> ICatalogManagement : invokes
@@ -297,6 +317,10 @@ package "Driven ports (domain)" #F3E5F5 {
    }
    interface IUnitOfWork <<driven port>> {
      + execute(work : Supplier<T>) : T
+   }
+   interface IAuditLog <<driven port>> {
+     + append(e : AuditEntry) : void
+     + find(q : AuditQuery) : List<AuditEntry>
    }
    interface ITokenRepository <<driven port>> {
      + save(t : SessionToken) : void
@@ -379,6 +403,11 @@ AccessService ..> ICatalogRepository : reads collections for inherited access
  EventDispatchService ..> IEventPublisher : publishes events
  ClassificationService ..> IRuleRepository : reads / saves rules
  ClassificationService ..> ICatalogRepository : reclassifies the catalog
+ AuditService ..> IAuditLog : reads the trail
+ AuditingDecorator ..> IAuditLog : appends entries
+ AuditingDecorator ..> IUnitOfWork : change and entry together
+ AuditedAccessControl ..> IUserRepository : names failed logins
+ AuditedCatalogManagement ..> ICatalogRepository : keeps deleted file names
  IEventSubscriber ..> ICatalogObserver : registers
 
 ' ============================================================
@@ -396,6 +425,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      # sessionMapper : SessionMapper
      # sharedLinkMapper : SharedLinkMapper
      # eventMapper : EventMapper
+     # auditMapper : AuditEntryMapper
      # {abstract} connection() : Connection
      # {abstract} dumpDatabase(destination : Path) : Path
      - assembleCatalog(c : Connection) : CatalogSnapshot
@@ -522,6 +552,10 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      + toEvent(row : ResultSet) : DomainEvent
      + bind(statement : PreparedStatement, e : DomainEvent) : void
    }
+   class AuditEntryMapper <<mapper>> {
+     + toValue(row : ResultSet) : AuditEntry
+     + bind(statement : PreparedStatement, e : AuditEntry) : void
+   }
    class CriterionMapper <<mapper>> #F7F7F7;line.dashed;line:999999 {
      + toValue(row : ResultSet) : ClassificationCriterion
      + bind(statement : PreparedStatement, c : ClassificationCriterion) : void
@@ -576,6 +610,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
  IChangeLog <|.. JdbcPersistenceAdapter
  IOutboxRepository <|.. JdbcPersistenceAdapter
  IUnitOfWork <|.. JdbcPersistenceAdapter
+ IAuditLog <|.. JdbcPersistenceAdapter
  IDataBackup <|.. JdbcPersistenceAdapter
  IConfigurationRepository <|.. JdbcPersistenceAdapter
  IRuleRepository <|.. JdbcPersistenceAdapter
@@ -606,6 +641,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
  JdbcPersistenceAdapter ..> SessionMapper : uses
  JdbcPersistenceAdapter ..> SharedLinkMapper : uses
  JdbcPersistenceAdapter ..> EventMapper : uses
+ JdbcPersistenceAdapter ..> AuditEntryMapper : uses
  JdbcPersistenceAdapter ..> CriterionMapper : uses (2.0)
  EventBusAdapter ..> ICatalogObserver : notifies
 
@@ -637,6 +673,7 @@ package "Composition (bootstrap)" #FFFDE7 {
      + {abstract} createChangeLog() : IChangeLog
      + {abstract} createOutboxRepository() : IOutboxRepository
      + {abstract} createUnitOfWork() : IUnitOfWork
+     + {abstract} createAuditLog() : IAuditLog
      + {abstract} createDataBackup() : IDataBackup
      + {abstract} createConfigurationRepository() : IConfigurationRepository
      + {abstract} createTokenRepository() : ITokenRepository
@@ -656,6 +693,7 @@ package "Composition (bootstrap)" #FFFDE7 {
      + stop() : void
      - selectFactory(config : AppConfiguration) : InfrastructureFactory
      - decoratePorts() : void
+     - auditDrivingPorts() : void
      - buildIngestionChain() : IngestionStep
      - createServices() : void
      - createHttpServer() : Javalin
@@ -720,9 +758,11 @@ package "Composition (bootstrap)" #FFFDE7 {
  end note
 
  note bottom of IUnitOfWork
-   Only used when an operation touches two aggregates:
+   Used when an operation touches two aggregates:
    creating a user (User + local credential) and sharing
-   a collection (guest User + SharedLink).
+   a collection (guest User + SharedLink); and by the
+   audit decorators, so a change and its AuditEntry are
+   saved together. A nested call joins the running one.
  end note
 
  note bottom of IEventBus
@@ -741,7 +781,7 @@ package "Composition (bootstrap)" #FFFDE7 {
  end note
 
  note bottom of JdbcPersistenceAdapter
-   Implements the 9 persistence ports only once,
+   Implements the 10 persistence ports only once,
    with plain JDBC (ADR 0015). SQLite and PostgreSQL only
    change the connection and how the database is dumped
    for backups (Template Method).

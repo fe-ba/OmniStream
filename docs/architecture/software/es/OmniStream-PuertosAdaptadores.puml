@@ -100,6 +100,7 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      - busqueda : IBusqueda
      - controlAcceso : IControlAcceso
      - sincronizacion : ISincronizacion
+     - historialAuditoria : IHistorialAuditoria
      + registrarRutas(cfg : JavalinConfig) : void
      - autenticarPeticion(ctx : Context) : TokenSesion
      - enviarStream(ctx : Context, f : FlujoMultimedia) : void
@@ -208,6 +209,9 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
    interface IDespachoEventos <<driving port>> {
      + publicarPendientes(limite : int) : int
    }
+   interface IHistorialAuditoria <<driving port>> {
+     + historial(u : UsuarioId, q : ConsultaAuditoria) : List<EntradaAuditoria>
+   }
    interface IGestionReglas <<driving port>> #E8F5E9;line.dashed;line:999999 {
      + crearRegla(admin : UsuarioId, c : CriterioClasificacion) : void
      + eliminarRegla(admin : UsuarioId, nombre : String) : void
@@ -232,6 +236,12 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
      + alCambiarCatalogo(e : EventoDominio) : void
    }
    class ObservadorSincronizacion <<observer>>
+   class ServicioAuditoria <<domain service>>
+   abstract class DecoradorAuditoria <<decorator>>
+   class ControlAccesoAuditado <<decorator>>
+   class GestionCatalogoAuditada <<decorator>>
+   class BusquedaAuditada <<decorator>>
+   class SincronizacionAuditada <<decorator>>
    IObservadorCatalogo <|.. ObservadorSincronizacion
  }
 
@@ -242,6 +252,15 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  ISincronizacion <|.. ServicioSincronizacion
  IDespachoEventos <|.. ServicioDespachoEventos
  IGestionReglas <|.. ServicioClasificacion
+ IHistorialAuditoria <|.. ServicioAuditoria
+ IControlAcceso <|.. ControlAccesoAuditado
+ IGestionCatalogo <|.. GestionCatalogoAuditada
+ IBusqueda <|.. BusquedaAuditada
+ ISincronizacion <|.. SincronizacionAuditada
+ ControlAccesoAuditado --> IControlAcceso : delegado (ServicioAcceso)
+ GestionCatalogoAuditada --> IGestionCatalogo : delegado (ServicioCatalogo)
+ BusquedaAuditada --> IBusqueda : delegado (ServicioBusqueda)
+ SincronizacionAuditada --> ISincronizacion : delegado (ServicioSincronizacion)
 
  AdaptadorCLI --> IGestionCatalogo : invoca
  AdaptadorApiRest ..> JsonApi : configura el JSON
@@ -251,6 +270,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  AdaptadorApiRest --> IReproduccion : invoca
  AdaptadorApiRest --> IControlAcceso : invoca
  AdaptadorApiRest --> ISincronizacion : invoca
+ AdaptadorApiRest --> IHistorialAuditoria : invoca
  AdaptadorApiRest ..> IGestionReglas : invoca (2.0)
  AdaptadorProgramador ..> TareaProgramada : dispara
  TareaReindexar --> IGestionCatalogo : invoca
@@ -297,6 +317,10 @@ package "Puertos de salida (dominio)" #F3E5F5 {
    }
    interface IUnidadDeTrabajo <<driven port>> {
      + ejecutar(trabajo : Supplier<T>) : T
+   }
+   interface IRegistroAuditoria <<driven port>> {
+     + anexar(e : EntradaAuditoria) : void
+     + buscar(q : ConsultaAuditoria) : List<EntradaAuditoria>
    }
    interface IRepositorioTokens <<driven port>> {
      + guardar(t : TokenSesion) : void
@@ -379,6 +403,11 @@ ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredad
  ServicioDespachoEventos ..> IPublicadorEventos : publica eventos
  ServicioClasificacion ..> IRepositorioReglas : lee / guarda reglas
  ServicioClasificacion ..> IRepositorioCatalogo : reclasifica el catalogo
+ ServicioAuditoria ..> IRegistroAuditoria : lee el historial
+ DecoradorAuditoria ..> IRegistroAuditoria : anexa entradas
+ DecoradorAuditoria ..> IUnidadDeTrabajo : cambio y entrada juntos
+ ControlAccesoAuditado ..> IRepositorioUsuarios : nombra inicios fallidos
+ GestionCatalogoAuditada ..> IRepositorioCatalogo : conserva nombres borrados
  ISuscriptorEventos ..> IObservadorCatalogo : registra
 
 ' ============================================================
@@ -396,6 +425,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      # mapeadorSesion : MapeadorSesion
      # mapeadorEnlace : MapeadorEnlace
      # mapeadorEvento : MapeadorEvento
+     # mapeadorAuditoria : MapeadorEntradaAuditoria
      # {abstract} conexion() : Connection
      # {abstract} volcarBase(destino : Path) : Path
      - armarCatalogo(c : Connection) : InstantaneaCatalogo
@@ -522,6 +552,10 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
      + aEvento(fila : ResultSet) : EventoDominio
      + asignar(sentencia : PreparedStatement, e : EventoDominio) : void
    }
+   class MapeadorEntradaAuditoria <<mapper>> {
+     + aValor(fila : ResultSet) : EntradaAuditoria
+     + asignar(sentencia : PreparedStatement, e : EntradaAuditoria) : void
+   }
    class MapeadorCriterio <<mapper>> #F7F7F7;line.dashed;line:999999 {
      + aValor(fila : ResultSet) : CriterioClasificacion
      + asignar(sentencia : PreparedStatement, c : CriterioClasificacion) : void
@@ -576,6 +610,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
  IRegistroCambios <|.. AdaptadorPersistenciaJdbc
  IRepositorioOutbox <|.. AdaptadorPersistenciaJdbc
  IUnidadDeTrabajo <|.. AdaptadorPersistenciaJdbc
+ IRegistroAuditoria <|.. AdaptadorPersistenciaJdbc
  IRespaldoDatos <|.. AdaptadorPersistenciaJdbc
  IRepositorioConfiguracion <|.. AdaptadorPersistenciaJdbc
  IRepositorioReglas <|.. AdaptadorPersistenciaJdbc
@@ -606,6 +641,7 @@ package "Adaptadores secundarios (infraestructura)" #FCE4D6 {
  AdaptadorPersistenciaJdbc ..> MapeadorSesion : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorEnlace : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorEvento : utiliza
+ AdaptadorPersistenciaJdbc ..> MapeadorEntradaAuditoria : utiliza
  AdaptadorPersistenciaJdbc ..> MapeadorCriterio : utiliza (2.0)
  AdaptadorBusEventos ..> IObservadorCatalogo : notifica
 
@@ -637,6 +673,7 @@ package "Composicion (arranque)" #FFFDE7 {
      + {abstract} crearRegistroCambios() : IRegistroCambios
      + {abstract} crearRepositorioOutbox() : IRepositorioOutbox
      + {abstract} crearUnidadDeTrabajo() : IUnidadDeTrabajo
+     + {abstract} crearRegistroAuditoria() : IRegistroAuditoria
      + {abstract} crearRespaldoDatos() : IRespaldoDatos
      + {abstract} crearRepositorioConfiguracion() : IRepositorioConfiguracion
      + {abstract} crearRepositorioTokens() : IRepositorioTokens
@@ -656,6 +693,7 @@ package "Composicion (arranque)" #FFFDE7 {
      + detener() : void
      - seleccionarFabrica(cfg : ConfiguracionApp) : FabricaInfraestructura
      - decorarPuertos() : void
+     - auditarPuertosEntrada() : void
      - construirCadenaIngesta() : PasoIngesta
      - crearServicios() : void
      - crearServidorHttp() : Javalin
@@ -720,9 +758,11 @@ package "Composicion (arranque)" #FFFDE7 {
  end note
 
  note bottom of IUnidadDeTrabajo
-   Solo se usa cuando una operacion toca dos agregados:
+   Se usa cuando una operacion toca dos agregados:
    crear usuario (Usuario + credencial local) y compartir
-   coleccion (Usuario invitado + EnlaceCompartido).
+   coleccion (Usuario invitado + EnlaceCompartido); y en los
+   decoradores de auditoria, para guardar el cambio y su
+   EntradaAuditoria juntos. Una llamada anidada se une a la que corre.
  end note
 
  note bottom of IBusEventos
@@ -741,7 +781,7 @@ package "Composicion (arranque)" #FFFDE7 {
  end note
 
  note bottom of AdaptadorPersistenciaJdbc
-   Implementa una sola vez los 9 puertos de persistencia,
+   Implementa una sola vez los 10 puertos de persistencia,
    con JDBC directo (ADR 0015). SQLite y PostgreSQL solo
    cambian la conexion y el volcado de la base para el
    respaldo (Template Method).

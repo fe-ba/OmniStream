@@ -102,6 +102,8 @@ package "Acceso y seguridad" {
   usecase "Autorizar acceso\nal recurso"  as UC19 <<incluido>>
   usecase "Compartir coleccion"           as UC20
   usecase "Gestionar usuarios\ny roles"   as UC21 <<admin>>
+  usecase "Gestionar acceso\na una coleccion" as UC28
+  usecase "Consultar historial\nde cambios"  as UC29
 }
 
 ' ============================================================
@@ -137,6 +139,8 @@ Usuario --> UC12
 Usuario --> UC16
 Usuario --> UC18
 Usuario --> UC20
+Usuario --> UC28
+Usuario --> UC29
 
 Invitado --> UC10
 Invitado --> UC12
@@ -148,6 +152,7 @@ Admin --> UC23
 Admin --> UC24
 Admin --> UC26
 Admin --> UC27
+Admin --> UC29
 
 ' ============================================================
 ' ASOCIACIONES - ACTORES SECUNDARIOS
@@ -178,6 +183,8 @@ UC12 ..> UC19 : <<include>>
 UC12 ..> UC15 : <<include>>
 UC16 ..> UC19 : <<include>>
 UC20 ..> UC19 : <<include>>
+UC28 ..> UC19 : <<include>>
+UC29 ..> UC19 : <<include>>
 
 ' ============================================================
 ' EXTEND  (condicional, con su condicion de guarda)

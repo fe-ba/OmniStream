@@ -164,3 +164,22 @@ without ranges, starting at the session's position.
 | `GET /files/{id}/offline` | `cacheContent` | user | | 200, the file as an attachment; its metadata is in the file's snapshot |
 
 `IEventDispatch` has no route: the scheduler calls it.
+
+### Audit trail (`IAuditTrail`, ADR 0025)
+
+| Method and path | Port method | Who | Request | Response |
+|---|---|---|---|---|
+| `GET /audit` | `history` | admin: any query; anyone else: only with `resource`, on something they can see | query string below | 200 list of `AuditEntry`, newest first |
+
+Every filter is optional: `actor`, `resource` and `subject` (identifiers),
+`action` (an `AuditAction`, repeatable: `?action=FILE_ADDED&action=FILE_DELETED`),
+`from` (included) and `to` (excluded) as ISO-8601 instants, and `limit` (1 to
+500, 100 when left out). `?resource=<id>` alone is the history of a file or a
+collection.
+
+`AuditEntry` is `{"id", "at", "actor", "action", "resource", "subject",
+"detail"}`; `resource` and `subject` are `null` when they do not apply, and
+`detail` is `""` when there is nothing to add. The trail only records what
+changes something or matters for security: logins, links, users and
+permissions, files and collections, and the administration of the library.
+Browsing, searching and playing are not recorded.

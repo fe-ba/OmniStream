@@ -57,6 +57,8 @@ skinparam class {
   BorderColor<<dto>>                     #C4A868
   BackgroundColor<<command>>             #FCF4E0
   BorderColor<<command>>                 #C4A868
+  BackgroundColor<<decorator>>           #E4F4E4
+  BorderColor<<decorator>>               #6FA86F
   BackgroundColor<<event>>               #ECE4F8
   BorderColor<<event>>                   #9673A6
   BackgroundColor<<aggregate root>>      #FFE8B5
@@ -336,6 +338,64 @@ package "Synchronization and events" {
 }
 
 ' ============================================================
+' AUDIT TRAIL (Decorator, ADR 0025)
+' ============================================================
+package "Audit trail" {
+
+  class AuditService <<domain service>> {
+    - auditLog : IAuditLog
+    __
+    + history(u : UserId, q : AuditQuery) : List<AuditEntry>
+  }
+
+  abstract class AuditingDecorator <<decorator>> {
+    # auditLog : IAuditLog
+    # unitOfWork : IUnitOfWork
+    # clock : Clock
+    __
+    # audited(call : Supplier<T>, describe : Function<T, Optional<AuditEntry>>) : T
+    # audited(call : Runnable, describe : Supplier<AuditEntry>) : void
+    # record(e : AuditEntry) : void
+    # entry(actor : UserId, action : AuditAction) : AuditEntry
+  }
+
+  class AuditedAccessControl <<decorator>> {
+    - delegate : IAccessControl
+    - userRepository : IUserRepository
+  }
+
+  class AuditedCatalogManagement <<decorator>> {
+    - delegate : ICatalogManagement
+    - catalogRepository : ICatalogRepository
+  }
+
+  class AuditedSearch <<decorator>> {
+    - delegate : ISearch
+  }
+
+  class AuditedSync <<decorator>> {
+    - delegate : ISync
+  }
+
+  note bottom of AuditingDecorator
+    **Decorator pattern (audit):** each decorator
+    implements the same driving port as the service it
+    wraps and passes every call on to it. When the call
+    changes something, it records an AuditEntry in the
+    same unit of work; if the call throws, nothing is
+    recorded. Reads are passed on untouched.
+    CompositionRoot hands the primary adapters the
+    decorators, so the services know nothing about it.
+  end note
+
+  note bottom of AuditService
+    Reads the trail. Administrators read all of it;
+    anyone else only the history of a file or
+    collection they can see.
+  end note
+}
+
+' ============================================================
 ' PLAYBACK
 ' ============================================================
 package "Playback" {
@@ -394,6 +454,7 @@ package "Model (see domain diagram)" {
   class PlaybackSession <<aggregate root>>
   abstract class DomainEvent <<event>>
   abstract class CatalogEvent <<event>>
+  class AuditEntry <<value object>>
 }
 
 ' ============================================================
@@ -413,6 +474,20 @@ package "Port DTOs and commands" {
   class OidcCredentials <<dto>> #FCF4E0;line.dashed;line:999999 {
     + externalToken : String
     + issuer : URI
+  }
+
+  class AuditQuery <<dto>> {
+    + actor : Optional<UserId>
+    + resource : Optional<ItemId>
+    + subject : Optional<UserId>
+    + actions : Set<AuditAction>
+    + from : Optional<Instant>
+    + to : Optional<Instant>
+    + limit : int
+    __
+    + {static} latest(limit : int) : AuditQuery
+    + about(resource : ItemId) : AuditQuery
+    + matches(e : AuditEntry) : boolean
   }
 
   class AccessGrant <<dto>> {
@@ -497,6 +572,7 @@ AuthorizedService <|-- SearchService
 AuthorizedService <|-- SyncService
 AuthorizedService <|-- PlaybackService
 AuthorizedService <|-- ClassificationService
+AuthorizedService <|-- AuditService
 AuthorizedService --> "1" AccessPolicy : accessPolicy
 AuthorizedService ..> User : <<loads>>
 
@@ -544,6 +620,16 @@ EventDispatchService ..> DomainEvent : <<publishes>>
 SyncService ..> SyncDelta : <<delivers>>
 
 ' ============================================================
+' RELATIONS - AUDIT TRAIL (Decorator)
+' ============================================================
+AuditingDecorator <|-- AuditedAccessControl
+AuditingDecorator <|-- AuditedCatalogManagement
+AuditingDecorator <|-- AuditedSearch
+AuditingDecorator <|-- AuditedSync
+AuditingDecorator ..> AuditEntry : <<records>>
+AuditService ..> AuditQuery : <<answers>>
+
+' ============================================================
 ' RELATIONS - PLAYBACK (stream Strategy)
 ' ============================================================
 PlaybackService ..> PlaybackSession : <<controls>>
@@ -569,6 +655,9 @@ note as PortsNote
   SyncService          -> ISync
   EventDispatchService -> IEventDispatch
   ClassificationService   -> IRuleManagement (2.0)
+  AuditService         -> IAuditTrail
+  Each Audited* decorator implements the port of
+  the service it wraps.
   The public methods of each service are exactly
   those of its port.
 end note

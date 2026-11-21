@@ -14,6 +14,7 @@ import co.omnistream.domain.model.catalog.Tag;
 import co.omnistream.domain.model.catalog.TagSource;
 import co.omnistream.domain.port.dto.CollectionCommand;
 import co.omnistream.domain.port.dto.SearchCriteria;
+import co.omnistream.domain.port.in.IAuditTrail;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -39,7 +40,8 @@ class RestApiSearchTest {
             Unused.port(IPlayback.class),
             search.port(),
             new FakeAccessControl(),
-            Unused.port(ISync.class));
+            Unused.port(ISync.class),
+            Unused.port(IAuditTrail.class));
     return Javalin.create(adapter::registerRoutes);
   }
 

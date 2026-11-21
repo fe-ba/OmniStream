@@ -258,6 +258,31 @@ package "Agregado Enlace compartido" {
 }
 
 ' ============================================================
+' HISTORIAL DE AUDITORIA    se escribe una vez, nunca cambia (ADR 0025)
+' ============================================================
+package "Historial de auditoria" {
+
+  class EntradaAuditoria <<value object>> {
+    + id : EntradaAuditoriaId
+    + en : Instant
+    + actor : UsuarioId
+    + accion : AccionAuditoria
+    + recurso : Optional<ElementoId>
+    + sujeto : Optional<UsuarioId>
+    + detalle : String
+    __
+    + {static} de(actor : UsuarioId, accion : AccionAuditoria, en : Instant) : EntradaAuditoria
+    + sobre(recurso : ElementoId) : EntradaAuditoria
+    + referidaA(sujeto : UsuarioId) : EntradaAuditoria
+    + diciendo(detalle : String) : EntradaAuditoria
+  }
+
+  class EntradaAuditoriaId <<value object>> {
+    - valor : UUID
+  }
+}
+
+' ============================================================
 ' AGREGADO  REPRODUCCION    raiz: SesionReproduccion
 ' ============================================================
 package "Agregado Reproduccion" {
@@ -457,7 +482,7 @@ package "Politicas de dominio" {
   class PoliticaAcceso <<policy>> {
     + autoriza(u : Usuario, recurso : ElementoId, acceso : TipoAcceso) : boolean
     + nivelEfectivo(u : Usuario, recurso : ElementoId) : Optional<NivelPermiso>
-    + puedeDelegar(otorgante : Usuario, nivelHeredado : Optional<NivelPermiso>, destino : Usuario, p : Permiso) : boolean
+    + puedeDelegar(otorgante : Usuario, nivelHeredado : Optional<NivelPermiso>, obj : Usuario, p : Permiso) : boolean
   }
 }
 
@@ -521,6 +546,28 @@ package "Enumerados" {
     AGREGADO
     MODIFICADO
     ELIMINADO
+  }
+  enum AccionAuditoria {
+    INICIO_SESION
+    INICIO_FALLIDO
+    CIERRE_SESION
+    ENLACE_CREADO
+    ENLACE_USADO
+    USUARIO_CREADO
+    ROL_CAMBIADO
+    PERMISO_OTORGADO
+    PERMISO_REVOCADO
+    USUARIO_DESACTIVADO
+    ARCHIVO_AGREGADO
+    ARCHIVO_ELIMINADO
+    METADATO_EDITADO
+    ARCHIVO_ETIQUETADO
+    COLECCION_CREADA
+    COLECCION_MODIFICADA
+    ARCHIVO_DESCARGADO
+    BIBLIOTECA_REINDEXADA
+    RUTA_BIBLIOTECA_CAMBIADA
+    RESPALDO_CREADO
   }
 }
 
@@ -619,6 +666,14 @@ ExcepcionDominio <|-- ConflictoDeVersion
 ' ============================================================
 PoliticaDeduplicacion ..> CatalogoIndice : evalua
 PoliticaAcceso        ..> Usuario        : evalua
+
+' ============================================================
+' RELACIONES  -  HISTORIAL DE AUDITORIA
+' ============================================================
+EntradaAuditoria --> "1" EntradaAuditoriaId : id
+EntradaAuditoria ..> AccionAuditoria : accion
+EntradaAuditoria ..> UsuarioId : actor, sujeto
+EntradaAuditoria ..> ElementoId : recurso
 
 ' ============================================================
 ' NOTAS DE DISENO

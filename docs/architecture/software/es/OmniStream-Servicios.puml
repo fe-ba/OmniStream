@@ -57,6 +57,8 @@ skinparam class {
   BorderColor<<dto>>                     #C4A868
   BackgroundColor<<command>>             #FCF4E0
   BorderColor<<command>>                 #C4A868
+  BackgroundColor<<decorator>>           #E4F4E4
+  BorderColor<<decorator>>               #6FA86F
   BackgroundColor<<event>>               #ECE4F8
   BorderColor<<event>>                   #9673A6
   BackgroundColor<<aggregate root>>      #FFE8B5
@@ -336,6 +338,64 @@ package "Sincronizacion y eventos" {
 }
 
 ' ============================================================
+' HISTORIAL DE AUDITORIA (Decorator, ADR 0025)
+' ============================================================
+package "Historial de auditoria" {
+
+  class ServicioAuditoria <<domain service>> {
+    - registroAuditoria : IRegistroAuditoria
+    __
+    + historial(u : UsuarioId, q : ConsultaAuditoria) : List<EntradaAuditoria>
+  }
+
+  abstract class DecoradorAuditoria <<decorator>> {
+    # registroAuditoria : IRegistroAuditoria
+    # unidadDeTrabajo : IUnidadDeTrabajo
+    # reloj : Clock
+    __
+    # auditado(llamada : Supplier<T>, describir : Function<T, Optional<EntradaAuditoria>>) : T
+    # auditado(llamada : Runnable, describir : Supplier<EntradaAuditoria>) : void
+    # anotar(e : EntradaAuditoria) : void
+    # entrada(actor : UsuarioId, accion : AccionAuditoria) : EntradaAuditoria
+  }
+
+  class ControlAccesoAuditado <<decorator>> {
+    - delegado : IControlAcceso
+    - repositorioUsuarios : IRepositorioUsuarios
+  }
+
+  class GestionCatalogoAuditada <<decorator>> {
+    - delegado : IGestionCatalogo
+    - repositorioCatalogo : IRepositorioCatalogo
+  }
+
+  class BusquedaAuditada <<decorator>> {
+    - delegado : IBusqueda
+  }
+
+  class SincronizacionAuditada <<decorator>> {
+    - delegado : ISincronizacion
+  }
+
+  note bottom of DecoradorAuditoria
+    **Patron Decorator (auditoria):** cada decorador
+    implementa el mismo puerto de entrada que el servicio
+    que envuelve y le pasa cada llamada. Si la llamada
+    cambia algo, registra una EntradaAuditoria en la misma
+    unidad de trabajo; si la llamada lanza, no registra
+    nada. Las lecturas pasan sin tocarse.
+    ComposicionRaiz entrega los decoradores a los
+    adaptadores primarios: los servicios no se enteran.
+  end note
+
+  note bottom of ServicioAuditoria
+    Lee el historial. Los administradores lo leen
+    completo; los demas, solo la historia de un archivo
+    o coleccion que pueden ver.
+  end note
+}
+
+' ============================================================
 ' REPRODUCCION
 ' ============================================================
 package "Reproduccion" {
@@ -394,6 +454,7 @@ package "Modelo (ver diagrama de dominio)" {
   class SesionReproduccion <<aggregate root>>
   abstract class EventoDominio <<event>>
   abstract class EventoCatalogo <<event>>
+  class EntradaAuditoria <<value object>>
 }
 
 ' ============================================================
@@ -415,8 +476,22 @@ package "DTOs y comandos de los puertos" {
     + emisor : URI
   }
 
+  class ConsultaAuditoria <<dto>> {
+    + actor : Optional<UsuarioId>
+    + recurso : Optional<ElementoId>
+    + sujeto : Optional<UsuarioId>
+    + acciones : Set<AccionAuditoria>
+    + inicio : Optional<Instant>
+    + fin : Optional<Instant>
+    + limite : int
+    __
+    + {static} ultimas(limite : int) : ConsultaAuditoria
+    + sobre(recurso : ElementoId) : ConsultaAuditoria
+    + coincide(e : EntradaAuditoria) : boolean
+  }
+
   class ConcesionAcceso <<dto>> {
-    + usuario : UsuarioId
+    + titular : UsuarioId
     + nombreUsuario : String
     + nivel : NivelPermiso
   }
@@ -497,6 +572,7 @@ ServicioAutorizado <|-- ServicioBusqueda
 ServicioAutorizado <|-- ServicioSincronizacion
 ServicioAutorizado <|-- ServicioReproduccion
 ServicioAutorizado <|-- ServicioClasificacion
+ServicioAutorizado <|-- ServicioAuditoria
 ServicioAutorizado --> "1" PoliticaAcceso : politicaAcceso
 ServicioAutorizado ..> Usuario : <<carga>>
 
@@ -552,6 +628,16 @@ EstrategiaStream <|.. StreamDirecto
 EstrategiaStream <|.. StreamTranscodificado
 
 ' ============================================================
+' RELACIONES - HISTORIAL DE AUDITORIA (Decorator)
+' ============================================================
+DecoradorAuditoria <|-- ControlAccesoAuditado
+DecoradorAuditoria <|-- GestionCatalogoAuditada
+DecoradorAuditoria <|-- BusquedaAuditada
+DecoradorAuditoria <|-- SincronizacionAuditada
+DecoradorAuditoria ..> EntradaAuditoria : <<registra>>
+ServicioAuditoria ..> ConsultaAuditoria : <<responde>>
+
+' ============================================================
 ' RELACIONES - DTOS
 ' ============================================================
 Credenciales <|-- CredencialesLocales
@@ -569,6 +655,9 @@ note as NotaPuertos
   ServicioSincronizacion  -> ISincronizacion
   ServicioDespachoEventos -> IDespachoEventos
   ServicioClasificacion   -> IGestionReglas (2.0)
+  ServicioAuditoria       -> IHistorialAuditoria
+  Cada decorador *Auditado/a implementa el puerto
+  del servicio que envuelve.
   Los metodos publicos de cada servicio son exactamente
   los de su puerto.
 end note

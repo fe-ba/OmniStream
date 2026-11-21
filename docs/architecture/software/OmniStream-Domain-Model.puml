@@ -258,6 +258,31 @@ package "Shared link aggregate" {
 }
 
 ' ============================================================
+' AUDIT TRAIL    written once, never changed (ADR 0025)
+' ============================================================
+package "Audit trail" {
+
+  class AuditEntry <<value object>> {
+    + id : AuditEntryId
+    + at : Instant
+    + actor : UserId
+    + action : AuditAction
+    + resource : Optional<ItemId>
+    + subject : Optional<UserId>
+    + detail : String
+    __
+    + {static} of(actor : UserId, action : AuditAction, at : Instant) : AuditEntry
+    + about(resource : ItemId) : AuditEntry
+    + concerning(subject : UserId) : AuditEntry
+    + saying(detail : String) : AuditEntry
+  }
+
+  class AuditEntryId <<value object>> {
+    - value : UUID
+  }
+}
+
+' ============================================================
 ' PLAYBACK AGGREGATE    root: PlaybackSession
 ' ============================================================
 package "Playback aggregate" {
@@ -522,6 +547,28 @@ package "Enumerations" {
     MODIFIED
     REMOVED
   }
+  enum AuditAction {
+    LOGGED_IN
+    LOGIN_FAILED
+    LOGGED_OUT
+    LINK_CREATED
+    LINK_USED
+    USER_CREATED
+    ROLE_CHANGED
+    PERMISSION_GRANTED
+    PERMISSION_REVOKED
+    USER_DEACTIVATED
+    FILE_ADDED
+    FILE_DELETED
+    METADATA_EDITED
+    FILE_TAGGED
+    COLLECTION_CREATED
+    COLLECTION_MODIFIED
+    FILE_DOWNLOADED
+    LIBRARY_REINDEXED
+    LIBRARY_PATH_CHANGED
+    BACKUP_CREATED
+  }
 }
 
 ' ============================================================
@@ -619,6 +666,14 @@ DomainException <|-- VersionConflict
 ' ============================================================
 DeduplicationPolicy ..> CatalogIndex : evaluates
 AccessPolicy        ..> User        : evaluates
+
+' ============================================================
+' RELATIONS  -  AUDIT TRAIL
+' ============================================================
+AuditEntry --> "1" AuditEntryId : id
+AuditEntry ..> AuditAction : action
+AuditEntry ..> UserId : actor, subject
+AuditEntry ..> ItemId : resource
 
 ' ============================================================
 ' DESIGN NOTES

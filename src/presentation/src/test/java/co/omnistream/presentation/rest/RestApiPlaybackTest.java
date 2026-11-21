@@ -11,6 +11,7 @@ import co.omnistream.domain.model.playback.SessionId;
 import co.omnistream.domain.model.playback.SessionStatus;
 import co.omnistream.domain.port.dto.MediaStream;
 import co.omnistream.domain.port.dto.StreamProfile;
+import co.omnistream.domain.port.in.IAuditTrail;
 import co.omnistream.domain.port.in.ICatalogManagement;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
@@ -42,7 +43,8 @@ class RestApiPlaybackTest {
             playback.port(),
             Unused.port(ISearch.class),
             new FakeAccessControl(),
-            Unused.port(ISync.class));
+            Unused.port(ISync.class),
+            Unused.port(IAuditTrail.class));
     return Javalin.create(adapter::registerRoutes);
   }
 

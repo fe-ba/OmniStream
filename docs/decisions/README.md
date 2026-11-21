@@ -32,6 +32,7 @@ decision changes, a new ADR supersedes the old one.
 | [0022](0022-configuration-from-properties-and-environment.md) | Configuration from a properties file and the environment | Accepted |
 | [0023](0023-rest-api-contract.md) | REST API contract | Accepted |
 | [0024](0024-delegate-permissions-per-collection.md) | Delegate permissions per collection | Accepted |
+| [0025](0025-audit-trail-with-decorators.md) | Audit trail with decorators | Accepted |
 
 ## Adding an ADR
 

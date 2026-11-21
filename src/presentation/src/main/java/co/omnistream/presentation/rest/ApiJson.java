@@ -1,6 +1,7 @@
 package co.omnistream.presentation.rest;
 
 import co.omnistream.domain.model.access.UserId;
+import co.omnistream.domain.model.audit.AuditEntryId;
 import co.omnistream.domain.model.catalog.CatalogId;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.model.playback.SessionId;
@@ -68,6 +69,7 @@ public final class ApiJson {
     identifier(module, SessionId.class, SessionId::value, SessionId::new);
     identifier(module, SharedLinkId.class, SharedLinkId::value, SharedLinkId::new);
     identifier(module, CatalogId.class, CatalogId::value, CatalogId::new);
+    identifier(module, AuditEntryId.class, AuditEntryId::value, AuditEntryId::new);
     module.addSerializer(Duration.class, new DurationSerializer());
     module.addDeserializer(Duration.class, new DurationDeserializer());
     module.addSerializer(Path.class, new PathSerializer());

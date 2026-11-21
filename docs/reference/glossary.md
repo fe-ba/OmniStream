@@ -21,6 +21,17 @@ below.
 | `ErroresApi` | `ApiErrors` | Ports and adapters |
 | `JsonApi` | `ApiJson` | Ports and adapters |
 | `ConfiguracionApp` | `AppConfiguration` | Ports and adapters |
+| `AccionAuditoria` | `AuditAction` | Domain model |
+| `EntradaAuditoria` | `AuditEntry` | Domain model |
+| `EntradaAuditoriaId` | `AuditEntryId` | Domain model |
+| `MapeadorEntradaAuditoria` | `AuditEntryMapper` | Ports and adapters |
+| `ConsultaAuditoria` | `AuditQuery` | Services |
+| `ServicioAuditoria` | `AuditService` | Services |
+| `ControlAccesoAuditado` | `AuditedAccessControl` | Services |
+| `GestionCatalogoAuditada` | `AuditedCatalogManagement` | Services |
+| `BusquedaAuditada` | `AuditedSearch` | Services |
+| `SincronizacionAuditada` | `AuditedSync` | Services |
+| `DecoradorAuditoria` | `AuditingDecorator` | Services |
 | `ServicioAutorizado` | `AuthorizedService` | Services |
 | `TareaRespaldar` | `BackupTask` | Ports and adapters |
 | `RepositorioCatalogoConCache` | `CachedCatalogRepository` | Ports and adapters |
@@ -72,6 +83,8 @@ below.
 | `ArchivoRechazado` | `FileRejected` | Domain model |
 | `HuellaDigital` | `Fingerprint` | Domain model |
 | `IControlAcceso` | `IAccessControl` | Ports and adapters |
+| `IRegistroAuditoria` | `IAuditLog` | Ports and adapters |
+| `IHistorialAuditoria` | `IAuditTrail` | Ports and adapters |
 | `IGestionCatalogo` | `ICatalogManagement` | Ports and adapters |
 | `IObservadorCatalogo` | `ICatalogObserver` | Services |
 | `IRepositorioCatalogo` | `ICatalogRepository` | Ports and adapters |
@@ -193,8 +206,21 @@ below.
 | `otorgante` | `granter` | Who gives or takes a permission: `grantPermission(granter, ...)`, `revokePermission(granter, ...)` |
 | `puedeDelegar()` | `mayDelegate()` | `AccessPolicy` |
 | `nivelHeredado` | `inheritedLevel` | Level reached through the collections that contain a resource |
+| `titular` | `user` | Field of `AccessGrant`: who holds the permission |
 | `accesoA()` | `accessTo()` | Access list of a resource |
 | `listarUsuarios()` / `buscarUsuario()` / `buscarTodos()` | `listUsers()` / `findUser()` / `findAll()` | Administration and user lookup |
+
+## Audit trail (ADR 0025)
+
+| Spanish | English | Where |
+|---|---|---|
+| `de()` / `sobre()` / `referidaA()` / `diciendo()` | `of()` / `about()` / `concerning()` / `saying()` | Building an `AuditEntry` |
+| `en` / `actor` / `sujeto` / `detalle` | `at` / `actor` / `subject` / `detail` | Parts of an `AuditEntry` |
+| `inicio` / `fin` / `limite` / `ultimas()` / `coincide()` | `from` / `to` / `limit` / `latest()` / `matches()` | `AuditQuery` |
+| `anexar()` / `historial()` | `append()` / `history()` | `IAuditLog`, `IAuditTrail` |
+| `auditado()` / `anotar()` / `entrada()` / `delegado` | `audited()` / `record()` / `entry()` / `delegate` | `AuditingDecorator` and its subclasses |
+| `auditarPuertosEntrada()` / `crearRegistroAuditoria()` | `auditDrivingPorts()` / `createAuditLog()` | Composition |
+| `Gestionar acceso a una coleccion` (UC28) / `Consultar historial de cambios` (UC29) | `Manage access to a collection` / `Review change history` | Use cases |
 
 ## Recurring member names
 
@@ -242,5 +268,13 @@ below.
 | `CONTIENE` | `CONTAINS` |
 | `MAYOR_QUE` | `GREATER_THAN` |
 | `MENOR_QUE` | `LESS_THAN` |
+| `INICIO_SESION` / `INICIO_FALLIDO` / `CIERRE_SESION` | `LOGGED_IN` / `LOGIN_FAILED` / `LOGGED_OUT` |
+| `ENLACE_CREADO` / `ENLACE_USADO` | `LINK_CREATED` / `LINK_USED` |
+| `USUARIO_CREADO` / `ROL_CAMBIADO` / `USUARIO_DESACTIVADO` | `USER_CREATED` / `ROLE_CHANGED` / `USER_DEACTIVATED` |
+| `PERMISO_OTORGADO` / `PERMISO_REVOCADO` | `PERMISSION_GRANTED` / `PERMISSION_REVOKED` |
+| `ARCHIVO_AGREGADO` / `ARCHIVO_ELIMINADO` / `ARCHIVO_ETIQUETADO` / `ARCHIVO_DESCARGADO` | `FILE_ADDED` / `FILE_DELETED` / `FILE_TAGGED` / `FILE_DOWNLOADED` |
+| `METADATO_EDITADO` | `METADATA_EDITED` |
+| `COLECCION_CREADA` / `COLECCION_MODIFICADA` | `COLLECTION_CREATED` / `COLLECTION_MODIFIED` |
+| `BIBLIOTECA_REINDEXADA` / `RUTA_BIBLIOTECA_CAMBIADA` / `RESPALDO_CREADO` | `LIBRARY_REINDEXED` / `LIBRARY_PATH_CHANGED` / `BACKUP_CREATED` |
 
 Constants not listed (`VIDEO`, `AUDIO`, `ERROR`, `MANUAL`) are the same in both languages.

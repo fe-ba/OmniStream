@@ -102,6 +102,8 @@ package "Access and security" {
   usecase "Authorize resource\naccess"      as UC19 <<included>>
   usecase "Share collection"                as UC20
   usecase "Manage users\nand roles"         as UC21 <<admin>>
+  usecase "Manage access\nto a collection"  as UC28
+  usecase "Review change\nhistory"           as UC29
 }
 
 ' ============================================================
@@ -137,6 +139,8 @@ User --> UC12
 User --> UC16
 User --> UC18
 User --> UC20
+User --> UC28
+User --> UC29
 
 Guest --> UC10
 Guest --> UC12
@@ -148,6 +152,7 @@ Admin --> UC23
 Admin --> UC24
 Admin --> UC26
 Admin --> UC27
+Admin --> UC29
 
 ' ============================================================
 ' ASSOCIATIONS - SECONDARY ACTORS
@@ -178,6 +183,8 @@ UC12 ..> UC19 : <<include>>
 UC12 ..> UC15 : <<include>>
 UC16 ..> UC19 : <<include>>
 UC20 ..> UC19 : <<include>>
+UC28 ..> UC19 : <<include>>
+UC29 ..> UC19 : <<include>>
 
 ' ============================================================
 ' EXTEND  (conditional, with its guard condition)

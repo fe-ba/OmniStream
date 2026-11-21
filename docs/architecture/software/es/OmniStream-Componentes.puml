@@ -89,6 +89,7 @@ rectangle "Puertos de entrada" <<dominio>> {
   interface "IControlAcceso"   as PIN_ACC
   interface "ISincronizacion"  as PIN_SIN
   interface "IDespachoEventos" as PIN_DES
+  interface "IHistorialAuditoria" as PIN_AUD
   interface "IGestionReglas"   as PIN_REG #FFFFFF;line.dashed;line:999999
 }
 
@@ -106,6 +107,8 @@ rectangle "Dominio" <<dominio>> {
     component "Servicio de Despacho de Eventos\n..\npublicarPendientes()"                                   as SvDes
     component "Observador de Sincronizacion\n<<observer>>\n..\nalCambiarCatalogo()"                         as SvObs
     component "Servicio de Clasificacion\n..\ncrearRegla()\nreclasificarBiblioteca()"                      as SvCla #FFFFFF;line.dashed;line:999999
+    component "Servicio de Auditoria\n..\nhistorial()"                                         as SvAud
+    component "Decoradores de auditoria\n<<decorator>>\n..\nregistran cada cambio"           as DecAud
   }
 
   rectangle "Modelo de dominio" <<modelo>> {
@@ -121,6 +124,7 @@ rectangle "Dominio" <<dominio>> {
     component "SesionReproduccion\n<<aggregate root>>"   as EnSesion
     component "Eventos de dominio\n<<event>>"            as EnEventos
     component "Politicas de dominio\n<<policy>>"         as EnReglas
+    component "EntradaAuditoria\n<<value object>>"     as EnAuditoria
   }
 }
 
@@ -135,6 +139,7 @@ rectangle "Puertos de salida" <<dominio>> {
   interface "IRegistroCambios"        as POUT_CAMB
   interface "IRepositorioOutbox"      as POUT_OUT
   interface "IUnidadDeTrabajo"        as POUT_UOW
+  interface "IRegistroAuditoria"      as POUT_AUD
   interface "IRepositorioTokens"      as POUT_TOK
   interface "IAlmacenamientoArchivos" as POUT_FS
   interface "IExtractorMetadatos"     as POUT_META
@@ -194,6 +199,7 @@ AdApi    ..> PIN_REP
 AdApi    ..> PIN_ACC
 AdApi    ..> PIN_SIN
 AdApi    ..> PIN_REG
+AdApi    ..> PIN_AUD
 AdCli    ..> PIN_CAT
 AdProg   ..> PIN_CAT : reindexar / respaldar
 AdProg   ..> PIN_DES : sincronizar
@@ -208,6 +214,7 @@ SvAcc -up- PIN_ACC
 SvSin -up- PIN_SIN
 SvDes -up- PIN_DES
 SvCla -up- PIN_REG
+SvAud -up- PIN_AUD
 
 ' ============================================================
 ' SERVICIOS -> MODELO DE DOMINIO
@@ -221,6 +228,12 @@ SvObs --> EnEventos : recibe
 SvDes --> EnEventos : publica
 SvCat --> EnClasif : clasifica al ingerir
 SvCla --> EnClasif
+SvAud --> EnAuditoria
+DecAud --> EnAuditoria : registra
+DecAud ..> SvAcc : envuelve
+DecAud ..> SvCat : envuelve
+DecAud ..> SvBus : envuelve
+DecAud ..> SvSin : envuelve
 
 ' --- relaciones internas del modelo ---
 EnCatalogo *-- EnArchivo
@@ -264,6 +277,9 @@ SvDes ..> POUT_OUT
 SvDes ..> POUT_PUB
 SvCla ..> POUT_REG
 SvCla ..> POUT_REPO
+SvAud ..> POUT_AUD
+DecAud ..> POUT_AUD
+DecAud ..> POUT_UOW
 
 ' ============================================================
 ' ADAPTADORES -- PUERTOS DE SALIDA  (implementa)
@@ -275,6 +291,7 @@ AdRepo  -up- POUT_ENL
 AdRepo  -up- POUT_CAMB
 AdRepo  -up- POUT_OUT
 AdRepo  -up- POUT_UOW
+AdRepo  -up- POUT_AUD
 AdRepo  -up- POUT_RESP
 AdRepo  -up- POUT_CONF
 AdRepo  -up- POUT_REG
