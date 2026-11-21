@@ -112,13 +112,13 @@ and the desktop app, which run on that machine, call it.
 
 | Method and path | Port method | Who | Request | Response |
 |---|---|---|---|---|
-| `GET /search?q=text` | `searchContent` | user | | 200 `[CatalogItemSnapshot]` |
+| `GET /search?q=text` | `searchContent` | user | `q` required | 200 `[CatalogItemSnapshot]` |
 | `GET /files?text=&type=VIDEO&tag=jazz&tag=live` | `filterByCriteria` | user | every parameter optional | 200 `[MediaFileSnapshot]` |
 | `GET /library` | `browseLibrary(u)` | user | | 200 `[CatalogItemSnapshot]`, the top level: what is not inside any collection |
 | `GET /collections/{id}/items` | `browseLibrary(u, col)` | user | | 200 `[CatalogItemSnapshot]` |
-| `POST /collections` | `manageCollections` | user | `{"name", "itemsToAdd": [ids]}` | 201 `CollectionSnapshot` |
+| `POST /collections` | `manageCollections` | user | `{"name", "itemsToAdd"?: [ids]}` | 201 `CollectionSnapshot` |
 | `PATCH /collections/{id}` | `manageCollections` | user | `{"name"?, "itemsToAdd"?}` | 200 `CollectionSnapshot` |
-| `POST /files/{id}/tags` | `tagFile` | user | `{"name": "jazz"}` | 204 |
+| `POST /files/{id}/tags` | `tagFile` | user | `{"name": "jazz"}`; the tag is `MANUAL` | 204 |
 
 ### Playback (`IPlayback`)
 

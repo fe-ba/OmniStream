@@ -426,16 +426,16 @@ package "Port DTOs and commands" {
   }
 
   class SearchCriteria <<dto>> {
-    + text : String
-    + type : MediaType
+    + text : Optional<String>
+    + type : Optional<MediaType>
     + tags : Set<Tag>
     __
     + hasFilters() : boolean
   }
 
   class CollectionCommand <<command>> {
-    + collectionId : ItemId
-    + name : String
+    + collectionId : Optional<ItemId>
+    + name : Optional<String>
     + itemsToAdd : List<ItemId>
   }
 

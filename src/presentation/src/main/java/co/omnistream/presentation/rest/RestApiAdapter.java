@@ -4,8 +4,14 @@ import co.omnistream.domain.model.access.Permission;
 import co.omnistream.domain.model.access.PermissionLevel;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.UserId;
+import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.model.catalog.ItemId;
+import co.omnistream.domain.model.catalog.MediaType;
+import co.omnistream.domain.model.catalog.Tag;
+import co.omnistream.domain.model.catalog.TagSource;
+import co.omnistream.domain.port.dto.CollectionCommand;
 import co.omnistream.domain.port.dto.LocalCredentials;
+import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.in.IAccessControl;
 import co.omnistream.domain.port.in.ICatalogManagement;
@@ -18,10 +24,17 @@ import io.javalin.http.Context;
 import io.javalin.http.Cookie;
 import io.javalin.http.SameSite;
 import io.javalin.http.UnauthorizedResponse;
+import io.javalin.http.UploadedFile;
+import java.io.InputStream;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Primary adapter that serves the REST API: it turns each request into a call to a driving port and
@@ -67,6 +80,8 @@ public final class RestApiAdapter {
     config.jsonMapper(ApiJson.forJavalin());
     ApiErrors.register(config);
     accessRoutes(config.routes);
+    catalogRoutes(config.routes);
+    searchRoutes(config.routes);
   }
 
   // ------------------------------------------------------------------ access (IAccessControl)
@@ -145,6 +160,127 @@ public final class RestApiAdapter {
         });
   }
 
+  // ------------------------------------------------------------------ catalog (ICatalogManagement)
+
+  private void catalogRoutes(RoutesConfig routes) {
+    routes.post(
+        API + "/files",
+        ctx -> {
+          UserId u = user(ctx);
+          UploadedFile file = ctx.uploadedFile("file");
+          if (file == null) {
+            throw new IllegalArgumentException("Missing the multipart field 'file'");
+          }
+          IngestionResult result;
+          try (InputStream content = file.content()) {
+            result = catalogManagement.uploadFile(u, file.filename(), content);
+          }
+          ctx.status(result.wasIndexed() ? 201 : 200).json(result);
+        });
+    routes.get(
+        API + "/files/duplicates", ctx -> ctx.json(catalogManagement.detectDuplicates(user(ctx))));
+    routes.put(
+        API + "/files/{id}/metadata/{key}",
+        ctx -> {
+          UserId u = user(ctx);
+          ValueRequest body = ctx.bodyAsClass(ValueRequest.class);
+          catalogManagement.editMetadata(u, itemId(ctx, "id"), ctx.pathParam("key"), body.value());
+          ctx.status(204);
+        });
+    routes.delete(
+        API + "/files/{id}",
+        ctx -> {
+          catalogManagement.deleteFile(user(ctx), itemId(ctx, "id"));
+          ctx.status(204);
+        });
+    routes.post(
+        API + "/admin/reindex",
+        ctx -> {
+          UserId admin = user(ctx);
+          ReindexRequest body = ctx.bodyAsClass(ReindexRequest.class);
+          ctx.json(Map.of("indexed", catalogManagement.reindexLibrary(admin, body.root())));
+        });
+    routes.post(
+        API + "/admin/backup",
+        ctx -> {
+          UserId admin = user(ctx);
+          BackupRequest body = ctx.bodyAsClass(BackupRequest.class);
+          ctx.json(Map.of("path", catalogManagement.backupCatalog(admin, body.destination())));
+        });
+    routes.put(
+        API + "/admin/library-path",
+        ctx -> {
+          UserId admin = user(ctx);
+          LibraryPathRequest body = ctx.bodyAsClass(LibraryPathRequest.class);
+          catalogManagement.configureLibraryPath(admin, body.path());
+          ctx.status(204);
+        });
+    routes.get(
+        API + "/admin/status", ctx -> ctx.json(catalogManagement.monitorServerStatus(user(ctx))));
+  }
+
+  // ------------------------------------------------------------------ search (ISearch)
+
+  private void searchRoutes(RoutesConfig routes) {
+    routes.get(
+        API + "/search",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.json(search.searchContent(u, requiredQuery(ctx, "q")));
+        });
+    routes.get(
+        API + "/files",
+        ctx -> {
+          UserId u = user(ctx);
+          Optional<MediaType> type = optionalQuery(ctx, "type").map(MediaType::valueOf);
+          Set<Tag> tags =
+              ctx.queryParams("tag").stream()
+                  .filter(name -> !name.isBlank())
+                  .map(name -> new Tag(name, TagSource.MANUAL))
+                  .collect(Collectors.toSet());
+          ctx.json(
+              search.filterByCriteria(
+                  u, new SearchCriteria(optionalQuery(ctx, "text"), type, tags)));
+        });
+    routes.get(API + "/library", ctx -> ctx.json(search.browseLibrary(user(ctx))));
+    routes.get(
+        API + "/collections/{id}/items",
+        ctx -> {
+          UserId u = user(ctx);
+          ctx.json(search.browseLibrary(u, itemId(ctx, "id")));
+        });
+    routes.post(
+        API + "/collections",
+        ctx -> {
+          UserId u = user(ctx);
+          CollectionRequest body = ctx.bodyAsClass(CollectionRequest.class);
+          String name = required(body.name(), "name");
+          CollectionCommand create =
+              new CollectionCommand(Optional.empty(), Optional.of(name), body.itemsToAdd());
+          ctx.status(201).json(search.manageCollections(u, create));
+        });
+    routes.patch(
+        API + "/collections/{id}",
+        ctx -> {
+          UserId u = user(ctx);
+          CollectionRequest body = ctx.bodyAsClass(CollectionRequest.class);
+          CollectionCommand change =
+              new CollectionCommand(
+                  Optional.of(itemId(ctx, "id")),
+                  Optional.ofNullable(body.name()),
+                  body.itemsToAdd());
+          ctx.json(search.manageCollections(u, change));
+        });
+    routes.post(
+        API + "/files/{id}/tags",
+        ctx -> {
+          UserId u = user(ctx);
+          TagRequest body = ctx.bodyAsClass(TagRequest.class);
+          search.tagFile(u, itemId(ctx, "id"), new Tag(body.name(), TagSource.MANUAL));
+          ctx.status(204);
+        });
+  }
+
   /** Answers a login with its token, and hands it to the web UI as an {@code HttpOnly} cookie. */
   private static void startSession(Context ctx, SessionToken token) {
     ctx.cookie(
@@ -207,6 +343,10 @@ public final class RestApiAdapter {
     return value;
   }
 
+  private static Optional<String> optionalQuery(Context ctx, String name) {
+    return Optional.ofNullable(ctx.queryParam(name)).filter(value -> !value.isBlank());
+  }
+
   private static <T> T required(T value, String name) {
     if (value == null) {
       throw new IllegalArgumentException("Missing '" + name + "'");
@@ -239,6 +379,51 @@ public final class RestApiAdapter {
       required(username, "username");
       required(password, "password");
       required(role, "role");
+    }
+  }
+
+  /** Body of {@code PUT /files/{id}/metadata/{key}}. */
+  record ValueRequest(String value) {
+    ValueRequest {
+      required(value, "value");
+    }
+  }
+
+  /** Body of {@code POST /admin/reindex}. */
+  record ReindexRequest(Path root) {
+    ReindexRequest {
+      required(root, "root");
+    }
+  }
+
+  /** Body of {@code POST /admin/backup}. */
+  record BackupRequest(Path destination) {
+    BackupRequest {
+      required(destination, "destination");
+    }
+  }
+
+  /** Body of {@code PUT /admin/library-path}. */
+  record LibraryPathRequest(Path path) {
+    LibraryPathRequest {
+      required(path, "path");
+    }
+  }
+
+  /**
+   * Body of {@code POST /collections}, where {@code name} is required, and of {@code PATCH
+   * /collections/{id}}, where both fields may be left out.
+   */
+  record CollectionRequest(String name, List<ItemId> itemsToAdd) {
+    CollectionRequest {
+      itemsToAdd = itemsToAdd == null ? List.of() : List.copyOf(itemsToAdd);
+    }
+  }
+
+  /** Body of {@code POST /files/{id}/tags}. */
+  record TagRequest(String name) {
+    TagRequest {
+      required(name, "name");
     }
   }
 

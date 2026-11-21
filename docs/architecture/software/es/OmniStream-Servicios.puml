@@ -426,16 +426,16 @@ package "DTOs y comandos de los puertos" {
   }
 
   class CriterioBusqueda <<dto>> {
-    + texto : String
-    + tipo : TipoMedio
+    + texto : Optional<String>
+    + tipo : Optional<TipoMedio>
     + etiquetas : Set<Etiqueta>
     __
     + tieneFiltros() : boolean
   }
 
   class ComandoColeccion <<command>> {
-    + coleccionId : ElementoId
-    + nombre : String
+    + coleccionId : Optional<ElementoId>
+    + nombre : Optional<String>
     + agregar : List<ElementoId>
   }
 
