@@ -86,6 +86,7 @@ class "Web browser" as WebBrowser <<actor>>
 package "Primary adapters (presentation)" #EAF3F8 {
    class CliAdapter <<primary adapter>> {
      - catalogManagement : ICatalogManagement
+     - systemIdentity : UserId
      + execute(args : List<String>) : int
      - printHelp() : void
    }
@@ -112,8 +113,9 @@ package "Primary adapters (presentation)" #EAF3F8 {
    }
    class SchedulerAdapter <<primary adapter>> {
      - tasks : Map<String,ScheduledTask>
+     - intervals : Map<String,Duration>
      - systemIdentity : UserId
-     + register(cronExpression : String, t : ScheduledTask) : void
+     + register(every : Duration, t : ScheduledTask) : void
      + start() : void
      + stop() : void
      - fire(t : ScheduledTask) : void

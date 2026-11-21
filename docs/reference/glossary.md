@@ -17,6 +17,8 @@ below.
 | `PoliticaAcceso` | `AccessPolicy` | Domain model |
 | `ServicioAcceso` | `AccessService` | Services |
 | `TipoAcceso` | `AccessType` | Domain model |
+| `ErroresApi` | `ApiErrors` | Ports and adapters |
+| `JsonApi` | `ApiJson` | Ports and adapters |
 | `ConfiguracionApp` | `AppConfiguration` | Ports and adapters |
 | `ServicioAutorizado` | `AuthorizedService` | Services |
 | `TareaRespaldar` | `BackupTask` | Ports and adapters |
@@ -45,6 +47,7 @@ below.
 | `ColeccionModificada` | `CollectionModified` | Domain model |
 | `InstantaneaColeccion` | `CollectionSnapshot` | Domain model |
 | `ComposicionRaiz` | `CompositionRoot` | Ports and adapters |
+| `CargadorConfiguracion` | `ConfigurationLoader` | Ports and adapters |
 | `Credenciales` | `Credentials` | Services |
 | `MapeadorCriterio` | `CriterionMapper` | Ports and adapters |
 | `ColeccionCiclica` | `CyclicCollection` | Domain model |

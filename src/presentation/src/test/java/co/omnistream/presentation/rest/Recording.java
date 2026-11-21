@@ -10,14 +10,15 @@ import java.util.function.Function;
 
 /**
  * A port that records every call it receives and answers with what the test told it to. A method
- * without an answer returns {@code null}, which is fine for {@code void} methods.
+ * without an answer returns {@code null}, which is fine for {@code void} methods. Used by the tests
+ * of every primary adapter.
  */
-final class Recording<T> {
+public final class Recording<T> {
 
   /** A call: the method's name and its arguments. */
-  record Call(String method, List<Object> args) {}
+  public record Call(String method, List<Object> args) {}
 
-  final List<Call> calls = new ArrayList<>();
+  public final List<Call> calls = new ArrayList<>();
   private final Map<String, Function<Object[], Object>> answers = new HashMap<>();
   private final T port;
 
@@ -42,27 +43,27 @@ final class Recording<T> {
                 }));
   }
 
-  static <T> Recording<T> of(Class<T> type) {
+  public static <T> Recording<T> of(Class<T> type) {
     return new Recording<>(type);
   }
 
   /** From now on, {@code method} returns {@code value}. */
-  Recording<T> answer(String method, Object value) {
+  public Recording<T> answer(String method, Object value) {
     return answer(method, args -> value);
   }
 
   /** From now on, {@code method} returns what {@code answer} computes from its arguments. */
-  Recording<T> answer(String method, Function<Object[], Object> answer) {
+  public Recording<T> answer(String method, Function<Object[], Object> answer) {
     answers.put(method, answer);
     return this;
   }
 
-  T port() {
+  public T port() {
     return port;
   }
 
   /** The only call received, which must be to {@code method}. */
-  Call onlyCall(String method) {
+  public Call onlyCall(String method) {
     if (calls.size() != 1 || !calls.get(0).method().equals(method)) {
       throw new AssertionError("Expected one call to " + method + " but got " + calls);
     }

@@ -86,6 +86,7 @@ class "Navegador web" as NavegadorWeb <<actor>>
 package "Adaptadores primarios (presentacion)" #EAF3F8 {
    class AdaptadorCLI <<primary adapter>> {
      - gestionCatalogo : IGestionCatalogo
+     - identidadSistema : UsuarioId
      + ejecutar(args : List<String>) : int
      - imprimirAyuda() : void
    }
@@ -112,8 +113,9 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
    }
    class AdaptadorProgramador <<primary adapter>> {
      - tareas : Map<String,TareaProgramada>
+     - intervalos : Map<String,Duration>
      - identidadSistema : UsuarioId
-     + registrar(expresionCron : String, t : TareaProgramada) : void
+     + registrar(cada : Duration, t : TareaProgramada) : void
      + iniciar() : void
      + detener() : void
      - disparar(t : TareaProgramada) : void
