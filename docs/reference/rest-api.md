@@ -39,6 +39,9 @@ The bodies are the snapshots and DTOs of the domain, serialized as they are
 | Other records (`Tag`, `MetadataEntry`, `Fingerprint`, `Permission`...) | object with the record's components | `{"name": "jazz", "source": "MANUAL"}` |
 | `MediaFileSnapshot`, `CollectionSnapshot` | the snapshot, starting with `"kind": "file"` or `"kind": "collection"`, so the items of a mixed list (`CatalogItemSnapshot`) can be told apart | |
 
+In request bodies, a field marked `?` may be left out; leaving out any other
+field answers 400. Unknown fields are ignored.
+
 Names are the record components, in camelCase; other methods of a record, such
 as `Tag.isAutomatic()`, do not appear. Lists are not paginated in version 1.0.
 `ApiJson` implements these rules.
@@ -76,7 +79,7 @@ in `ApiErrors`, before it reaches the API; until then it answers 500.
 
 | Method and path | Port method | Who | Request | Response |
 |---|---|---|---|---|
-| `POST /auth/login` | `authenticateUser` | public | `{"provider": "local", "username", "password"}` | 200 `SessionToken` and the cookie |
+| `POST /auth/login` | `authenticateUser` | public | `{"provider"?, "username", "password"}`; `provider` is `"local"` when left out | 200 `SessionToken` and the cookie |
 | `POST /auth/logout` | `logout` | user | | 204, and the cookie is cleared |
 | `POST /links/{token}/access` | `accessWithLink` | public | | 200 `SessionToken` of the link's guest, and the cookie |
 | `POST /collections/{id}/links` | `shareCollection` | user | `{"level": "READ", "lifetime": 604800}` | 201 `SharedLinkSnapshot` |
