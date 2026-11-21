@@ -27,6 +27,16 @@
       <groupId>co.omnistream</groupId>
       <artifactId>omnistream-presentation</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <!-- The only module that knows the logging provider (ADR 0021) -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>runtime</scope>
+    </dependency>
   </dependencies>
 
 </project>

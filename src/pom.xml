@@ -29,6 +29,14 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
+    <!-- Libraries of the adapters (ADR 0014, ADR 0021) -->
+    <javalin.version>7.2.4</javalin.version>
+    <jackson.version>3.2.4</jackson.version>
+    <slf4j.version>2.0.20</slf4j.version>
+    <logback.version>1.6.5</logback.version>
+    <jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
+    <jakarta-annotation.version>2.1.1</jakarta-annotation.version>
+
     <!-- Test libraries -->
     <junit.version>6.1.3</junit.version>
     <assertj.version>3.27.7</assertj.version>
@@ -68,6 +76,48 @@
         <groupId>co.omnistream</groupId>
         <artifactId>omnistream-presentation</artifactId>
         <version>${project.version}</version>
+      </dependency>
+
+      <!-- HTTP and JSON for the primary adapters (ADR 0014) -->
+      <dependency>
+        <groupId>io.javalin</groupId>
+        <artifactId>javalin</artifactId>
+        <version>${javalin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.javalin</groupId>
+        <artifactId>javalin-testtools</artifactId>
+        <version>${javalin.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>tools.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- Logging (ADR 0021) -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.version}</version>
+      </dependency>
+      <!-- Transitive dependencies of Javalin that arrive in two versions; fixing
+           them keeps the dependency convergence rule happy -->
+      <dependency>
+        <groupId>org.jetbrains</groupId>
+        <artifactId>annotations</artifactId>
+        <version>${jetbrains-annotations.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>jakarta.annotation</groupId>
+        <artifactId>jakarta.annotation-api</artifactId>
+        <version>${jakarta-annotation.version}</version>
       </dependency>
 
       <!-- Test libraries -->
