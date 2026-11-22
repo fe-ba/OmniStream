@@ -4,7 +4,6 @@ import static co.omnistream.domain.model.catalog.CatalogFixtures.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import co.omnistream.domain.event.CatalogEvent;
 import co.omnistream.domain.event.FileClassified;
 import co.omnistream.domain.event.FileDeleted;
 import co.omnistream.domain.event.FileIngested;
@@ -124,9 +123,7 @@ class IngestionChainTest {
             new Tag("video", TagSource.AUTOMATIC),
             new Tag("2025", TagSource.AUTOMATIC),
             new Tag("2025-07", TagSource.AUTOMATIC));
-    assertThat(catalog.pullEvents())
-        .extracting(CatalogEvent::getClass)
-        .containsExactly(FileIngested.class, FileClassified.class);
+    assertThat(eventTypes(catalog)).containsExactly(FileIngested.class, FileClassified.class);
   }
 
   @Test
@@ -172,8 +169,7 @@ class IngestionChainTest {
     IngestionResult replaced = fullChain().execute(context(catalog, replacement));
     assertThat(replaced.wasIndexed()).isTrue();
     assertThat(replaced.action()).contains(DuplicateAction.REPLACE);
-    assertThat(catalog.pullEvents())
-        .extracting(CatalogEvent::getClass)
+    assertThat(eventTypes(catalog))
         .containsExactly(FileDeleted.class, FileIngested.class, FileClassified.class);
   }
 
@@ -211,6 +207,10 @@ class IngestionChainTest {
     MediaFileSnapshot sizedSnapshot =
         (MediaFileSnapshot) catalog.findItem(sizedResult.fileId()).orElseThrow().toSnapshot();
     assertThat(sizedSnapshot.sizeBytes()).isEqualTo(4096L);
+  }
+
+  private static List<Class<?>> eventTypes(CatalogIndex catalog) {
+    return catalog.pullEvents().stream().<Class<?>>map(Object::getClass).toList();
   }
 
   private static IngestionContext context(CatalogIndex catalog, Path path) {

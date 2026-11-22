@@ -131,8 +131,7 @@ class CatalogServiceTest {
             new Tag("video", TagSource.AUTOMATIC),
             new Tag("2026", TagSource.AUTOMATIC),
             new Tag("2026-03", TagSource.AUTOMATIC));
-    assertThat(catalogRepository.outbox)
-        .extracting(CatalogEvent::getClass)
+    assertThat(eventTypes(catalogRepository.outbox))
         .containsExactly(FileIngested.class, FileClassified.class);
     assertThat(users.findById(anaId).orElseThrow().canAccess(result.fileId(), AccessType.DELETE))
         .isTrue();
@@ -275,9 +274,7 @@ class CatalogServiceTest {
     MediaFileSnapshot updated = catalogRepository.findFile(fileId).orElseThrow();
     assertThat(updated.metadata())
         .contains(new MetadataEntry("title", "Spec", MetadataSource.MANUAL));
-    assertThat(catalogRepository.outbox)
-        .extracting(CatalogEvent::getClass)
-        .containsExactly(FileModified.class);
+    assertThat(eventTypes(catalogRepository.outbox)).containsExactly(FileModified.class);
 
     assertThatThrownBy(() -> service.deleteFile(anaId, fileId)).isInstanceOf(AccessDenied.class);
 
@@ -322,5 +319,9 @@ class CatalogServiceTest {
     assertThat(backup).isEqualTo(Path.of("/backups/omnistream-backup.db"));
     assertThat(configuration.getLibraryPath()).isEqualTo(Path.of("/media"));
     assertThat(status).isEqualTo(new ServerStatus(1, 5_000_000L, 2));
+  }
+
+  private static List<Class<?>> eventTypes(List<CatalogEvent> events) {
+    return events.stream().<Class<?>>map(Object::getClass).toList();
   }
 }

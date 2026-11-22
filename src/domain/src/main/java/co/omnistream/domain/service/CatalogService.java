@@ -12,6 +12,7 @@ import co.omnistream.domain.model.catalog.CatalogIndex;
 import co.omnistream.domain.model.catalog.Fingerprint;
 import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.model.catalog.ItemId;
+import co.omnistream.domain.model.catalog.MediaFile;
 import co.omnistream.domain.model.catalog.MetadataEntry;
 import co.omnistream.domain.model.catalog.MetadataSource;
 import co.omnistream.domain.policy.AccessPolicy;
@@ -33,11 +34,10 @@ import co.omnistream.domain.snapshot.UserSnapshot;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Clock;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /** Domain service that implements the ICatalogManagement driving port. */
 public final class CatalogService extends AuthorizedService implements ICatalogManagement {
@@ -159,14 +159,19 @@ public final class CatalogService extends AuthorizedService implements ICatalogM
     if (!user.toSnapshot().active()) {
       throw new AccessDenied("User account is deactivated");
     }
-    CatalogSnapshot snapshot = catalogRepository.getCatalog().toSnapshot();
-    Map<Fingerprint, List<MediaFileSnapshot>> byFingerprint = new LinkedHashMap<>();
+    CatalogIndex catalog = catalogRepository.getCatalog();
+    CatalogSnapshot snapshot = catalog.toSnapshot();
+    Set<Fingerprint> duplicateFingerprints = new HashSet<>();
     for (MediaFileSnapshot file : snapshot.files()) {
-      byFingerprint.computeIfAbsent(file.fingerprint(), ignored -> new ArrayList<>()).add(file);
+      catalog
+          .findItem(file.id())
+          .filter(MediaFile.class::isInstance)
+          .map(MediaFile.class::cast)
+          .filter(mediaFile -> deduplicationPolicy.isDuplicate(mediaFile, catalog))
+          .ifPresent(mediaFile -> duplicateFingerprints.add(file.fingerprint()));
     }
-    return byFingerprint.values().stream()
-        .filter(group -> group.size() > 1)
-        .flatMap(List::stream)
+    return snapshot.files().stream()
+        .filter(file -> duplicateFingerprints.contains(file.fingerprint()))
         .filter(file -> accessPolicy.authorizes(user, file.id(), AccessType.VIEW, snapshot))
         .toList();
   }
