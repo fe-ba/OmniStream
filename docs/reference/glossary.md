@@ -225,7 +225,7 @@ below.
 | `inicio` / `fin` / `limite` / `ultimas()` / `coincide()` | `from` / `to` / `limit` / `latest()` / `matches()` | `AuditQuery` |
 | `anexar()` / `historial()` | `append()` / `history()` | `IAuditLog`, `IAuditTrail` |
 | `auditado()` / `anotar()` / `entrada()` / `delegado` | `audited()` / `record()` / `entry()` / `delegate` | `AuditingDecorator` and its subclasses |
-| `auditarPuertosEntrada()` / `crearRegistroAuditoria()` | `auditDrivingPorts()` / `createAuditLog()` | Composition |
+| `crearRegistroAuditoria()` | `createAuditLog()` | `InfrastructureFactory` |
 | `Gestionar acceso a una coleccion` (UC28) / `Consultar historial de cambios` (UC29) | `Manage access to a collection` / `Review change history` | Use cases |
 
 ## Live changes (ADR 0026)
@@ -236,6 +236,18 @@ below.
 | `oyente` / `flujoCatalogo` / `suscriptorEventos` | `listener` / `catalogFeed` / `eventSubscriber` | Fields and parameters |
 | `elemento` / `cambio` / `evento` | `item` / `change` / `event` | Parts of a `CatalogChange` |
 | `puedeVer()` / `detener()` / `usuarioActivo()` | `canSee()` / `stop()` / `activeUser()` | `CatalogFeedService` and its `Follower` |
+
+## Start-up (ADR 0028, ADR 0029)
+
+| Spanish | English | Where |
+|---|---|---|
+| `Principal` | `Main` | Entry point: serves, or runs one command |
+| `ejecutarComando()` / `puerto()` / `crearPlanificador()` | `runCommand()` / `port()` / `createScheduler()` | `CompositionRoot` |
+| `asegurarCuentaSistema()` / `asegurarPrimerAdministrador()` | `ensureSystemAccount()` / `ensureFirstAdmin()` | `CompositionRoot` |
+| `sistema` | `system` | The account the CLI and the scheduled tasks act as |
+| cuenta del sistema | system account | `omnistream-system`, identity `("system", "omnistream")`; nobody logs in with it |
+| primer administrador | first administrator | `admin`, created when nobody can administer; password shown once on the console |
+| instalacion | installation | One per context (personal or organization); no multi-tenancy |
 
 ## Recurring member names
 

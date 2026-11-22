@@ -35,6 +35,8 @@ decision changes, a new ADR supersedes the old one.
 | [0025](0025-audit-trail-with-decorators.md) | Audit trail with decorators | Accepted |
 | [0026](0026-live-catalog-changes.md) | Live catalog changes over server-sent events | Accepted |
 | [0027](0027-collaborative-text-editing.md) | Collaborative editing of text files | Accepted (implementation pending) |
+| [0028](0028-one-installation-per-context.md) | One installation per context | Accepted |
+| [0029](0029-system-account-and-first-administrator.md) | System account and first administrator | Accepted |
 
 ## Adding an ADR
 

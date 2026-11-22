@@ -46,8 +46,8 @@ public final class ConfigurationLoader {
     this(System.getenv(), Path.of(System.getProperty("user.home")));
   }
 
-  /** A loader that reads the given environment; for tests. */
-  ConfigurationLoader(Map<String, String> environment, Path userHome) {
+  /** A loader that reads the given environment and home folder instead of the real ones. */
+  public ConfigurationLoader(Map<String, String> environment, Path userHome) {
     this.environment = Map.copyOf(environment);
     this.userHome = Objects.requireNonNull(userHome, "userHome");
   }

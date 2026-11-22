@@ -68,6 +68,17 @@ Requires JDK 25; Maven comes with the wrapper. From `src/`:
 ./mvnw spotless:apply    # format the code
 ```
 
+`co.omnistream.bootstrap.Main` starts OmniStream: with no arguments it serves
+the web UI and the REST API (port 8080 by default); with arguments it runs one
+command, such as `help`, `ingest <file>...` or `status`. On the first start it
+creates the administrator `admin` and prints its password on the console, once
+(ADR 0029). It needs the infrastructure adapters, which are still being
+written; until then, the web UI runs on an in-memory demo:
+
+```bash
+./mvnw -pl presentation -am test -Ddemo=true -Dtest=DemoServer -Dsurefire.failIfNoSpecifiedTests=false
+```
+
 The design behind the code is in the
 [software diagrams](docs/architecture/software/) and the
 [ADRs](docs/decisions/); the rules for writing it are in the

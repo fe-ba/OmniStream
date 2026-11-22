@@ -710,14 +710,19 @@ package "Composicion (arranque)" #FFFDE7 {
      - fabrica : FabricaInfraestructura
      + arrancar() : void
      + detener() : void
+     + ejecutarComando(args : List<String>) : int
+     + puerto() : int
      - seleccionarFabrica(cfg : ConfiguracionApp) : FabricaInfraestructura
      - decorarPuertos() : void
-     - auditarPuertosEntrada() : void
      - construirCadenaIngesta() : PasoIngesta
-     - crearServicios() : void
      - crearServidorHttp() : Javalin
-     - crearAdaptadoresPrimarios() : void
+     - crearPlanificador(sistema : UsuarioId) : AdaptadorProgramador
      - registrarObservadores() : void
+     - asegurarCuentaSistema() : UsuarioId
+     - asegurarPrimerAdministrador() : void
+   }
+   class Principal <<entry point>> {
+     + {static} main(args : String[]) : void
    }
    FabricaInfraestructura <|-- FabricaLocal
    FabricaInfraestructura <|-- FabricaServidor
@@ -726,6 +731,18 @@ package "Composicion (arranque)" #FFFDE7 {
    ComposicionRaiz --> FabricaInfraestructura : selecciona segun perfil
    ComposicionRaiz ..> ISuscriptorEventos : registra observadores
    ComposicionRaiz ..> ObservadorSincronizacion : crea y suscribe
+   Principal ..> CargadorConfiguracion : lee la configuracion
+   Principal ..> ComposicionRaiz : sirve o ejecuta un comando
+   note top of ComposicionRaiz
+     El constructor crea los servicios, los envuelve con
+     los decoradores de auditoria y los entrega a los
+     adaptadores primarios. Antes de servir asegura la
+     cuenta del sistema (la de la CLI y las tareas) y,
+     si nadie puede administrar, crea "admin" con una
+     clave aleatoria que muestra una sola vez en
+     consola (ADR 0029). decorarPuertos (cache) llega
+     con los adaptadores de infraestructura.
+   end note
 
    FabricaLocal ..> AdaptadorPersistenciaSQLite : crea
    FabricaLocal ..> AdaptadorArchivosLocal : crea

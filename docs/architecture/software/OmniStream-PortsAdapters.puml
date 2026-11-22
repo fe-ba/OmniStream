@@ -710,14 +710,19 @@ package "Composition (bootstrap)" #FFFDE7 {
      - factory : InfrastructureFactory
      + start() : void
      + stop() : void
+     + runCommand(args : List<String>) : int
+     + port() : int
      - selectFactory(config : AppConfiguration) : InfrastructureFactory
      - decoratePorts() : void
-     - auditDrivingPorts() : void
      - buildIngestionChain() : IngestionStep
-     - createServices() : void
      - createHttpServer() : Javalin
-     - createPrimaryAdapters() : void
+     - createScheduler(system : UserId) : SchedulerAdapter
      - registerObservers() : void
+     - ensureSystemAccount() : UserId
+     - ensureFirstAdmin() : void
+   }
+   class Main <<entry point>> {
+     + {static} main(args : String[]) : void
    }
    InfrastructureFactory <|-- LocalFactory
    InfrastructureFactory <|-- ServerFactory
@@ -726,6 +731,18 @@ package "Composition (bootstrap)" #FFFDE7 {
    CompositionRoot --> InfrastructureFactory : selects by profile
    CompositionRoot ..> IEventSubscriber : registers observers
    CompositionRoot ..> SyncObserver : creates and subscribes
+   Main ..> ConfigurationLoader : reads the configuration
+   Main ..> CompositionRoot : serves or runs a command
+   note top of CompositionRoot
+     The constructor creates the services, wraps them in
+     the audit decorators and hands them to the
+     primary adapters. Before serving it ensures the
+     system account (used by the CLI and the tasks) and,
+     if nobody can administer, creates "admin" with a
+     random password shown only once on the
+     console (ADR 0029). decoratePorts (cache) comes
+     with the infrastructure adapters.
+   end note
 
    LocalFactory ..> SqlitePersistenceAdapter : creates
    LocalFactory ..> LocalFileStorageAdapter : creates
