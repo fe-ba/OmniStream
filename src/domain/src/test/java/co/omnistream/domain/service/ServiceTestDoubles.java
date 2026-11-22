@@ -9,6 +9,7 @@ import co.omnistream.domain.exception.VersionConflict;
 import co.omnistream.domain.model.access.LinkedIdentity;
 import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
+import co.omnistream.domain.model.audit.AuditEntry;
 import co.omnistream.domain.model.catalog.CatalogId;
 import co.omnistream.domain.model.catalog.CatalogIndex;
 import co.omnistream.domain.model.catalog.Fingerprint;
@@ -20,6 +21,7 @@ import co.omnistream.domain.model.playback.PlaybackSession;
 import co.omnistream.domain.model.playback.SessionId;
 import co.omnistream.domain.model.playback.SessionStatus;
 import co.omnistream.domain.model.sharing.SharedLink;
+import co.omnistream.domain.port.dto.AuditQuery;
 import co.omnistream.domain.port.dto.Credentials;
 import co.omnistream.domain.port.dto.LocalCredentials;
 import co.omnistream.domain.port.dto.MediaStream;
@@ -27,6 +29,7 @@ import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.dto.StreamProfile;
 import co.omnistream.domain.port.dto.SyncDelta;
+import co.omnistream.domain.port.out.IAuditLog;
 import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.IChangeLog;
 import co.omnistream.domain.port.out.IConfigurationRepository;
@@ -603,6 +606,24 @@ final class ServiceTestDoubles {
     @Override
     public boolean hasChangesSince(Instant since) {
       return recorded.values().stream().anyMatch(event -> event.occurredAt().isAfter(since));
+    }
+  }
+
+  static final class InMemoryAuditLog implements IAuditLog {
+    private final List<AuditEntry> entries = new ArrayList<>();
+
+    @Override
+    public void append(AuditEntry e) {
+      entries.add(e);
+    }
+
+    @Override
+    public List<AuditEntry> find(AuditQuery q) {
+      return entries.stream()
+          .filter(q::matches)
+          .sorted(Comparator.comparing(AuditEntry::at).reversed())
+          .limit(q.limit())
+          .toList();
     }
   }
 }
