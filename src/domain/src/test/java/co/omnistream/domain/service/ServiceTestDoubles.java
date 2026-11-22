@@ -1,6 +1,9 @@
 package co.omnistream.domain.service;
 
 import co.omnistream.domain.event.CatalogEvent;
+import co.omnistream.domain.event.DomainEvent;
+import co.omnistream.domain.event.EventId;
+import co.omnistream.domain.event.ICatalogObserver;
 import co.omnistream.domain.exception.ResourceNotFound;
 import co.omnistream.domain.exception.VersionConflict;
 import co.omnistream.domain.model.access.LinkedIdentity;
@@ -23,13 +26,17 @@ import co.omnistream.domain.port.dto.MediaStream;
 import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.dto.StreamProfile;
+import co.omnistream.domain.port.dto.SyncDelta;
 import co.omnistream.domain.port.out.ICatalogRepository;
+import co.omnistream.domain.port.out.IChangeLog;
 import co.omnistream.domain.port.out.IConfigurationRepository;
 import co.omnistream.domain.port.out.ICredentialRegistry;
 import co.omnistream.domain.port.out.IDataBackup;
+import co.omnistream.domain.port.out.IEventPublisher;
 import co.omnistream.domain.port.out.IFileStorage;
 import co.omnistream.domain.port.out.IIdentityProvider;
 import co.omnistream.domain.port.out.IMetadataExtractor;
+import co.omnistream.domain.port.out.IOutboxRepository;
 import co.omnistream.domain.port.out.ISessionRepository;
 import co.omnistream.domain.port.out.ISharedLinkRepository;
 import co.omnistream.domain.port.out.ITokenRepository;
@@ -55,8 +62,10 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -513,6 +522,87 @@ final class ServiceTestDoubles {
     @Override
     public Instant instant() {
       return now;
+    }
+  }
+
+  static final class InMemoryOutbox implements IOutboxRepository {
+    private final Map<EventId, DomainEvent> pending = new LinkedHashMap<>();
+    final List<EventId> publishedIds = new ArrayList<>();
+
+    void enqueue(DomainEvent event) {
+      pending.putIfAbsent(event.id(), event);
+    }
+
+    void enqueueAll(List<? extends DomainEvent> events) {
+      events.forEach(this::enqueue);
+    }
+
+    int pendingCount() {
+      return pending.size();
+    }
+
+    @Override
+    public List<DomainEvent> fetchPending(int limit) {
+      return pending.values().stream().limit(limit).toList();
+    }
+
+    @Override
+    public void markPublished(EventId id) {
+      if (pending.remove(id) != null) {
+        publishedIds.add(id);
+      }
+    }
+  }
+
+  static final class RecordingEventPublisher implements IEventPublisher {
+    final List<DomainEvent> published = new ArrayList<>();
+    final Set<EventId> failOn = new HashSet<>();
+    final List<ICatalogObserver> observers = new ArrayList<>();
+
+    @Override
+    public void publish(DomainEvent e) {
+      if (failOn.contains(e.id())) {
+        throw new IllegalStateException("Simulated publish failure for " + e.id());
+      }
+      published.add(e);
+      for (ICatalogObserver observer : List.copyOf(observers)) {
+        observer.onCatalogChanged(e);
+      }
+    }
+  }
+
+  static final class InMemoryChangeLog implements IChangeLog {
+    private final Map<EventId, CatalogEvent> recorded = new LinkedHashMap<>();
+
+    int size() {
+      return recorded.size();
+    }
+
+    @Override
+    public void register(CatalogEvent e) {
+      recorded.putIfAbsent(e.id(), e);
+    }
+
+    @Override
+    public SyncDelta changesSince(Instant since) {
+      Set<ItemId> added = new LinkedHashSet<>();
+      Set<ItemId> modified = new LinkedHashSet<>();
+      Set<ItemId> removed = new LinkedHashSet<>();
+      for (CatalogEvent event : recorded.values()) {
+        if (event.occurredAt().isAfter(since)) {
+          switch (event.changeType()) {
+            case ADDED -> added.add(event.item());
+            case MODIFIED -> modified.add(event.item());
+            case REMOVED -> removed.add(event.item());
+          }
+        }
+      }
+      return new SyncDelta(List.copyOf(added), List.copyOf(modified), List.copyOf(removed));
+    }
+
+    @Override
+    public boolean hasChangesSince(Instant since) {
+      return recorded.values().stream().anyMatch(event -> event.occurredAt().isAfter(since));
     }
   }
 }
