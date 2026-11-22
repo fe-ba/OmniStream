@@ -31,6 +31,11 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
+    <!-- The composition root builds the Javalin server and registers the primary adapters -->
+    <dependency>
+      <groupId>io.javalin</groupId>
+      <artifactId>javalin</artifactId>
+    </dependency>
     <!-- The only module that knows the logging provider (ADR 0021) -->
     <dependency>
       <groupId>ch.qos.logback</groupId>
