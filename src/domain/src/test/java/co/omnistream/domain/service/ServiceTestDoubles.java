@@ -12,6 +12,7 @@ import co.omnistream.domain.model.catalog.Fingerprint;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.model.catalog.MetadataEntry;
+import co.omnistream.domain.model.catalog.Tag;
 import co.omnistream.domain.model.playback.PlaybackSession;
 import co.omnistream.domain.model.playback.SessionId;
 import co.omnistream.domain.model.playback.SessionStatus;
@@ -42,6 +43,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,6 +51,7 @@ import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -231,12 +234,66 @@ final class ServiceTestDoubles {
 
     @Override
     public List<MediaFileSnapshot> findByText(String txt) {
-      return List.of();
+      if (txt == null || txt.isBlank()) {
+        return List.of();
+      }
+      String query = txt.strip();
+      return catalog.toSnapshot().files().stream()
+          .filter(file -> matchesText(file, query))
+          .toList();
     }
 
     @Override
     public List<MediaFileSnapshot> findByCriteria(SearchCriteria c) {
-      return List.of();
+      return catalog.toSnapshot().files().stream()
+          .filter(file -> matchesCriteria(file, c))
+          .toList();
+    }
+
+    private static boolean matchesCriteria(MediaFileSnapshot file, SearchCriteria criteria) {
+      if (criteria.text().isPresent() && !criteria.text().get().isBlank()) {
+        if (!matchesText(file, criteria.text().get().strip())) {
+          return false;
+        }
+      }
+      if (criteria.type().isPresent() && file.type() != criteria.type().get()) {
+        return false;
+      }
+      for (Tag required : criteria.tags()) {
+        boolean present =
+            file.tags().stream().anyMatch(tag -> tag.normalized().equals(required.normalized()));
+        if (!present) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private static boolean matchesText(MediaFileSnapshot file, String query) {
+      String lower = query.toLowerCase(Locale.ROOT);
+      String normalizedQuery = normalizeText(query);
+      if (file.name().toLowerCase(Locale.ROOT).contains(lower)) {
+        return true;
+      }
+      if (file.metadata().stream()
+          .anyMatch(entry -> entry.value().toLowerCase(Locale.ROOT).contains(lower))) {
+        return true;
+      }
+      return file.tags().stream()
+          .anyMatch(tag ->
+              tag.name().toLowerCase(Locale.ROOT).contains(lower)
+                  || tag.normalized().contains(normalizedQuery));
+    }
+
+    private static String normalizeText(String value) {
+      StringBuilder folded = new StringBuilder();
+      for (char ch :
+          Normalizer.normalize(value.toLowerCase(Locale.ROOT), Normalizer.Form.NFD).toCharArray()) {
+        if (Character.getType(ch) != Character.NON_SPACING_MARK) {
+          folded.append(ch);
+        }
+      }
+      return folded.toString();
     }
   }
 
