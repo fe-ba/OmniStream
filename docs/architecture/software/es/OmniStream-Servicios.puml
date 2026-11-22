@@ -424,6 +424,34 @@ package "Historial de auditoria" {
 }
 
 ' ============================================================
+' EDICION DE TEXTO EN CONJUNTO (ADR 0027)
+' ============================================================
+package "Edicion de texto" {
+
+  class ServicioEdicionTexto <<domain service>> {
+    - repositorioCatalogo : IRepositorioCatalogo
+    - almacenamiento : IAlmacenamientoArchivos
+    - unidadDeTrabajo : IUnidadDeTrabajo
+    - politicaArchivoTexto : PoliticaArchivoTexto
+    __
+    + abrir(u : UsuarioId, archivo : ElementoId) : DocumentoTexto
+    + guardar(u : UsuarioId, archivo : ElementoId, texto : String, basadoEn : HuellaDigital) : DocumentoTexto
+    - usuarioActivo(u : UsuarioId) : Usuario
+    - archivoTexto(catalogo : InstantaneaCatalogo, archivo : ElementoId) : InstantaneaArchivo
+  }
+
+  note bottom of ServicioEdicionTexto
+    **Edicion en conjunto (ADR 0027):** la mezcla de
+    cambios ocurre en los navegadores; el servidor solo
+    lee y guarda el texto. Guardar escribe el archivo y
+    registra su nueva huella en el catalogo (FileModified);
+    si el catalogo no se guarda, reescribe lo anterior.
+    El mismo texto otra vez no cambia nada; otro texto
+    basado en una huella vieja es ConflictoDeVersion.
+  end note
+}
+
+' ============================================================
 ' REPRODUCCION
 ' ============================================================
 package "Reproduccion" {
@@ -475,6 +503,7 @@ package "Reproduccion" {
 package "Modelo (ver diagrama de dominio)" {
   class PoliticaAcceso <<policy>>
   class PoliticaDeduplicacion <<policy>>
+  class PoliticaArchivoTexto <<policy>>
   class Usuario <<aggregate root>>
   class CatalogoIndice <<aggregate root>>
   class Clasificacion <<value object>>
@@ -502,6 +531,14 @@ package "DTOs y comandos de los puertos" {
   class CredencialesOIDC <<dto>> #FCF4E0;line.dashed;line:999999 {
     + tokenExterno : String
     + emisor : URI
+  }
+
+  class DocumentoTexto <<dto>> {
+    + archivo : ElementoId
+    + nombre : String
+    + texto : String
+    + huella : HuellaDigital
+    + editable : boolean
   }
 
   class ConsultaAuditoria <<dto>> {
@@ -619,6 +656,7 @@ ServicioAutorizado <|-- ServicioReproduccion
 ServicioAutorizado <|-- ServicioClasificacion
 ServicioAutorizado <|-- ServicioAuditoria
 ServicioAutorizado <|-- ServicioFlujoCatalogo
+ServicioAutorizado <|-- ServicioEdicionTexto
 ServicioAutorizado --> "1" PoliticaAcceso : politicaAcceso
 ServicioAutorizado ..> Usuario : <<carga>>
 
@@ -645,6 +683,9 @@ PasoIndexacion ..> CatalogoIndice : <<ingestar>>
 ServicioCatalogo --> "1" PoliticaDeduplicacion : politicaDeduplicacion
 ServicioCatalogo ..> CatalogoIndice : <<modifica>>
 ServicioBusqueda ..> CatalogoIndice : <<consulta / modifica>>
+ServicioEdicionTexto --> "1" PoliticaArchivoTexto : politicaArchivoTexto
+ServicioEdicionTexto ..> CatalogoIndice : <<reemplaza contenido>>
+ServicioEdicionTexto ..> DocumentoTexto : <<entrega>>
 
 ' ============================================================
 ' RELACIONES - CLASIFICACION AUTOMATICA (Strategy)
@@ -705,6 +746,7 @@ note as NotaPuertos
   ServicioSincronizacion  -> ISincronizacion
   ServicioDespachoEventos -> IDespachoEventos
   ServicioFlujoCatalogo   -> IFlujoCatalogo
+  ServicioEdicionTexto    -> IEdicionTexto
   ServicioClasificacion   -> IGestionReglas (2.0)
   ServicioAuditoria       -> IHistorialAuditoria
   Cada decorador *Auditado/a implementa el puerto

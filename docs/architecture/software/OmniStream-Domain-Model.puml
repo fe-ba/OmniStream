@@ -87,6 +87,7 @@ package "Catalog aggregate" {
     + tag(id : ItemId, e : Tag, now : Instant) : void
     + applyClassification(id : ItemId, c : Classification, now : Instant) : void
     + delete(id : ItemId, now : Instant) : void
+    + replaceContent(id : ItemId, newFingerprint : Fingerprint, newSizeBytes : long, now : Instant) : void
     + createCollection(name : String, now : Instant) : Collection
     + addToCollection(collection : ItemId, item : ItemId, now : Instant) : void
     + totalFiles() : int
@@ -122,6 +123,7 @@ package "Catalog aggregate" {
     + metadataEntry(key : String) : Optional<MetadataEntry>
     + tag(e : Tag) : void
     + replaceAutomaticTags(newTags : Set<Tag>) : void
+    ~ replaceContent(newFingerprint : Fingerprint, newSizeBytes : long) : boolean
     + markIndexed() : void
     + markFailed(cause : String) : void
     + totalSize() : long
@@ -479,6 +481,14 @@ package "Domain policies" {
     + resolve(incoming : MediaFile, existing : MediaFile) : DuplicateAction
   }
 
+  class TextFilePolicy <<policy>> {
+    + {static} MAX_BYTES : int
+    + {static} EXTENSIONS : Set<String>
+    __
+    + isText(f : MediaFileSnapshot) : boolean
+    + decode(bytes : byte[]) : Optional<String>
+  }
+
   class AccessPolicy <<policy>> {
     + authorizes(u : User, resource : ItemId, access : AccessType) : boolean
     + effectiveLevel(u : User, resource : ItemId) : Optional<PermissionLevel>
@@ -668,6 +678,7 @@ DomainException <|-- VersionConflict
 ' ============================================================
 DeduplicationPolicy ..> CatalogIndex : evaluates
 AccessPolicy        ..> User        : evaluates
+TextFilePolicy      ..> MediaFileSnapshot : evaluates
 
 ' ============================================================
 ' RELATIONS  -  AUDIT TRAIL
@@ -715,6 +726,12 @@ note bottom of CatalogEvent
   in the same transaction.
   changeType() tells the change log whether the item
   was added, modified or removed.
+end note
+
+note bottom of TextFilePolicy
+  Files that can be edited as text (ADR 0027): by the
+  extension of the stored file, up to 1 MiB and in
+  UTF-8. Videos, audio, images and PDFs never are.
 end note
 
 note bottom of DeduplicationPolicy

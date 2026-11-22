@@ -87,6 +87,7 @@ package "Agregado Catalogo" {
     + etiquetar(id : ElementoId, e : Etiqueta, ahora : Instant) : void
     + aplicarClasificacion(id : ElementoId, c : Clasificacion, ahora : Instant) : void
     + eliminar(id : ElementoId, ahora : Instant) : void
+    + reemplazarContenido(id : ElementoId, nuevaHuella : HuellaDigital, nuevoTamanioBytes : long, ahora : Instant) : void
     + crearColeccion(nombre : String, ahora : Instant) : Coleccion
     + agregarAColeccion(coleccion : ElementoId, elemento : ElementoId, ahora : Instant) : void
     + totalArchivos() : int
@@ -122,6 +123,7 @@ package "Agregado Catalogo" {
     + metadato(clave : String) : Optional<Metadato>
     + etiquetar(e : Etiqueta) : void
     + reemplazarEtiquetasAutomaticas(nuevas : Set<Etiqueta>) : void
+    ~ reemplazarContenido(nuevaHuella : HuellaDigital, nuevoTamanioBytes : long) : boolean
     + marcarIndexado() : void
     + marcarError(causa : String) : void
     + tamanioTotal() : long
@@ -479,6 +481,14 @@ package "Politicas de dominio" {
     + resolver(nuevo : ArchivoMultimedia, existente : ArchivoMultimedia) : AccionDuplicado
   }
 
+  class PoliticaArchivoTexto <<policy>> {
+    + {static} MAX_BYTES : int
+    + {static} EXTENSIONES : Set<String>
+    __
+    + esTexto(f : InstantaneaArchivo) : boolean
+    + decodificar(bytes : byte[]) : Optional<String>
+  }
+
   class PoliticaAcceso <<policy>> {
     + autoriza(u : Usuario, recurso : ElementoId, acceso : TipoAcceso) : boolean
     + nivelEfectivo(u : Usuario, recurso : ElementoId) : Optional<NivelPermiso>
@@ -668,6 +678,7 @@ ExcepcionDominio <|-- ConflictoDeVersion
 ' ============================================================
 PoliticaDeduplicacion ..> CatalogoIndice : evalua
 PoliticaAcceso        ..> Usuario        : evalua
+PoliticaArchivoTexto  ..> InstantaneaArchivo : evalua
 
 ' ============================================================
 ' RELACIONES  -  HISTORIAL DE AUDITORIA
@@ -715,6 +726,12 @@ note bottom of EventoCatalogo
   el outbox en la misma transaccion.
   tipoCambio() le dice al registro de cambios si el
   elemento se agrego, se modifico o se elimino.
+end note
+
+note bottom of PoliticaArchivoTexto
+  Archivos editables como texto (ADR 0027): por la
+  extension del archivo guardado, hasta 1 MiB y en
+  UTF-8. Videos, audio, imagenes y PDF nunca lo son.
 end note
 
 note bottom of PoliticaDeduplicacion

@@ -3,7 +3,7 @@ package co.omnistream.domain.event;
 import co.omnistream.domain.model.catalog.ItemId;
 import java.time.Instant;
 
-/** The metadata or the tags of a file changed. */
+/** The metadata, the tags or the content of a file changed. */
 public final class FileModified extends CatalogEvent {
 
   public FileModified(ItemId itemId, Instant occurredAt) {

@@ -237,6 +237,17 @@ below.
 | `elemento` / `cambio` / `evento` | `item` / `change` / `event` | Parts of a `CatalogChange` |
 | `puedeVer()` / `detener()` / `usuarioActivo()` | `canSee()` / `stop()` / `activeUser()` | `CatalogFeedService` and its `Follower` |
 
+## Text editing (ADR 0027)
+
+| Spanish | English | Where |
+|---|---|---|
+| `IEdicionTexto` / `ServicioEdicionTexto` | `ITextEditing` / `TextEditingService` | Driving port and its service |
+| `DocumentoTexto` | `TextDocument` | What the editor receives: text, fingerprint, whether it may save |
+| `PoliticaArchivoTexto` / `esTexto()` / `decodificar()` | `TextFilePolicy` / `isText()` / `decode()` | Which files are text: extension, at most 1 MiB, UTF-8 |
+| `abrir()` / `guardar()` / `basadoEn` | `open()` / `save()` / `basedOn` | `ITextEditing` |
+| `reemplazarContenido()` / `nuevaHuella` / `nuevoTamanioBytes` | `replaceContent()` / `newFingerprint` / `newSizeBytes` | `CatalogIndex`, `MediaFile` |
+| `archivoTexto()` / `politicaArchivoTexto` | `textFile()` / `textFilePolicy` | `TextEditingService` |
+
 ## Start-up (ADR 0028, ADR 0029)
 
 | Spanish | English | Where |

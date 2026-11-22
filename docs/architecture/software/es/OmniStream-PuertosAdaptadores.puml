@@ -224,6 +224,10 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
    interface SuscripcionFlujo <<callback>> {
      + cerrar() : void
    }
+   interface IEdicionTexto <<driving port>> {
+     + abrir(u : UsuarioId, archivo : ElementoId) : DocumentoTexto
+     + guardar(u : UsuarioId, archivo : ElementoId, texto : String, basadoEn : HuellaDigital) : DocumentoTexto
+   }
    IFlujoCatalogo ..> OyenteCambiosCatalogo : avisa
    IFlujoCatalogo ..> SuscripcionFlujo : devuelve
    interface IGestionReglas <<driving port>> #E8F5E9;line.dashed;line:999999 {
@@ -252,6 +256,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
    class ObservadorSincronizacion <<observer>>
    class ServicioAuditoria <<domain service>>
    class ServicioFlujoCatalogo <<domain service>>
+   class ServicioEdicionTexto <<domain service>>
    abstract class DecoradorAuditoria <<decorator>>
    class ControlAccesoAuditado <<decorator>>
    class GestionCatalogoAuditada <<decorator>>
@@ -269,6 +274,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  IGestionReglas <|.. ServicioClasificacion
  IHistorialAuditoria <|.. ServicioAuditoria
  IFlujoCatalogo <|.. ServicioFlujoCatalogo
+ IEdicionTexto <|.. ServicioEdicionTexto
  IControlAcceso <|.. ControlAccesoAuditado
  IGestionCatalogo <|.. GestionCatalogoAuditada
  IBusqueda <|.. BusquedaAuditada
@@ -423,6 +429,9 @@ ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredad
  ServicioAuditoria ..> IRegistroAuditoria : lee el historial
  ServicioFlujoCatalogo ..> ISuscriptorEventos : suscribe a cada seguidor
  ServicioFlujoCatalogo ..> IRepositorioCatalogo : revisa que puede ver cada seguidor
+ ServicioEdicionTexto ..> IAlmacenamientoArchivos : lee y escribe el texto
+ ServicioEdicionTexto ..> IRepositorioCatalogo : registra la nueva huella
+ ServicioEdicionTexto ..> IUnidadDeTrabajo : archivo y catalogo juntos
  DecoradorAuditoria ..> IRegistroAuditoria : anexa entradas
  DecoradorAuditoria ..> IUnidadDeTrabajo : cambio y entrada juntos
  ControlAccesoAuditado ..> IRepositorioUsuarios : nombra inicios fallidos

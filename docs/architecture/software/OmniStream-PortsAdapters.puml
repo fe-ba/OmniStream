@@ -224,6 +224,10 @@ package "Driving ports (domain)" #E8F5E9 {
    interface FeedSubscription <<callback>> {
      + close() : void
    }
+   interface ITextEditing <<driving port>> {
+     + open(u : UserId, file : ItemId) : TextDocument
+     + save(u : UserId, file : ItemId, text : String, basedOn : Fingerprint) : TextDocument
+   }
    ICatalogFeed ..> CatalogChangeListener : tells
    ICatalogFeed ..> FeedSubscription : returns
    interface IRuleManagement <<driving port>> #E8F5E9;line.dashed;line:999999 {
@@ -253,6 +257,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
    ICatalogObserver <|.. SyncObserver
    class AuditService <<domain service>>
    class CatalogFeedService <<domain service>>
+   class TextEditingService <<domain service>>
    abstract class AuditingDecorator <<decorator>>
    class AuditedAccessControl <<decorator>>
    class AuditedCatalogManagement <<decorator>>
@@ -269,6 +274,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  IRuleManagement <|.. ClassificationService
  IAuditTrail <|.. AuditService
  ICatalogFeed <|.. CatalogFeedService
+ ITextEditing <|.. TextEditingService
  IAccessControl <|.. AuditedAccessControl
  ICatalogManagement <|.. AuditedCatalogManagement
  ISearch <|.. AuditedSearch
@@ -423,6 +429,9 @@ AccessService ..> ICatalogRepository : reads collections for inherited access
  AuditService ..> IAuditLog : reads the trail
  CatalogFeedService ..> IEventSubscriber : subscribes each follower
  CatalogFeedService ..> ICatalogRepository : checks what each follower can see
+ TextEditingService ..> IFileStorage : reads and writes the text
+ TextEditingService ..> ICatalogRepository : records the new fingerprint
+ TextEditingService ..> IUnitOfWork : file and catalog together
  AuditingDecorator ..> IAuditLog : appends entries
  AuditingDecorator ..> IUnitOfWork : change and entry together
  AuditedAccessControl ..> IUserRepository : names failed logins

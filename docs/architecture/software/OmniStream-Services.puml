@@ -424,6 +424,34 @@ package "Audit trail" {
 }
 
 ' ============================================================
+' COLLABORATIVE TEXT EDITING (ADR 0027)
+' ============================================================
+package "Text editing" {
+
+  class TextEditingService <<domain service>> {
+    - catalogRepository : ICatalogRepository
+    - storage : IFileStorage
+    - unitOfWork : IUnitOfWork
+    - textFilePolicy : TextFilePolicy
+    __
+    + open(u : UserId, file : ItemId) : TextDocument
+    + save(u : UserId, file : ItemId, text : String, basedOn : Fingerprint) : TextDocument
+    - activeUser(u : UserId) : User
+    - textFile(catalog : CatalogSnapshot, file : ItemId) : MediaFileSnapshot
+  }
+
+  note bottom of TextEditingService
+    **Editing together (ADR 0027):** the edits are
+    merged in the browsers; the server only reads and
+    saves the text. A save writes the file and records
+    its new fingerprint in the catalog (FileModified);
+    if the catalog is not saved, it writes the old text
+    back. The same text again changes nothing; another
+    text based on an old fingerprint is a VersionConflict.
+  end note
+}
+
+' ============================================================
 ' PLAYBACK
 ' ============================================================
 package "Playback" {
@@ -475,6 +503,7 @@ package "Playback" {
 package "Model (see domain diagram)" {
   class AccessPolicy <<policy>>
   class DeduplicationPolicy <<policy>>
+  class TextFilePolicy <<policy>>
   class User <<aggregate root>>
   class CatalogIndex <<aggregate root>>
   class Classification <<value object>>
@@ -502,6 +531,14 @@ package "Port DTOs and commands" {
   class OidcCredentials <<dto>> #FCF4E0;line.dashed;line:999999 {
     + externalToken : String
     + issuer : URI
+  }
+
+  class TextDocument <<dto>> {
+    + file : ItemId
+    + name : String
+    + text : String
+    + fingerprint : Fingerprint
+    + editable : boolean
   }
 
   class AuditQuery <<dto>> {
@@ -619,6 +656,7 @@ AuthorizedService <|-- PlaybackService
 AuthorizedService <|-- ClassificationService
 AuthorizedService <|-- AuditService
 AuthorizedService <|-- CatalogFeedService
+AuthorizedService <|-- TextEditingService
 AuthorizedService --> "1" AccessPolicy : accessPolicy
 AuthorizedService ..> User : <<loads>>
 
@@ -645,6 +683,9 @@ IndexingStep ..> CatalogIndex : <<ingest>>
 CatalogService --> "1" DeduplicationPolicy : deduplicationPolicy
 CatalogService ..> CatalogIndex : <<modifies>>
 SearchService ..> CatalogIndex : <<queries / modifies>>
+TextEditingService --> "1" TextFilePolicy : textFilePolicy
+TextEditingService ..> CatalogIndex : <<replaces content>>
+TextEditingService ..> TextDocument : <<delivers>>
 
 ' ============================================================
 ' RELATIONS - AUTOMATIC CLASSIFICATION (Strategy)
@@ -705,6 +746,7 @@ note as PortsNote
   SyncService          -> ISync
   EventDispatchService -> IEventDispatch
   CatalogFeedService   -> ICatalogFeed
+  TextEditingService   -> ITextEditing
   ClassificationService   -> IRuleManagement (2.0)
   AuditService         -> IAuditTrail
   Each Audited* decorator implements the port of

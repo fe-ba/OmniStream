@@ -91,6 +91,7 @@ rectangle "Puertos de entrada" <<dominio>> {
   interface "IDespachoEventos" as PIN_DES
   interface "IHistorialAuditoria" as PIN_AUD
   interface "IFlujoCatalogo"      as PIN_FLU
+  interface "IEdicionTexto"       as PIN_TXT
   interface "IGestionReglas"   as PIN_REG #FFFFFF;line.dashed;line:999999
 }
 
@@ -110,6 +111,7 @@ rectangle "Dominio" <<dominio>> {
     component "Servicio de Clasificacion\n..\ncrearRegla()\nreclasificarBiblioteca()"                      as SvCla #FFFFFF;line.dashed;line:999999
     component "Servicio de Auditoria\n..\nhistorial()"                                         as SvAud
     component "Servicio de Flujo del Catalogo\n..\nseguir()"                                  as SvFlu
+    component "Servicio de Edicion de Texto\n..\nabrir()\nguardar()"                         as SvTxt
     component "Decoradores de auditoria\n<<decorator>>\n..\nregistran cada cambio"           as DecAud
   }
 
@@ -219,6 +221,7 @@ SvDes -up- PIN_DES
 SvCla -up- PIN_REG
 SvAud -up- PIN_AUD
 SvFlu -up- PIN_FLU
+SvTxt -up- PIN_TXT
 
 ' ============================================================
 ' SERVICIOS -> MODELO DE DOMINIO
@@ -233,6 +236,7 @@ SvDes --> EnEventos : publica
 SvCat --> EnClasif : clasifica al ingerir
 SvCla --> EnClasif
 SvAud --> EnAuditoria
+SvTxt --> EnCatalogo : reemplaza contenido
 DecAud --> EnAuditoria : registra
 DecAud ..> SvAcc : envuelve
 DecAud ..> SvCat : envuelve
@@ -284,6 +288,9 @@ SvCla ..> POUT_REPO
 SvAud ..> POUT_AUD
 SvFlu ..> POUT_SUS
 SvFlu ..> POUT_REPO
+SvTxt ..> POUT_REPO
+SvTxt ..> POUT_FS
+SvTxt ..> POUT_UOW
 DecAud ..> POUT_AUD
 DecAud ..> POUT_UOW
 
