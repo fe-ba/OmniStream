@@ -37,6 +37,8 @@ public enum AuditAction {
   FILE_DELETED,
   /** Changed a metadata entry of a file. */
   METADATA_EDITED,
+  /** Saved a text file from the editor, with a different content (ADR 0027). */
+  FILE_EDITED,
   /** Tagged a file. */
   FILE_TAGGED,
   /** Created a collection. */

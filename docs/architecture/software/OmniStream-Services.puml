@@ -405,6 +405,11 @@ package "Audit trail" {
     - delegate : ISync
   }
 
+  class AuditedTextEditing <<decorator>> {
+    - delegate : ITextEditing
+    - catalogRepository : ICatalogRepository
+  }
+
   note bottom of AuditingDecorator
     **Decorator pattern (audit):** each decorator
     implements the same driving port as the service it
@@ -717,6 +722,7 @@ AuditingDecorator <|-- AuditedAccessControl
 AuditingDecorator <|-- AuditedCatalogManagement
 AuditingDecorator <|-- AuditedSearch
 AuditingDecorator <|-- AuditedSync
+AuditingDecorator <|-- AuditedTextEditing
 AuditingDecorator ..> AuditEntry : <<records>>
 AuditService ..> AuditQuery : <<answers>>
 

@@ -16,6 +16,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -24,6 +26,8 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -180,6 +184,29 @@ class CompositionRootTest {
       assertThat(session.statusCode()).isEqualTo(401);
       assertThat(page.statusCode()).isEqualTo(200);
       assertThat(page.body()).contains("OmniStream");
+    }
+  }
+
+  @Test
+  void servesTheTextEditorRelay() {
+    try (CompositionRoot root = root(0)) {
+      root.start();
+      URI editor =
+          URI.create(
+              "ws://localhost:"
+                  + root.port()
+                  + "/api/v1/files/00000000-0000-4000-8000-0000000000e1/edit");
+
+      assertThatThrownBy(() ->
+              HttpClient.newHttpClient()
+                  .newWebSocketBuilder()
+                  .buildAsync(editor, new WebSocket.Listener() {})
+                  .get(5, TimeUnit.SECONDS))
+          .isInstanceOf(ExecutionException.class)
+          .cause()
+          .isInstanceOfSatisfying(
+              WebSocketHandshakeException.class,
+              e -> assertThat(e.getResponse().statusCode()).isEqualTo(401));
     }
   }
 

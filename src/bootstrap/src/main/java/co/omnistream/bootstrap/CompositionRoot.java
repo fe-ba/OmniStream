@@ -8,6 +8,7 @@ import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
 import co.omnistream.domain.policy.AccessPolicy;
 import co.omnistream.domain.policy.DeduplicationPolicy;
+import co.omnistream.domain.policy.TextFilePolicy;
 import co.omnistream.domain.port.in.IAccessControl;
 import co.omnistream.domain.port.in.IAuditTrail;
 import co.omnistream.domain.port.in.ICatalogFeed;
@@ -16,6 +17,7 @@ import co.omnistream.domain.port.in.IEventDispatch;
 import co.omnistream.domain.port.in.IPlayback;
 import co.omnistream.domain.port.in.ISearch;
 import co.omnistream.domain.port.in.ISync;
+import co.omnistream.domain.port.in.ITextEditing;
 import co.omnistream.domain.port.out.IAuditLog;
 import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.ICredentialRegistry;
@@ -32,10 +34,12 @@ import co.omnistream.domain.service.PlaybackService;
 import co.omnistream.domain.service.SearchService;
 import co.omnistream.domain.service.SyncObserver;
 import co.omnistream.domain.service.SyncService;
+import co.omnistream.domain.service.TextEditingService;
 import co.omnistream.domain.service.audit.AuditedAccessControl;
 import co.omnistream.domain.service.audit.AuditedCatalogManagement;
 import co.omnistream.domain.service.audit.AuditedSearch;
 import co.omnistream.domain.service.audit.AuditedSync;
+import co.omnistream.domain.service.audit.AuditedTextEditing;
 import co.omnistream.domain.service.classification.DateRule;
 import co.omnistream.domain.service.classification.MediaTypeRule;
 import co.omnistream.domain.service.ingestion.ClassificationStep;
@@ -47,6 +51,7 @@ import co.omnistream.domain.service.stream.DirectStream;
 import co.omnistream.domain.service.stream.TranscodedStream;
 import co.omnistream.presentation.cli.CliAdapter;
 import co.omnistream.presentation.rest.RestApiAdapter;
+import co.omnistream.presentation.rest.TextEditingRelay;
 import co.omnistream.presentation.scheduler.BackupTask;
 import co.omnistream.presentation.scheduler.ReindexTask;
 import co.omnistream.presentation.scheduler.SchedulerAdapter;
@@ -123,6 +128,7 @@ public final class CompositionRoot implements AutoCloseable {
   private final ISync sync;
   private final IAuditTrail auditTrail;
   private final ICatalogFeed catalogFeed;
+  private final ITextEditing textEditing;
   private final IEventDispatch eventDispatch;
   private final SyncObserver syncObserver;
 
@@ -204,6 +210,15 @@ public final class CompositionRoot implements AutoCloseable {
         new CatalogFeedService(userRepository, accessPolicy, clock, eventBus, catalogRepository);
     eventDispatch = new EventDispatchService(factory.createOutboxRepository(), eventBus);
     syncObserver = new SyncObserver(changeLog);
+    ITextEditing textService =
+        new TextEditingService(
+            userRepository,
+            accessPolicy,
+            clock,
+            catalogRepository,
+            storage,
+            unitOfWork,
+            new TextFilePolicy());
 
     // Audit decorators around the ports that change something (ADR 0025)
     accessControl =
@@ -213,6 +228,8 @@ public final class CompositionRoot implements AutoCloseable {
             catalogService, catalogRepository, auditLog, unitOfWork, clock);
     search = new AuditedSearch(searchService, auditLog, unitOfWork, clock);
     sync = new AuditedSync(syncService, auditLog, unitOfWork, clock);
+    textEditing =
+        new AuditedTextEditing(textService, catalogRepository, auditLog, unitOfWork, clock);
   }
 
   /**
@@ -301,9 +318,11 @@ public final class CompositionRoot implements AutoCloseable {
     RestApiAdapter api =
         new RestApiAdapter(
             catalogManagement, playback, search, accessControl, sync, auditTrail, catalogFeed);
+    TextEditingRelay editor = new TextEditingRelay(textEditing, accessControl);
     WebUiAdapter web = new WebUiAdapter();
     return Javalin.create(javalin -> {
       api.registerRoutes(javalin);
+      editor.registerRoutes(javalin);
       web.registerRoutes(javalin);
     });
   }

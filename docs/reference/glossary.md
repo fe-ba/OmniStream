@@ -247,6 +247,10 @@ below.
 | `abrir()` / `guardar()` / `basadoEn` | `open()` / `save()` / `basedOn` | `ITextEditing` |
 | `reemplazarContenido()` / `nuevaHuella` / `nuevoTamanioBytes` | `replaceContent()` / `newFingerprint` / `newSizeBytes` | `CatalogIndex`, `MediaFile` |
 | `archivoTexto()` / `politicaArchivoTexto` | `textFile()` / `textFilePolicy` | `TextEditingService` |
+| `EdicionTextoAuditada` / `ARCHIVO_EDITADO` | `AuditedTextEditing` / `FILE_EDITED` | Audit of the saves that changed the file |
+| `RelayEdicionTexto` / `SalasEdicion` / `Participante` | `TextEditingRelay` / `EditingRooms` / `Peer` | WebSocket relay of the editor and its rooms |
+| `unirse()` / `recibir()` / `salir()` / `trama` | `join()` / `receive()` / `leave()` / `frame` | `EditingRooms` |
+| `saludo()` / `conectar()` / `desconectar()` | `handshake()` / `connect()` / `disconnect()` | `TextEditingRelay` |
 
 ## Start-up (ADR 0028, ADR 0029)
 

@@ -225,3 +225,45 @@ it. Removals reach everyone, with only the identifier. In the browser,
 connection drops it reconnects by itself and gets a new `ready`, which is the
 moment for the client to reload what it shows. Changes reach the stream when
 the outbox is published (`SyncTask`), within a couple of seconds.
+
+### Editing text together (`ITextEditing`, ADR 0027)
+
+| Method and path | Port method | Who | Request | Response |
+|---|---|---|---|---|
+| `GET /files/{id}/edit` (WebSocket) | `open`, `save` | read to watch, write to edit | session cookie or `Authorization` header; a browser's `Origin` must be this server | 101, a WebSocket; 401 without a session; 403 from another site |
+
+Everyone editing the same file is in one room. The server relays the edits
+without decoding them; the browsers merge them with Yjs. Only text files can be
+edited: plain text, Markdown, subtitles, configuration and source code, of at
+most 1 MiB, in UTF-8.
+
+If the file cannot be opened, the connection closes with 4000 plus the status
+the API would answer, and the message as the reason: 4400 (not an identifier),
+4403, 4404 or 4422 (not a text file).
+
+Edits are **binary frames**; the first byte says what follows:
+
+| Byte | From | Content |
+|---|---|---|
+| `0` | browser, relayed to the others | a Yjs update. Kept, so whoever joins later receives it. Dropped if the sender may only read. |
+| `1` | browser, relayed to the others | Yjs awareness: who is there and their cursor. Not kept. |
+| `2` | browser | the whole document as one update, in answer to `compact`. It replaces the updates kept so far. |
+| `3` | browser | the text to save, in UTF-8. |
+
+The server talks in **JSON text messages**, each with a `type`:
+
+| `type` | When | Other fields |
+|---|---|---|
+| `welcome` | on joining | `file`, `name`, `text`, `fingerprint`, `editable`, `seed`, `others` (how many were already there); then the kept updates follow as frames |
+| `seed` | the one who had to load the text left before doing it | none: load `text` from `welcome` now |
+| `saved` | someone saved, to everyone | `fingerprint`, `by` (user identifier) |
+| `compact` | many updates are kept | none: answer with frame `2` |
+| `error` | something the sender did failed | `error`, `message`, as in error responses |
+
+The first editor to join gets `seed: true` and loads `text` into the empty
+document; the others receive its update. Readers never seed: until an editor
+does, they show `text`. A save is based on the last fingerprint the room knows,
+so editors do not send one; saving the text already stored changes nothing,
+and a save after the file was changed outside the editor is an `error` with
+`VersionConflict`. A save before anything was loaded is refused (`NotReady`),
+so an empty document never overwrites the file.

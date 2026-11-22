@@ -405,6 +405,11 @@ package "Historial de auditoria" {
     - delegado : ISincronizacion
   }
 
+  class EdicionTextoAuditada <<decorator>> {
+    - delegado : IEdicionTexto
+    - repositorioCatalogo : IRepositorioCatalogo
+  }
+
   note bottom of DecoradorAuditoria
     **Patron Decorator (auditoria):** cada decorador
     implementa el mismo puerto de entrada que el servicio
@@ -725,6 +730,7 @@ DecoradorAuditoria <|-- ControlAccesoAuditado
 DecoradorAuditoria <|-- GestionCatalogoAuditada
 DecoradorAuditoria <|-- BusquedaAuditada
 DecoradorAuditoria <|-- SincronizacionAuditada
+DecoradorAuditoria <|-- EdicionTextoAuditada
 DecoradorAuditoria ..> EntradaAuditoria : <<registra>>
 ServicioAuditoria ..> ConsultaAuditoria : <<responde>>
 

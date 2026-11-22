@@ -112,6 +112,26 @@ package "Primary adapters (presentation)" #EAF3F8 {
      + {static} mapper() : JsonMapper
      + {static} forJavalin() : JavalinJackson3
    }
+   class TextEditingRelay <<primary adapter>> {
+     - accessControl : IAccessControl
+     - rooms : EditingRooms
+     + registerRoutes(config : JavalinConfig) : void
+     - handshake(ctx : Context) : void
+     - connect(ctx : WsConnectContext) : void
+     - disconnect(ctx : WsContext) : void
+   }
+   class EditingRooms <<adapter helper>> {
+     - textEditing : ITextEditing
+     + join(file : ItemId, p : Peer) : void
+     + receive(p : Peer, frame : byte[]) : void
+     + leave(p : Peer) : void
+   }
+   interface Peer <<callback>> {
+     + user() : UserId
+     + send(message : Map<String,Object>) : void
+     + send(frame : byte[]) : void
+     + close(statusCode : int, reason : String) : void
+   }
    class ApiErrors <<adapter helper>> {
      + {static} register(config : JavalinConfig) : void
    }
@@ -263,6 +283,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
    class AuditedCatalogManagement <<decorator>>
    class AuditedSearch <<decorator>>
    class AuditedSync <<decorator>>
+   class AuditedTextEditing <<decorator>>
  }
 
  ICatalogManagement <|.. CatalogService
@@ -283,6 +304,8 @@ package "Domain services (see services diagram)" #FFF8E1 {
  AuditedCatalogManagement --> ICatalogManagement : delegate (CatalogService)
  AuditedSearch --> ISearch : delegate (SearchService)
  AuditedSync --> ISync : delegate (SyncService)
+ ITextEditing <|.. AuditedTextEditing
+ AuditedTextEditing --> ITextEditing : delegate (TextEditingService)
 
  CliAdapter --> ICatalogManagement : invokes
  RestApiAdapter ..> ApiJson : configures JSON
@@ -295,6 +318,18 @@ package "Domain services (see services diagram)" #FFF8E1 {
  RestApiAdapter --> IAuditTrail : invokes
  RestApiAdapter --> ICatalogFeed : follows (server-sent events)
  RestApiAdapter ..> IRuleManagement : invokes (2.0)
+ TextEditingRelay --> IAccessControl : validates the session
+ TextEditingRelay *-- EditingRooms : rooms
+ EditingRooms --> ITextEditing : opens and saves
+ EditingRooms ..> Peer : relays to each one
+ note bottom of TextEditingRelay
+   WebSocket at /api/v1/files/{id}/edit (ADR 0027).
+   Refuses the handshake without a session (401) or
+   from another site (403). Each room relays the Yjs
+   edits without decoding them, keeps them in memory
+   for whoever joins later, and saves the text with
+   ITextEditing, based on the last fingerprint it knows.
+ end note
  SchedulerAdapter ..> ScheduledTask : fires
  ReindexTask --> ICatalogManagement : invokes
  BackupTask --> ICatalogManagement : invokes
@@ -432,6 +467,7 @@ AccessService ..> ICatalogRepository : reads collections for inherited access
  TextEditingService ..> IFileStorage : reads and writes the text
  TextEditingService ..> ICatalogRepository : records the new fingerprint
  TextEditingService ..> IUnitOfWork : file and catalog together
+ AuditedTextEditing ..> ICatalogRepository : compares fingerprints
  AuditingDecorator ..> IAuditLog : appends entries
  AuditingDecorator ..> IUnitOfWork : change and entry together
  AuditedAccessControl ..> IUserRepository : names failed logins

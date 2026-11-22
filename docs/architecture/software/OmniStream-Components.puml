@@ -76,6 +76,7 @@ rectangle "Presentation layer\n(primary / driving adapters)" <<presentation>> {
   component "Web UI adapter\n<<Javalin>>"                     as AdWeb
   component "CLI adapter\n<<controller>>"                    as AdCli
   component "REST API adapter\n<<Javalin>>"                   as AdApi
+  component "Text editing relay\n<<WebSocket>>"                 as AdEdit
   component "Scheduler adapter\n<<scheduled tasks>>"     as AdScheduler
 }
 
@@ -191,6 +192,7 @@ rectangle "Bootstrap" <<bootstrap>> {
 ' ============================================================
 CliWeb    --> AdWeb
 CliWeb    --> AdApi : HTTP/JSON
+CliWeb    --> AdEdit : WebSocket (Yjs)
 CliMobile ..> AdApi : HTTP/JSON
 CliCli    --> AdCli
 
@@ -205,6 +207,8 @@ AdApi    ..> PIN_SYNC
 AdApi    ..> PIN_RULES
 AdApi    ..> PIN_AUDIT
 AdApi    ..> PIN_FEED : live changes (SSE)
+AdEdit   ..> PIN_TEXT
+AdEdit   ..> PIN_ACC
 AdCli    ..> PIN_CAT
 AdScheduler   ..> PIN_CAT : reindex / back up
 AdScheduler   ..> PIN_DISPATCH : sync
@@ -242,6 +246,7 @@ DecAudit ..> SvAccess : wraps
 DecAudit ..> SvCatalog : wraps
 DecAudit ..> SvSearch : wraps
 DecAudit ..> SvSync : wraps
+DecAudit ..> SvText : wraps
 
 ' --- relations inside the model ---
 ModelCatalog *-- ModelFile

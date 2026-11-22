@@ -112,6 +112,26 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      + {static} mapeador() : JsonMapper
      + {static} paraJavalin() : JavalinJackson3
    }
+   class RelayEdicionTexto <<primary adapter>> {
+     - controlAcceso : IControlAcceso
+     - salas : SalasEdicion
+     + registrarRutas(cfg : JavalinConfig) : void
+     - saludo(ctx : Context) : void
+     - conectar(ctx : WsConnectContext) : void
+     - desconectar(ctx : WsContext) : void
+   }
+   class SalasEdicion <<adapter helper>> {
+     - edicionTexto : IEdicionTexto
+     + unirse(archivo : ElementoId, p : Participante) : void
+     + recibir(p : Participante, trama : byte[]) : void
+     + salir(p : Participante) : void
+   }
+   interface Participante <<callback>> {
+     + titular() : UsuarioId
+     + enviar(mensaje : Map<String,Object>) : void
+     + enviar(trama : byte[]) : void
+     + cerrar(codigo : int, motivo : String) : void
+   }
    class ErroresApi <<adapter helper>> {
      + {static} registrar(cfg : JavalinConfig) : void
    }
@@ -262,6 +282,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
    class GestionCatalogoAuditada <<decorator>>
    class BusquedaAuditada <<decorator>>
    class SincronizacionAuditada <<decorator>>
+   class EdicionTextoAuditada <<decorator>>
    IObservadorCatalogo <|.. ObservadorSincronizacion
  }
 
@@ -283,6 +304,8 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  GestionCatalogoAuditada --> IGestionCatalogo : delegado (ServicioCatalogo)
  BusquedaAuditada --> IBusqueda : delegado (ServicioBusqueda)
  SincronizacionAuditada --> ISincronizacion : delegado (ServicioSincronizacion)
+ IEdicionTexto <|.. EdicionTextoAuditada
+ EdicionTextoAuditada --> IEdicionTexto : delegado (ServicioEdicionTexto)
 
  AdaptadorCLI --> IGestionCatalogo : invoca
  AdaptadorApiRest ..> JsonApi : configura el JSON
@@ -295,6 +318,18 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  AdaptadorApiRest --> IHistorialAuditoria : invoca
  AdaptadorApiRest --> IFlujoCatalogo : sigue (eventos enviados por el servidor)
  AdaptadorApiRest ..> IGestionReglas : invoca (2.0)
+ RelayEdicionTexto --> IControlAcceso : valida la sesion
+ RelayEdicionTexto *-- SalasEdicion : salas
+ SalasEdicion --> IEdicionTexto : abre y guarda
+ SalasEdicion ..> Participante : reenvia a cada uno
+ note bottom of RelayEdicionTexto
+   WebSocket en /api/v1/files/{id}/edit (ADR 0027).
+   Rechaza el saludo sin sesion (401) o desde otro
+   sitio (403). Cada sala reenvia las ediciones Yjs
+   sin decodificarlas, las guarda en memoria para
+   quien llegue despues y guarda el texto con
+   IEdicionTexto, basado en la ultima huella que conoce.
+ end note
  AdaptadorProgramador ..> TareaProgramada : dispara
  TareaReindexar --> IGestionCatalogo : invoca
  TareaRespaldar --> IGestionCatalogo : invoca
@@ -432,6 +467,7 @@ ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredad
  ServicioEdicionTexto ..> IAlmacenamientoArchivos : lee y escribe el texto
  ServicioEdicionTexto ..> IRepositorioCatalogo : registra la nueva huella
  ServicioEdicionTexto ..> IUnidadDeTrabajo : archivo y catalogo juntos
+ EdicionTextoAuditada ..> IRepositorioCatalogo : compara huellas
  DecoradorAuditoria ..> IRegistroAuditoria : anexa entradas
  DecoradorAuditoria ..> IUnidadDeTrabajo : cambio y entrada juntos
  ControlAccesoAuditado ..> IRepositorioUsuarios : nombra inicios fallidos

@@ -76,6 +76,7 @@ rectangle "Capa de presentacion\n(adaptadores primarios / driving)" <<present>> 
   component "Adaptador Web UI\n<<Javalin>>"                     as AdWeb
   component "Adaptador CLI\n<<controlador>>"                    as AdCli
   component "Adaptador API REST\n<<Javalin>>"                   as AdApi
+  component "Relay de edicion de texto\n<<WebSocket>>"           as AdEdit
   component "Adaptador Programador\n<<tareas programadas>>"     as AdProg
 }
 
@@ -191,6 +192,7 @@ rectangle "Arranque" <<arranque>> {
 ' ============================================================
 CliWeb    --> AdWeb
 CliWeb    --> AdApi : HTTP/JSON
+CliWeb    --> AdEdit : WebSocket (Yjs)
 CliMobile ..> AdApi : HTTP/JSON
 CliCli    --> AdCli
 
@@ -205,6 +207,8 @@ AdApi    ..> PIN_SIN
 AdApi    ..> PIN_REG
 AdApi    ..> PIN_AUD
 AdApi    ..> PIN_FLU : cambios en vivo (SSE)
+AdEdit   ..> PIN_TXT
+AdEdit   ..> PIN_ACC
 AdCli    ..> PIN_CAT
 AdProg   ..> PIN_CAT : reindexar / respaldar
 AdProg   ..> PIN_DES : sincronizar
@@ -242,6 +246,7 @@ DecAud ..> SvAcc : envuelve
 DecAud ..> SvCat : envuelve
 DecAud ..> SvBus : envuelve
 DecAud ..> SvSin : envuelve
+DecAud ..> SvTxt : envuelve
 
 ' --- relaciones internas del modelo ---
 EnCatalogo *-- EnArchivo
