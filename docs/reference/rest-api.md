@@ -75,6 +75,25 @@ Every error answers this body, with the status from the table:
 `ApiErrors` implements this table. A new domain exception needs a row here, and
 in `ApiErrors`, before it reaches the API; until then it answers 500.
 
+## Web UI
+
+`WebUiAdapter` serves the browser interface from the same server: `/` and the
+files next to it (`/app.js`, `/style.css`, `/fonts/`), and `/s/{token}` for
+shared links. The page uses this API like any other client. Every path under
+`/api/v1` that is not a route below is a JSON 404, never the page.
+
+What the page offers, and the routes behind it:
+
+- **Library:** browse, search, upload, collections, tags, play (`/library`,
+  `/collections`, `/files`, `/sessions`).
+- **Sharing and access:** a link per collection (`/collections/{id}/links`);
+  "Who has access" for whoever manages a collection (`/items/{id}/access`,
+  `/users/by-name/{username}`, `/users/{id}/permissions`).
+- **People** (administrators): users, roles, access and deactivation (`/users`).
+- **History:** the whole trail for administrators, and the history of each file
+  or collection for whoever can see it (`/audit`).
+- **Live:** what others change appears without reloading (`/events`).
+
 ## Routes
 
 ### Access (`IAccessControl`)
@@ -82,6 +101,7 @@ in `ApiErrors`, before it reaches the API; until then it answers 500.
 | Method and path | Port method | Who | Request | Response |
 |---|---|---|---|---|
 | `POST /auth/login` | `authenticateUser` | public | `{"provider"?, "username", "password"}`; `provider` is `"local"` when left out | 200 `SessionToken` and the cookie |
+| `GET /auth/session` | `validateToken` | user | | 200 `{"userId", "role", "expiresAt"}`: who is logged in, without the token, so the web UI can tell after a reload |
 | `POST /auth/logout` | `logout` | user | | 204, and the cookie is cleared |
 | `POST /links/{token}/access` | `accessWithLink` | public | | 200 `SessionToken` of the link's guest, and the cookie |
 | `POST /collections/{id}/links` | `shareCollection` | user | `{"level": "READ", "lifetime": 604800}` | 201 `SharedLinkSnapshot` |
@@ -102,8 +122,9 @@ item itself, not through a collection that contains it.
 
 A manager who is not an administrator may only give or take `READ` and `WRITE`,
 not change its own permissions, and not touch another manager of the same
-resource; otherwise 403 `AccessDenied`. The web UI opens a
-shared link as `/s/{token}`, a page that calls `POST /links/{token}/access`.
+resource; otherwise 403 `AccessDenied`. The web UI opens a shared link as
+`/s/{token}?collection={id}`, a page that calls `POST /links/{token}/access` and
+then shows that collection.
 
 ### Catalog (`ICatalogManagement`)
 

@@ -122,6 +122,16 @@ public final class RestApiAdapter {
                   new LocalCredentials(body.provider(), body.username(), body.password()));
           startSession(ctx, token);
         });
+    // Who is logged in, for the web UI after a reload: the token itself stays in its HttpOnly
+    // cookie
+    routes.get(
+        API + "/auth/session",
+        ctx -> {
+          SessionToken token = authenticateRequest(ctx);
+          ctx.json(
+              Map.of(
+                  "userId", token.userId(), "role", token.role(), "expiresAt", token.expiresAt()));
+        });
     routes.post(
         API + "/auth/logout",
         ctx -> {

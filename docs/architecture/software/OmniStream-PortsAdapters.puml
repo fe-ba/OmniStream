@@ -93,7 +93,7 @@ package "Primary adapters (presentation)" #EAF3F8 {
      - printHelp() : void
    }
    class WebUiAdapter <<primary adapter>> {
-     - staticDirectory : Path
+     - resourceFolder : String
      + registerRoutes(config : JavalinConfig) : void
    }
    class RestApiAdapter <<primary adapter>> {

@@ -93,7 +93,7 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      - imprimirAyuda() : void
    }
    class AdaptadorWebUI <<primary adapter>> {
-     - directorioEstatico : Path
+     - carpetaRecursos : String
      + registrarRutas(cfg : JavalinConfig) : void
    }
    class AdaptadorApiRest <<primary adapter>> {

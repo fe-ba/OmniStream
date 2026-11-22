@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>OmniStream</title>
+  <link rel="preload" href="/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar" hidden>
+    <a class="wordmark" href="/">OmniStream</a>
+    <nav id="nav" class="nav" aria-label="Sections" hidden>
+      <button type="button" data-view="library" aria-current="page">Library</button>
+      <button type="button" data-view="people">People</button>
+      <button type="button" data-view="history">History</button>
+    </nav>
+    <form id="search" role="search">
+      <label class="visually-hidden" for="search-text">Search the library</label>
+      <input id="search-text" type="search" placeholder="Search by name or tag" autocomplete="off">
+    </form>
+    <span id="live" class="live" data-state="off" hidden></span>
+    <span id="me" class="me" hidden></span>
+    <button id="logout" class="quiet" type="button">Log out</button>
+  </header>
+
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+
+  <main>
+    <section id="login" class="login" hidden>
+      <div class="login-copy">
+        <p class="login-mark" aria-hidden="true">OmniStream</p>
+        <h1 class="visually-hidden">Log in to OmniStream</h1>
+        <p class="login-lead">Your films, music and photos, on your own network.</p>
+        <form id="login-form" class="login-form">
+          <label>Username <input id="username" autocomplete="username" required></label>
+          <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary" type="submit">Log in</button>
+        </form>
+      </div>
+      <div id="login-art" class="login-art" aria-hidden="true"></div>
+    </section>
+
+    <section id="library" hidden>
+      <div class="place">
+        <nav id="breadcrumb" class="breadcrumb" aria-label="Where you are"></nav>
+        <h1 id="place-title" class="place-title">Library</h1>
+        <div id="toolbar" class="toolbar">
+          <label class="button primary">Upload files <input id="upload" type="file" multiple hidden></label>
+          <button id="new-collection" type="button">New collection</button>
+          <button id="share-collection" type="button" hidden>Share this collection</button>
+          <button id="collection-access" type="button" hidden>Who has access</button>
+          <button id="collection-history" type="button" hidden>History</button>
+        </div>
+      </div>
+
+      <section id="shelf-section" aria-labelledby="shelf-heading">
+        <h2 id="shelf-heading" class="section-heading">Collections</h2>
+        <ul id="shelf" class="shelf"></ul>
+      </section>
+
+      <section id="files-section" aria-labelledby="files-heading">
+        <h2 id="files-heading" class="section-heading">Files</h2>
+        <ul id="grid" class="grid"></ul>
+      </section>
+
+      <p id="empty" class="empty" hidden></p>
+    </section>
+
+    <section id="people" hidden aria-labelledby="people-title">
+      <div class="place">
+        <h1 id="people-title" class="place-title">People</h1>
+        <p class="place-lead">Who can log in, and what each person can open. Managers of a collection can also give access to it.</p>
+        <div class="toolbar">
+          <button id="add-person" class="primary" type="button">Add a person</button>
+        </div>
+      </div>
+      <ul id="people-list" class="people"></ul>
+    </section>
+
+    <section id="history" hidden aria-labelledby="history-title">
+      <div class="place">
+        <h1 id="history-title" class="place-title">History</h1>
+        <form id="history-filters" class="filters">
+          <label>Who <select id="filter-who"><option value="">Everyone</option></select></label>
+          <label>What
+            <select id="filter-what">
+              <option value="">Everything</option>
+              <option value="files">Files</option>
+              <option value="collections">Collections</option>
+              <option value="access">People and access</option>
+              <option value="logins">Logins</option>
+              <option value="admin">Administration</option>
+            </select>
+          </label>
+          <label>When
+            <select id="filter-when">
+              <option value="1">Today</option>
+              <option value="7" selected>Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="">Any time</option>
+            </select>
+          </label>
+        </form>
+      </div>
+      <div id="history-list" class="timeline"></div>
+      <p id="history-empty" class="empty" hidden>Nothing happened in this period.</p>
+    </section>
+  </main>
+
+  <div id="theater" class="theater" hidden>
+    <div class="screen" role="dialog" aria-modal="true" aria-labelledby="theater-title">
+      <div class="screen-bar">
+        <h2 id="theater-title"></h2>
+        <button id="theater-close" class="quiet" type="button">Close</button>
+      </div>
+      <div id="theater-stage" class="stage"></div>
+    </div>
+  </div>
+
+  <footer id="now-playing" class="now-playing" hidden>
+    <div id="np-cover" class="np-cover" aria-hidden="true"></div>
+    <div class="np-text">
+      <p id="np-title" class="np-title"></p>
+      <p id="np-status" class="np-status"></p>
+    </div>
+    <div class="np-controls">
+      <button id="np-toggle" class="round" type="button" aria-label="Pause">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path id="np-icon" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
+      <span id="np-time" class="np-time">0:00</span>
+      <input id="np-seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Position">
+      <span id="np-length" class="np-time">0:00</span>
+    </div>
+    <button id="np-close" class="quiet" type="button">Stop</button>
+  </footer>
+
+  <dialog id="dialog" class="dialog">
+    <form method="dialog">
+      <h2 id="dialog-title"></h2>
+      <div id="dialog-body"></div>
+      <div class="dialog-actions">
+        <button id="dialog-confirm" value="confirm" class="primary">OK</button>
+        <button id="dialog-cancel" value="cancel" formnovalidate class="quiet">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

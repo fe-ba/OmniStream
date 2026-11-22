@@ -245,6 +245,7 @@ below.
 | `aValor()` / `asignar()` (mappers) | `toValue()` / `bind()` |
 | `buscar...` / `guardar` / `eliminar` | `find...` / `save` / `delete` |
 | `ahora` / `reloj` | `now` / `clock` |
+| `carpetaRecursos` (`AdaptadorWebUI`) | `resourceFolder` (`WebUiAdapter`) |
 
 ## Enum constants
 
