@@ -19,8 +19,10 @@ import co.omnistream.domain.model.playback.SessionStatus;
 import co.omnistream.domain.model.sharing.SharedLink;
 import co.omnistream.domain.port.dto.Credentials;
 import co.omnistream.domain.port.dto.LocalCredentials;
+import co.omnistream.domain.port.dto.MediaStream;
 import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.dto.SessionToken;
+import co.omnistream.domain.port.dto.StreamProfile;
 import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.IConfigurationRepository;
 import co.omnistream.domain.port.out.ICredentialRegistry;
@@ -31,6 +33,7 @@ import co.omnistream.domain.port.out.IMetadataExtractor;
 import co.omnistream.domain.port.out.ISessionRepository;
 import co.omnistream.domain.port.out.ISharedLinkRepository;
 import co.omnistream.domain.port.out.ITokenRepository;
+import co.omnistream.domain.port.out.ITranscoder;
 import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
 import co.omnistream.domain.snapshot.CatalogSnapshot;
@@ -44,7 +47,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -450,6 +457,62 @@ final class ServiceTestDoubles {
     public Path backup(Path destination) {
       this.lastDestination = destination;
       return destination.resolve("omnistream-backup.db");
+    }
+  }
+
+  static final class StubTranscoder implements ITranscoder {
+    Set<MediaType> supportedTypes = Set.of(MediaType.VIDEO, MediaType.AUDIO);
+    boolean rejectProfiles;
+    String outputMime = "video/mp4";
+    byte[] output = "transcoded-stream".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    Path lastPath;
+    StreamProfile lastProfile;
+    Duration lastPosition;
+
+    @Override
+    public boolean supports(MediaType source, StreamProfile p) {
+      return !rejectProfiles && supportedTypes.contains(source) && !p.isDirectPlay();
+    }
+
+    @Override
+    public MediaStream transcode(Path path, StreamProfile p, Duration pos) {
+      this.lastPath = path;
+      this.lastProfile = p;
+      this.lastPosition = pos;
+      return new MediaStream(new ByteArrayInputStream(output), outputMime, true, Optional.empty());
+    }
+  }
+
+  static final class MutableClock extends Clock {
+    private final ZoneId zone;
+    private Instant now;
+
+    MutableClock(Instant initial) {
+      this(initial, ZoneOffset.UTC);
+    }
+
+    private MutableClock(Instant initial, ZoneId zone) {
+      this.now = initial;
+      this.zone = zone;
+    }
+
+    void advance(Duration delta) {
+      this.now = this.now.plus(delta);
+    }
+
+    @Override
+    public ZoneId getZone() {
+      return zone;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+      return new MutableClock(now, zone);
+    }
+
+    @Override
+    public Instant instant() {
+      return now;
     }
   }
 }
