@@ -1,12 +1,18 @@
 package co.omnistream.domain.service;
 
+import co.omnistream.domain.exception.AccessDenied;
+import co.omnistream.domain.exception.ExpiredLink;
+import co.omnistream.domain.exception.InvalidCredentials;
+import co.omnistream.domain.exception.ResourceNotFound;
 import co.omnistream.domain.model.access.AccessType;
+import co.omnistream.domain.model.access.LinkedIdentity;
 import co.omnistream.domain.model.access.Permission;
 import co.omnistream.domain.model.access.PermissionLevel;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.User;
 import co.omnistream.domain.model.access.UserId;
 import co.omnistream.domain.model.catalog.ItemId;
+import co.omnistream.domain.model.sharing.SharedLink;
 import co.omnistream.domain.policy.AccessPolicy;
 import co.omnistream.domain.port.dto.AccessGrant;
 import co.omnistream.domain.port.dto.Credentials;
@@ -21,19 +27,35 @@ import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
 import co.omnistream.domain.snapshot.SharedLinkSnapshot;
 import co.omnistream.domain.snapshot.UserSnapshot;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 
-/** Domain service that implements the IAccessControl driving port. */
+/**
+ * Domain service that implements the IAccessControl driving port.
+ *
+ * <p>Acts as the context of the identity verification strategy (Strategy pattern over {@link
+ * IIdentityProvider}).
+ */
 public final class AccessService extends AuthorizedService implements IAccessControl {
+
+  private static final SecureRandom RANDOM = new SecureRandom();
+  private static final int TOKEN_BYTES = 32;
+
   private final List<IIdentityProvider> providers;
   private final ICredentialRegistry credentialRegistry;
   private final ITokenRepository tokenRepository;
   private final ISharedLinkRepository sharedLinkRepository;
   private final ICatalogRepository catalogRepository;
   private final IUnitOfWork unitOfWork;
+  private final Duration tokenLifetime;
 
   public AccessService(
       IUserRepository userRepository,
@@ -44,29 +66,58 @@ public final class AccessService extends AuthorizedService implements IAccessCon
       ITokenRepository tokenRepository,
       ISharedLinkRepository sharedLinkRepository,
       ICatalogRepository catalogRepository,
-      IUnitOfWork unitOfWork) {
+      IUnitOfWork unitOfWork,
+      Duration tokenLifetime) {
     super(userRepository, accessPolicy, clock);
-    this.providers = providers;
-    this.credentialRegistry = credentialRegistry;
-    this.tokenRepository = tokenRepository;
-    this.sharedLinkRepository = sharedLinkRepository;
-    this.catalogRepository = catalogRepository;
-    this.unitOfWork = unitOfWork;
+    this.providers = List.copyOf(Objects.requireNonNull(providers, "providers"));
+    this.credentialRegistry = Objects.requireNonNull(credentialRegistry, "credentialRegistry");
+    this.tokenRepository = Objects.requireNonNull(tokenRepository, "tokenRepository");
+    this.sharedLinkRepository =
+        Objects.requireNonNull(sharedLinkRepository, "sharedLinkRepository");
+    this.catalogRepository = Objects.requireNonNull(catalogRepository, "catalogRepository");
+    this.unitOfWork = Objects.requireNonNull(unitOfWork, "unitOfWork");
+    if (!Objects.requireNonNull(tokenLifetime, "tokenLifetime").isPositive()) {
+      throw new IllegalArgumentException("tokenLifetime must be positive");
+    }
+    this.tokenLifetime = tokenLifetime;
   }
 
   @Override
   public SessionToken authenticateUser(Credentials c) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    IIdentityProvider provider = selectProvider(c);
+    LinkedIdentity identity =
+        provider.verify(c).orElseThrow(() -> new InvalidCredentials("Invalid credentials"));
+    User user =
+        userRepository
+            .findByIdentity(identity)
+            .orElseThrow(() -> new InvalidCredentials("Invalid credentials"));
+    if (!user.toSnapshot().active()) {
+      throw new AccessDenied("User account is deactivated");
+    }
+    return issueToken(user);
   }
 
   @Override
   public Optional<SessionToken> validateToken(String value) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(value, "value");
+    if (value.isBlank()) {
+      return Optional.empty();
+    }
+    Instant now = clock.instant();
+    return tokenRepository
+        .find(value)
+        .filter(token -> token.isValidAt(now))
+        .filter(token ->
+            userRepository
+                .findById(token.userId())
+                .map(user -> user.toSnapshot().active())
+                .orElse(false));
   }
 
   @Override
   public void logout(String value) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(value, "value");
+    tokenRepository.delete(value);
   }
 
   /**
@@ -77,24 +128,56 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public SessionToken accessWithLink(String link) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(link, "link");
+    SharedLink sharedLink =
+        sharedLinkRepository
+            .findByToken(link)
+            .orElseThrow(() -> new ResourceNotFound("Shared link not found"));
+    if (!sharedLink.isValidAt(clock.instant())) {
+      throw new ExpiredLink("Shared link has expired or been revoked");
+    }
+    User guest = loadUser(sharedLink.toSnapshot().guestId());
+    if (!guest.toSnapshot().active()) {
+      throw new AccessDenied("Guest account is deactivated");
+    }
+    return issueToken(guest);
   }
 
   @Override
   public boolean authorizeResource(UserId u, ItemId r, AccessType acc) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(r, "r");
+    Objects.requireNonNull(acc, "acc");
+    User user = loadUser(u);
+    return accessPolicy.authorizes(user, r, acc, catalogRepository.getCatalog().toSnapshot());
   }
 
   /**
-   * Nobody shares with more rights than they have: if {@code accessPolicy.effectiveLevel(u, col)}
-   * is empty or below {@code level}, throw {@code AccessDenied}. Then, in one unit of work: {@code
+   * Nobody shares with more rights than they have: if {@code inheritedLevel(u, col)} is empty or
+   * below {@code level}, throw {@code AccessDenied}. Then, in one unit of work: {@code
    * User.createGuest(col, level)} and save it, {@code SharedLink.create(col, <guest id>, level, u,
    * lifetime, clock.instant())} and save it too.
    */
   @Override
   public SharedLinkSnapshot shareCollection(
       UserId u, ItemId col, PermissionLevel level, Duration lifetime) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(col, "col");
+    Objects.requireNonNull(level, "level");
+    if (!Objects.requireNonNull(lifetime, "lifetime").isPositive()) {
+      throw new IllegalArgumentException("lifetime must be positive");
+    }
+    User sharer = loadUser(u);
+    Optional<PermissionLevel> allowed = inheritedLevel(sharer, col);
+    if (allowed.isEmpty() || allowed.get().compareTo(level) < 0) {
+      throw new AccessDenied("Cannot share collection with level " + level);
+    }
+    return unitOfWork.execute(() -> {
+      User guest = User.createGuest(col, level);
+      userRepository.save(guest);
+      SharedLink link =
+          SharedLink.create(col, guest.toSnapshot().id(), level, u, lifetime, clock.instant());
+      sharedLinkRepository.save(link);
+      return link.toSnapshot();
+    });
   }
 
   /**
@@ -103,7 +186,22 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public UserId createUser(UserId admin, String username, String password, Role role) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    requireAdmin(admin);
+    String cleanUsername = requireNotBlank(username, "username");
+    requireNotBlank(password, "password");
+    Objects.requireNonNull(role, "role");
+    if (role == Role.GUEST) {
+      throw new AccessDenied("Guests can only be created from shared links");
+    }
+    if (userRepository.findByUsername(cleanUsername).isPresent()) {
+      throw new IllegalStateException("Username already exists: " + cleanUsername);
+    }
+    return unitOfWork.execute(() -> {
+      LinkedIdentity identity = credentialRegistry.register(cleanUsername, password);
+      User created = User.create(cleanUsername, role, identity);
+      userRepository.save(created);
+      return created.toSnapshot().id();
+    });
   }
 
   /**
@@ -114,7 +212,17 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public void manageRoles(UserId admin, UserId target, Role role) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    requireAdmin(admin);
+    Objects.requireNonNull(role, "role");
+    if (role == Role.GUEST) {
+      throw new AccessDenied("Cannot assign guest role");
+    }
+    User user = loadUser(target);
+    if (user.toSnapshot().role() == Role.GUEST) {
+      throw new AccessDenied("Cannot change a guest's role");
+    }
+    user.changeRole(role);
+    userRepository.save(user);
   }
 
   /**
@@ -125,7 +233,7 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public void grantPermission(UserId granter, UserId u, Permission p) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    delegatePermission(granter, u, p, user -> user.grant(p));
   }
 
   /**
@@ -134,12 +242,15 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public void revokePermission(UserId granter, UserId u, Permission p) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    delegatePermission(granter, u, p, user -> user.revoke(p));
   }
 
   @Override
   public void deactivateUser(UserId admin, UserId u) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    requireAdmin(admin);
+    User user = loadUser(u);
+    user.deactivate();
+    userRepository.save(user);
   }
 
   /**
@@ -149,7 +260,12 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public List<UserSnapshot> listUsers(UserId admin) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    requireAdmin(admin);
+    return userRepository.findAll().stream()
+        .map(User::toSnapshot)
+        .filter(snapshot -> snapshot.role() != Role.GUEST)
+        .sorted(Comparator.comparing(UserSnapshot::username))
+        .toList();
   }
 
   /**
@@ -160,7 +276,17 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public UserId findUser(UserId u, String username) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    String cleanUsername = requireNotBlank(username, "username");
+    User caller = loadUser(u);
+    if (!canFindUsers(caller)) {
+      throw new AccessDenied("Only administrators or resource managers can find users");
+    }
+    return userRepository
+        .findByUsername(cleanUsername)
+        .map(User::toSnapshot)
+        .filter(snapshot -> snapshot.active() && snapshot.role() != Role.GUEST)
+        .map(UserSnapshot::id)
+        .orElseThrow(() -> new ResourceNotFound("Active user not found: " + cleanUsername));
   }
 
   /**
@@ -172,7 +298,62 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    */
   @Override
   public List<AccessGrant> accessTo(UserId u, ItemId resource) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(resource, "resource");
+    User caller = loadUser(u);
+    if (caller.toSnapshot().role() == Role.GUEST
+        || inheritedLevel(caller, resource)
+            .filter(level -> level == PermissionLevel.MANAGE)
+            .isEmpty()) {
+      throw new AccessDenied("Cannot view access list for " + resource.value());
+    }
+    return userRepository.findAll().stream()
+        .map(User::toSnapshot)
+        .filter(snapshot -> snapshot.active() && snapshot.role() != Role.GUEST)
+        .flatMap(snapshot ->
+            snapshot.permissions().stream()
+                .filter(permission -> permission.appliesTo(resource))
+                .findFirst()
+                .map(permission ->
+                    new AccessGrant(snapshot.id(), snapshot.username(), permission.level()))
+                .stream())
+        .sorted(Comparator.comparing(AccessGrant::username))
+        .toList();
+  }
+
+  private void delegatePermission(
+      UserId granter, UserId targetId, Permission permission, Consumer<User> action) {
+    Objects.requireNonNull(permission, "p");
+    User granterUser = loadUser(granter);
+    User targetUser = loadUser(targetId);
+    Optional<PermissionLevel> inherited = inheritedLevel(granterUser, permission.resource());
+    if (!accessPolicy.mayDelegate(granterUser, inherited, targetUser, permission)) {
+      throw new AccessDenied(
+          "Not allowed to change permission on " + permission.resource().value());
+    }
+    if (targetUser.toSnapshot().role() == Role.GUEST) {
+      throw new AccessDenied("Cannot change a guest's permissions");
+    }
+    action.accept(targetUser);
+    userRepository.save(targetUser);
+  }
+
+  private static boolean canFindUsers(User caller) {
+    if (caller.isAdmin()) {
+      return true;
+    }
+    UserSnapshot snapshot = caller.toSnapshot();
+    return snapshot.active()
+        && snapshot.role() != Role.GUEST
+        && snapshot.permissions().stream()
+            .anyMatch(permission -> permission.level() == PermissionLevel.MANAGE);
+  }
+
+  private static String requireNotBlank(String value, String name) {
+    String stripped = Objects.requireNonNull(value, name).strip();
+    if (stripped.isEmpty()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return stripped;
   }
 
   /**
@@ -181,14 +362,26 @@ public final class AccessService extends AuthorizedService implements IAccessCon
    * {@code r} itself, which {@code mayDelegate} adds anyway.
    */
   private Optional<PermissionLevel> inheritedLevel(User u, ItemId r) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    return accessPolicy.effectiveLevel(u, r, catalogRepository.getCatalog().toSnapshot());
   }
 
   private IIdentityProvider selectProvider(Credentials c) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    Objects.requireNonNull(c, "c");
+    return providers.stream()
+        .filter(provider -> provider.supports(c))
+        .findFirst()
+        .orElseThrow(() -> new InvalidCredentials("No identity provider supports " + c.provider()));
   }
 
   private SessionToken issueToken(User u) {
-    throw new UnsupportedOperationException("Not implemented yet");
+    UserSnapshot snapshot = u.toSnapshot();
+    byte[] bytes = new byte[TOKEN_BYTES];
+    RANDOM.nextBytes(bytes);
+    String value = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    SessionToken token =
+        new SessionToken(
+            value, snapshot.id(), snapshot.role(), clock.instant().plus(tokenLifetime));
+    tokenRepository.save(token);
+    return token;
   }
 }
