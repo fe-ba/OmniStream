@@ -68,6 +68,74 @@ Requires JDK 25; Maven comes with the wrapper. From `src/`:
 ./mvnw spotless:apply    # format the code
 ```
 
+## Running the project
+
+The application is currently run through its demo server. It includes the web
+UI, REST API and in-memory sample data, so it does not require a database,
+FFmpeg or ExifTool.
+
+Requirements:
+
+- JDK 25. Check the installed version with `java -version`.
+- No system Maven installation is needed; `src/mvnw` downloads and uses the
+  Maven version required by the project.
+
+### 1. Build and test
+
+From the repository root:
+
+```bash
+cd src
+./mvnw verify
+```
+
+It must finish with `BUILD SUCCESS`. This runs the format check, architecture
+rules, compilation and all tests.
+
+### 2. Start the demo
+
+From `src/`:
+
+```bash
+./mvnw -pl presentation -am test \
+  -Ddemo=true \
+  -Dtest=DemoServer \
+  -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+Keep the terminal open. Once it prints the OmniStream address, open
+[http://localhost:7070](http://localhost:7070).
+
+The default demo users are:
+
+| Username | Password |
+|---|---|
+| `admin` | `admin` |
+| `ana` | `ana` |
+| `luis` | `luis` |
+
+To use another port:
+
+```bash
+./mvnw -pl presentation -am test \
+  -Ddemo=true \
+  -Ddemo.port=8080 \
+  -Dtest=DemoServer \
+  -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+Then open [http://localhost:8080](http://localhost:8080). Stop the server with
+`Ctrl+C`.
+
+### Troubleshooting
+
+- If Maven reports that Java 25 or newer is required, install JDK 25 or configure
+  `JAVA_HOME` to point to it.
+- If port `7070` is already in use, start the demo with a different
+  `-Ddemo.port=...` value.
+- If the demo does not start, run `./mvnw verify` first and fix the reported
+  compilation or test failure.
+
 The design behind the code is in the
 [software diagrams](docs/architecture/software/) and the
 [ADRs](docs/decisions/); the rules for writing it are in the
