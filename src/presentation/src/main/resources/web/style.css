@@ -37,6 +37,8 @@
   --step-3: 2.25rem;
   --step-4: 3.5rem;
 
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
   --gutter: clamp(1rem, 4vw, 2.5rem);
   --np-height: 0px;
 
@@ -628,6 +630,107 @@ code { font-size: 0.9em; color: var(--paper); background: var(--lagoon-3); paddi
 
 @keyframes dim { from { opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(1rem) scale(0.98); } }
+
+/* ------------------------------------------------------------------ text editor (ADR 0027)
+ *
+ * A sheet on the desk: the text sits on a lighter panel, and everyone in the room is a
+ * coloured initial at the top right, in the colour their cursor has in the text.
+ */
+
+/* Unlike the theater, the editor covers the app completely: it is a place to work, not a preview */
+.editor {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--gutter);
+  background: rgb(7 20 24);
+  animation: dim 220ms ease-out;
+}
+
+.desk {
+  width: min(64rem, 100%);
+  height: min(52rem, calc(100dvh - 2 * var(--gutter)));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0.75rem;
+  animation: rise 260ms ease-out;
+}
+
+.desk-bar { display: flex; align-items: center; gap: 1rem; }
+.desk-heading { min-width: 0; margin-right: auto; }
+.desk-heading h2 {
+  font-size: var(--step-2);
+  font-weight: 700;
+  font-stretch: 85%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.desk-meta { display: flex; flex-wrap: wrap; gap: 0 0.9rem; color: var(--mist); font-size: var(--step--1); }
+
+/* Where the text is: saved, being edited, saving, read only, offline */
+.editor-status { display: inline-flex; align-items: center; gap: 0.4rem; }
+.editor-status::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--mist);
+}
+.editor-status[data-state="saved"]::before { background: var(--image); }
+.editor-status[data-state="unsaved"]::before { background: var(--document); }
+.editor-status[data-state="saving"]::before,
+.editor-status[data-state="connecting"]::before { background: var(--document); animation: blink 1.2s ease-in-out infinite; }
+.editor-status[data-state="readonly"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--mist); }
+.editor-status[data-state="error"],
+.editor-status[data-state="offline"] { color: var(--error); }
+.editor-status[data-state="error"]::before,
+.editor-status[data-state="offline"]::before { background: var(--error); }
+
+.editor-people { list-style: none; margin: 0; padding: 0; display: flex; }
+.editor-people li + li { margin-left: -0.45rem; }
+.editor-people .avatar {
+  width: 2.1rem;
+  height: 2.1rem;
+  box-shadow: 0 0 0 3px rgb(5 14 16);
+}
+
+.editor-notice {
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--error);
+  color: var(--paper);
+  background: color-mix(in srgb, var(--error) 12%, var(--lagoon));
+}
+
+.editor-surface {
+  grid-row: 3; /* the notice above is often hidden, and then takes no row of its own */
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--lagoon-2);
+  box-shadow: inset 0 0 0 1px var(--lagoon-3);
+}
+.editor-surface .cm-editor { height: 100%; }
+
+@media (max-width: 40rem) {
+  .editor { padding: 0.75rem; }
+  .desk { height: calc(100dvh - 1.5rem); }
+  .desk-heading h2 { font-size: var(--step-1); }
+  /* CodeMirror injects its own styles after this sheet, so only !important wins here */
+  .editor-surface .cm-foldGutter { display: none !important; }
+}
+
+/* The page of a text file, which opens in the editor, is ruled */
+.cover.text .extension {
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 0.7rem,
+    color-mix(in srgb, currentColor 30%, transparent) 0.7rem calc(0.7rem + 1px)
+  );
+}
 
 /* ------------------------------------------------------------------ now playing */
 

@@ -227,6 +227,7 @@ below.
 | `auditado()` / `anotar()` / `entrada()` / `delegado` | `audited()` / `record()` / `entry()` / `delegate` | `AuditingDecorator` and its subclasses |
 | `crearRegistroAuditoria()` | `createAuditLog()` | `InfrastructureFactory` |
 | `Gestionar acceso a una coleccion` (UC28) / `Consultar historial de cambios` (UC29) | `Manage access to a collection` / `Review change history` | Use cases |
+| `Editar texto en conjunto` (UC30) | `Edit text together` | Use case (ADR 0027) |
 
 ## Live changes (ADR 0026)
 

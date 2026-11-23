@@ -190,6 +190,7 @@ function textField(label, value = "") {
 function showLogin() {
   stopPlaying(false);
   stopLive();
+  closeEditor();
   drawLoginArt();
   document.querySelector(".topbar").hidden = true;
   $("library").hidden = true;
@@ -417,15 +418,16 @@ function cover(file) {
   if (file.type === "AUDIO") face = waveform(file.id);
   else if (file.type === "VIDEO") face = el("span", { class: "runtime" }, formatDuration(file.duration));
   else face = el("span", { class: "extension" }, extension(file.name));
+  const text = isText(file);
   const verb = file.type === "AUDIO" || file.type === "VIDEO" ? "Play" : "Open";
   return el(
     "button",
     {
-      class: "cover",
+      class: text ? "cover text" : "cover",
       type: "button",
       "data-type": file.type,
-      "aria-label": `${verb} ${file.name}`,
-      onclick: () => play(file).catch(sayError),
+      "aria-label": text ? `Open ${file.name} in the editor` : `${verb} ${file.name}`,
+      onclick: () => (text ? openEditor(file) : play(file)).catch(sayError),
     },
     face,
   );
@@ -1192,7 +1194,7 @@ async function collectionAccess(collection) {
 // ------------------------------------------------------------------ history
 
 const ACTION_GROUPS = {
-  files: ["FILE_ADDED", "FILE_DELETED", "METADATA_EDITED", "FILE_TAGGED", "FILE_DOWNLOADED"],
+  files: ["FILE_ADDED", "FILE_DELETED", "FILE_EDITED", "METADATA_EDITED", "FILE_TAGGED", "FILE_DOWNLOADED"],
   collections: ["COLLECTION_CREATED", "COLLECTION_MODIFIED", "LINK_CREATED", "LINK_USED"],
   access: ["USER_CREATED", "ROLE_CHANGED", "PERMISSION_GRANTED", "PERMISSION_REVOKED", "USER_DEACTIVATED"],
   logins: ["LOGGED_IN", "LOGIN_FAILED", "LOGGED_OUT"],
@@ -1237,6 +1239,9 @@ function sentence(entry) {
       return [who, " added ", itemLink(entry.resource, detail.split("/").pop())];
     case "FILE_DELETED":
       return [who, " deleted ", el("strong", { class: "gone" }, detail || "a file")];
+    case "FILE_EDITED":
+      // the detail is "<name>, <n> characters"
+      return [who, " edited ", itemLink(entry.resource, detail.slice(0, Math.max(0, detail.lastIndexOf(", "))))];
     case "METADATA_EDITED": {
       const [key, ...value] = detail.split(" = ");
       return [who, " changed the ", key, " of ", itemLink(entry.resource), ` to “${value.join(" = ")}”`];
@@ -1464,6 +1469,416 @@ async function applyChanges() {
     if (error.status !== 401) sayError(error);
   }
 }
+
+// ------------------------------------------------------------------ editing text together (ADR 0027)
+//
+// Everyone who opens the same text file is in one room of the server's relay. The browsers merge
+// the edits with Yjs (a CRDT); the server passes them on without reading them, keeps them for
+// whoever joins later, and saves the text when an editor sends it. Protocol: docs/reference/rest-api.md.
+
+const TEXT_EXTENSIONS = new Set([
+  "txt", "text", "md", "markdown", "log", "srt", "vtt", "csv", "tsv", "json", "xml", "yaml", "yml",
+  "toml", "ini", "properties", "env", "html", "htm", "css", "js", "mjs", "ts", "jsx", "tsx", "java",
+  "kt", "py", "rb", "go", "rs", "c", "h", "cpp", "hpp", "cs", "php", "sql", "sh", "bash", "tex",
+]);
+const PROSE_EXTENSIONS = new Set(["txt", "text", "md", "markdown", "log", "srt", "vtt"]);
+const TEXT_MAX_BYTES = 1024 * 1024;
+const SAVE_AFTER_MS = 2000;
+const FRAME = { UPDATE: 0, AWARENESS: 1, STATE: 2, SAVE: 3 };
+const CLOSED_BECAUSE = {
+  4400: "This is not a file of the library.",
+  4403: "You cannot open this file.",
+  4404: "This file is no longer in the library.",
+};
+
+/** Whether a file opens in the editor: the same rule as the server's TextFilePolicy. */
+function isText(file) {
+  const dot = file.name.lastIndexOf(".");
+  const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
+  return file.type === "DOCUMENT" && TEXT_EXTENSIONS.has(ext) && file.sizeBytes <= TEXT_MAX_BYTES;
+}
+
+let editorLibrary = null;
+
+/** CodeMirror and Yjs, about 280 KB compressed: loaded the first time someone opens a text file. */
+function loadEditorLibrary() {
+  if (!editorLibrary) {
+    editorLibrary = new Promise((resolve, reject) => {
+      const script = el("script", {
+        src: "/vendor/editor.js",
+        onload: () => resolve(window.OmniEditor),
+        onerror: () => {
+          editorLibrary = null;
+          reject(new Error("The editor could not be loaded"));
+        },
+      });
+      document.head.append(script);
+    });
+  }
+  return editorLibrary;
+}
+
+let editing = null; // the open editor: see openEditor
+
+async function openEditor(file) {
+  closeEditor();
+  const E = await loadEditorLibrary();
+  const doc = new E.Y.Doc();
+  const awareness = new E.Awareness(doc);
+  const me = state.me ? state.me.username || "you" : "Guest";
+  const color = SPINE_COLORS[hash(me) % SPINE_COLORS.length];
+  awareness.setLocalStateField("user", {
+    name: me,
+    id: state.me ? state.me.userId : "",
+    color,
+    colorLight: `${color}55`,
+  });
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(`${scheme}//${location.host}${API}/files/${file.id}/edit`);
+  socket.binaryType = "arraybuffer";
+  const session = {
+    E, file, doc, awareness, socket,
+    text: doc.getText("content"),
+    view: null,
+    live: false, // whether the view follows the shared document
+    loaded: false, // whether the document has its text: seeded here or received
+    editable: false,
+    savedText: "", // the text of the file when it was opened
+    dirty: false,
+    saveTimer: null,
+    conflict: false,
+    closing: false,
+  };
+  editing = session;
+
+  $("editor-title").textContent = file.name;
+  $("editor-notice").hidden = true;
+  $("editor-surface").replaceChildren();
+  $("editor-people").replaceChildren();
+  setEditorStatus("connecting", "Connecting…");
+  $("editor").hidden = false;
+
+  socket.addEventListener("message", (event) => {
+    if (editing !== session) return;
+    if (typeof event.data === "string") onEditorMessage(session, JSON.parse(event.data));
+    else onEditorFrame(session, new Uint8Array(event.data));
+  });
+  socket.addEventListener("close", (event) => onEditorClosed(session, event));
+  doc.on("update", (update, origin) => {
+    if (origin === "remote") return;
+    session.loaded = true;
+    if (!session.editable) return;
+    sendFrame(session, FRAME.UPDATE, update);
+    if (origin !== "seed") markDirty(session);
+  });
+  awareness.on("update", ({ added, updated, removed }, origin) => {
+    if (origin === "local") {
+      sendFrame(session, FRAME.AWARENESS, E.encodeAwarenessUpdate(awareness, [...added, ...updated, ...removed]));
+    } else if (added.length > 0) {
+      // Presence is only sent when it changes: tell whoever just arrived that we are here
+      announce(session);
+    }
+    if (editing === session) drawEditorPeople(session);
+  });
+}
+
+function onEditorMessage(session, message) {
+  switch (message.type) {
+    case "welcome":
+      announce(session);
+      session.editable = message.editable;
+      session.savedText = message.text;
+      if (message.seed) seed(session);
+      if (session.editable) {
+        mountEditor(session, true);
+        setEditorStatus("saved", session.loaded ? "Saved" : "Loading…");
+      } else {
+        // Until an editor is here, a reader sees the saved text; edits replace it when they come
+        mountEditor(session, false);
+        setEditorStatus("readonly", "Read only");
+      }
+      drawEditorPeople(session);
+      break;
+    case "seed":
+      seed(session);
+      break;
+    case "saved":
+      if (!session.dirty) {
+        const mine = state.me && message.by === state.me.userId;
+        setEditorStatus("saved", mine ? "Saved" : `Saved by ${editorName(session, message.by)}`);
+      }
+      break;
+    case "compact":
+      sendFrame(session, FRAME.STATE, session.E.Y.encodeStateAsUpdate(session.doc));
+      break;
+    case "error":
+      onEditorError(session, message);
+      break;
+    default:
+      break;
+  }
+}
+
+/** Loads the file's text into the empty shared document: only the editor the room picks does it. */
+function seed(session) {
+  if (session.text.length > 0 || session.loaded) return;
+  session.doc.transact(() => session.text.insert(0, session.savedText), "seed");
+  if (session.view && !session.live) mountEditor(session, true);
+}
+
+function onEditorFrame(session, frame) {
+  const kind = frame[0];
+  const body = frame.subarray(1);
+  if (kind === FRAME.UPDATE) {
+    session.E.Y.applyUpdate(session.doc, body, "remote");
+    session.loaded = true;
+    if (!session.live) mountEditor(session, true);
+    if (session.editable && !session.dirty) setEditorStatus("saved", "Saved");
+  } else if (kind === FRAME.AWARENESS) {
+    session.E.applyAwarenessUpdate(session.awareness, body, "remote");
+  }
+}
+
+function onEditorError(session, message) {
+  if (message.error === "VersionConflict") {
+    session.conflict = true;
+    clearTimeout(session.saveTimer);
+    editorNotice(
+      "Someone changed this file outside the editor after it was opened. Your edits here are not saved: " +
+        "copy what you need, then close the editor and open the file again.",
+    );
+    setEditorStatus("error", "Not saved");
+  } else if (message.error === "AccessDenied") {
+    session.editable = false;
+    mountEditor(session, session.live);
+    editorNotice("You can no longer change this file. What you see is still up to date.");
+    setEditorStatus("readonly", "Read only");
+  } else if (message.error !== "NotReady") {
+    setEditorStatus("error", `Not saved: ${message.message}`);
+  }
+}
+
+function onEditorClosed(session, event) {
+  if (session.closing || editing !== session) return;
+  clearTimeout(session.saveTimer);
+  const known = CLOSED_BECAUSE[event.code] || (event.code === 4422 ? event.reason : null);
+  if (known) {
+    $("editor-surface").replaceChildren();
+    editorNotice(known);
+    setEditorStatus("error", "Not opened");
+    return;
+  }
+  session.editable = false;
+  if (session.view) mountEditor(session, session.live);
+  editorNotice(
+    session.dirty
+      ? "Lost the connection to the server. Your last edits were not saved: copy them, then open the file again."
+      : "Lost the connection to the server. Everything up to here is saved; open the file again to keep editing.",
+  );
+  setEditorStatus("offline", "Offline");
+}
+
+/** (Re)builds the view: following the shared document, or showing the saved text until it can. */
+function mountEditor(session, live) {
+  const { E } = session;
+  const extensions = [E.basicSetup, editorTheme(E), ...editorLanguage(E, session.file.name)];
+  if (live) {
+    // Undo goes to Yjs, which only undoes this person's edits; CodeMirror's history would undo
+    // everyone's
+    extensions.unshift(E.Prec.high(E.keymap.of(E.yUndoManagerKeymap)));
+    extensions.push(E.yCollab(session.text, session.awareness));
+  }
+  if (!session.editable) extensions.push(E.EditorState.readOnly.of(true));
+  if (session.view) session.view.destroy();
+  session.live = live;
+  session.view = new E.EditorView({
+    state: E.EditorState.create({ doc: live ? session.text.toString() : session.savedText, extensions }),
+    parent: $("editor-surface"),
+  });
+  if (session.editable) session.view.focus();
+}
+
+function editorLanguage(E, name) {
+  const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+  const language = {
+    md: () => E.markdown(),
+    markdown: () => E.markdown(),
+    js: () => E.javascript(),
+    mjs: () => E.javascript(),
+    jsx: () => E.javascript({ jsx: true }),
+    ts: () => E.javascript({ typescript: true }),
+    tsx: () => E.javascript({ jsx: true, typescript: true }),
+    json: () => E.json(),
+    py: () => E.python(),
+    java: () => E.java(),
+    css: () => E.css(),
+    html: () => E.html(),
+    htm: () => E.html(),
+  }[ext];
+  const extensions = language ? [language()] : [];
+  if (PROSE_EXTENSIONS.has(ext)) extensions.push(E.EditorView.lineWrapping);
+  return extensions;
+}
+
+let editorThemeCache = null;
+
+/** The editor in the colours of the app: paper on lagoon, one colour per kind of token. */
+function editorTheme(E) {
+  if (editorThemeCache) return editorThemeCache;
+  const t = E.tags;
+  editorThemeCache = [
+    E.EditorView.theme(
+      {
+        "&": { height: "100%", color: "var(--paper)", backgroundColor: "transparent" },
+        ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "1.6" },
+        ".cm-content": { padding: "1rem 0", caretColor: "var(--amber)" },
+        ".cm-line": { padding: "0 1.25rem 0 0.75rem" },
+        "&.cm-focused": { outline: "none" },
+        ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--amber)", borderLeftWidth: "2px" },
+        "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
+          backgroundColor: "color-mix(in srgb, var(--video) 28%, transparent)",
+        },
+        ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--paper) 4%, transparent)" },
+        ".cm-gutters": { backgroundColor: "transparent", color: "var(--mist)", border: "none" },
+        ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--paper)" },
+        ".cm-lineNumbers .cm-gutterElement": { padding: "0 0.4rem 0 0.75rem", minWidth: "2.75rem" },
+        ".cm-foldGutter .cm-gutterElement": { color: "var(--mist)" },
+        ".cm-matchingBracket": { backgroundColor: "var(--lagoon-3)", outline: "none" },
+        ".cm-searchMatch": { backgroundColor: "color-mix(in srgb, var(--document) 30%, transparent)" },
+        ".cm-panels": { backgroundColor: "var(--lagoon)", color: "var(--paper)" },
+        ".cm-tooltip": { backgroundColor: "var(--lagoon)", border: "1px solid var(--lagoon-3)" },
+        ".cm-ySelectionInfo": {
+          fontFamily: "Bricolage Grotesque, system-ui, sans-serif",
+          fontSize: "0.75rem",
+          fontWeight: "640",
+          padding: "0.05rem 0.35rem",
+          borderRadius: "4px 4px 4px 0",
+          top: "-1.35em",
+          opacity: "1",
+        },
+      },
+      { dark: true },
+    ),
+    E.syntaxHighlighting(
+      E.HighlightStyle.define([
+        { tag: [t.keyword, t.operatorKeyword, t.modifier], color: "var(--video)" },
+        { tag: [t.string, t.special(t.string), t.regexp], color: "var(--image)" },
+        { tag: [t.number, t.bool, t.null, t.atom], color: "var(--document)" },
+        { tag: [t.comment, t.meta], color: "var(--mist)", fontStyle: "italic" },
+        { tag: [t.typeName, t.className, t.definition(t.variableName)], color: "var(--audio)" },
+        { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--paper)", fontWeight: "620" },
+        { tag: [t.propertyName, t.attributeName], color: "#c9dcd9" },
+        { tag: [t.tagName, t.angleBracket], color: "var(--video)" },
+        { tag: t.heading, color: "var(--paper)", fontWeight: "760" },
+        { tag: t.strong, fontWeight: "720" },
+        { tag: t.emphasis, fontStyle: "italic" },
+        { tag: [t.link, t.url], color: "var(--video)", textDecoration: "underline" },
+        { tag: [t.list, t.quote], color: "var(--document)" },
+        { tag: t.monospace, color: "var(--image)" },
+        { tag: t.processingInstruction, color: "var(--mist)" },
+        { tag: t.invalid, color: "var(--error)" },
+      ]),
+    ),
+  ];
+  return editorThemeCache;
+}
+
+/** Sends this browser's presence: name, colour and cursor. */
+function announce(session) {
+  sendFrame(session, FRAME.AWARENESS, session.E.encodeAwarenessUpdate(session.awareness, [session.doc.clientID]));
+}
+
+function sendFrame(session, kind, bytes) {
+  if (session.socket.readyState !== WebSocket.OPEN) return;
+  const frame = new Uint8Array(bytes.length + 1);
+  frame[0] = kind;
+  frame.set(bytes, 1);
+  session.socket.send(frame);
+}
+
+function markDirty(session) {
+  if (session.conflict) return;
+  session.dirty = true;
+  setEditorStatus("unsaved", "Editing…");
+  clearTimeout(session.saveTimer);
+  session.saveTimer = setTimeout(() => saveEditor(session), SAVE_AFTER_MS);
+}
+
+function saveEditor(session) {
+  clearTimeout(session.saveTimer);
+  if (!session.dirty || !session.editable || session.conflict || !session.loaded) return;
+  session.dirty = false;
+  setEditorStatus("saving", "Saving…");
+  sendFrame(session, FRAME.SAVE, new TextEncoder().encode(session.text.toString()));
+}
+
+/** Saves what is pending, says goodbye to the others and closes the editor. */
+function closeEditor() {
+  const session = editing;
+  if (!session) return;
+  editing = null;
+  session.closing = true;
+  saveEditor(session);
+  session.E.removeAwarenessStates(session.awareness, [session.doc.clientID], "local");
+  session.socket.close(1000, "Closed");
+  if (session.view) session.view.destroy();
+  session.awareness.destroy();
+  session.doc.destroy();
+  $("editor").hidden = true;
+}
+
+/** Who is in the room, from the presence each browser shares: you first, then the others. */
+function drawEditorPeople(session) {
+  const seen = new Map();
+  for (const [client, presence] of session.awareness.getStates()) {
+    const user = presence.user;
+    if (!user) continue;
+    const key = user.id || user.name;
+    const mine = client === session.doc.clientID;
+    if (!seen.has(key) || mine) seen.set(key, { ...user, mine });
+  }
+  const people = [...seen.values()].sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0));
+  $("editor-people").replaceChildren(
+    ...people.map((user) =>
+      el(
+        "li",
+        { title: user.mine ? `${user.name} (you)` : user.name },
+        el("span", { class: "avatar", style: { "--avatar-color": user.color }, "aria-hidden": "true" }, (user.name[0] || "?").toUpperCase()),
+        el("span", { class: "visually-hidden" }, user.mine ? `${user.name} (you)` : user.name),
+      ),
+    ),
+  );
+  const others = people.filter((user) => !user.mine).map((user) => user.name);
+  $("editor-with").textContent =
+    others.length === 0 ? "Only you" : `With ${others.length > 2 ? `${others.slice(0, 2).join(", ")} and ${others.length - 2} more` : others.join(" and ")}`;
+}
+
+function editorName(session, userId) {
+  for (const presence of session.awareness.getStates().values()) {
+    if (presence.user && presence.user.id === userId) return presence.user.name;
+  }
+  return personName(userId);
+}
+
+function setEditorStatus(mode, text) {
+  const status = $("editor-status");
+  status.dataset.state = mode;
+  status.textContent = text;
+}
+
+function editorNotice(text) {
+  const notice = $("editor-notice");
+  notice.textContent = text;
+  notice.hidden = false;
+}
+
+$("editor-close").addEventListener("click", closeEditor);
+$("editor").addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !event.defaultPrevented) closeEditor();
+});
+window.addEventListener("pagehide", () => {
+  if (editing) saveEditor(editing);
+});
 
 // ------------------------------------------------------------------ starting
 

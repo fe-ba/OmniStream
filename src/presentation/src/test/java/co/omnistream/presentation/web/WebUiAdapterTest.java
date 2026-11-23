@@ -50,6 +50,22 @@ class WebUiAdapterTest {
   }
 
   @Test
+  void theEditorIsServedWithItsLicenses() {
+    JavalinTest.test(
+        app(),
+        (server, client) -> {
+          var editor = client.get("/vendor/editor.js");
+          var licenses = client.get("/vendor/LICENSES.txt");
+
+          assertThat(editor.code()).isEqualTo(200);
+          assertThat(editor.headers().get("Content-Type").get(0)).contains("javascript");
+          assertThat(editor.body().string()).contains("OmniEditor");
+          assertThat(licenses.code()).isEqualTo(200);
+          assertThat(licenses.body().string()).contains("yjs").contains("@codemirror/view");
+        });
+  }
+
+  @Test
   void aSharedLinkAnswersThePageToo() {
     JavalinTest.test(
         app(),

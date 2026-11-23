@@ -1,6 +1,6 @@
 # 0027. Collaborative editing of text files
 
-- **Status:** Accepted (implementation pending)
+- **Status:** Accepted
 - **Date:** 2026-11-21
 
 ## Context

@@ -78,7 +78,7 @@ in `ApiErrors`, before it reaches the API; until then it answers 500.
 ## Web UI
 
 `WebUiAdapter` serves the browser interface from the same server: `/` and the
-files next to it (`/app.js`, `/style.css`, `/fonts/`), and `/s/{token}` for
+files next to it (`/app.js`, `/style.css`, `/fonts/`, `/vendor/`), and `/s/{token}` for
 shared links. The page uses this API like any other client. Every path under
 `/api/v1` that is not a route below is a JSON 404, never the page.
 
@@ -93,6 +93,12 @@ What the page offers, and the routes behind it:
 - **History:** the whole trail for administrators, and the history of each file
   or collection for whoever can see it (`/audit`).
 - **Live:** what others change appears without reloading (`/events`).
+- **Editing together:** a text file opens in an editor shared with everyone who
+  has it open, with their names and cursors; it saves by itself a couple of
+  seconds after the last change (`/files/{id}/edit`). The editor (CodeMirror 6
+  and Yjs, about 800 KB minified, 280 KB compressed) is in `/vendor/editor.js`
+  and is only downloaded the first time someone opens a text file; its licenses
+  are in `/vendor/LICENSES.txt`.
 
 ## Routes
 

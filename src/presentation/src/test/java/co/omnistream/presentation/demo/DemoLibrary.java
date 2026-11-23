@@ -56,6 +56,7 @@ import co.omnistream.domain.port.in.ISync;
 import co.omnistream.domain.port.out.IAuditLog;
 import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.IEventSubscriber;
+import co.omnistream.domain.port.out.IFileStorage;
 import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
 import co.omnistream.domain.snapshot.CatalogItemSnapshot;
@@ -107,17 +108,50 @@ import javax.imageio.ImageIO;
  * be tried in a browser before the services and the infrastructure exist. It is a test double, not
  * the application: it keeps everything in memory. Who may see and do what is decided by the real
  * {@link AccessPolicy}, counting collections, and delegation follows ADR 0024; {@link DemoServer}
- * wraps it in the real audit decorators and the real live feed.
+ * wraps it in the real audit decorators, the real live feed and the real text editing service.
  *
  * <p>Accounts (password = username): {@code admin}, the administrator; {@code ana}, who manages the
- * "Tones" collection; {@code luis}, who can only watch and listen to it. In the demo, whatever a
- * user uploads or creates, that user manages.
+ * "Tones" and "Notes" collections; {@code luis}, who can only watch and listen to "Tones" but can
+ * edit the text files of "Notes", so the two can try the collaborative editor (ADR 0027). In the
+ * demo, whatever a user uploads or creates, that user manages.
  */
 final class DemoLibrary
     implements IAccessControl, ICatalogManagement, ISearch, IPlayback, ISync, IAuditTrail {
 
   static final String USERNAME = "admin";
   static final String PASSWORD = "admin";
+
+  private static final String SETLIST =
+      """
+      # Setlist
+
+      Doors at **7 pm**. We open soft and finish loud.
+
+      ## First half
+      1. A 440 Hz tone
+      2. A 660 Hz tone
+
+      ## Second half
+      3. Silence, for a minute
+      """;
+
+  private static final String TONE_SCRIPT =
+      """
+      \"""Writes a pure tone as a WAV file.\"""
+      import math
+      import struct
+      import wave
+
+
+      def tone(path, frequency, seconds, rate=22050):
+          with wave.open(path, "wb") as out:
+              out.setnchannels(1)
+              out.setsampwidth(2)
+              out.setframerate(rate)
+              for i in range(int(rate * seconds)):
+                  sample = math.sin(2 * math.pi * frequency * i / rate)
+                  out.writeframes(struct.pack("<h", int(sample * 8000)))
+      """;
 
   private static final SecureRandom RANDOM = new SecureRandom();
   private static final CatalogId CATALOG = new CatalogId(UUID.randomUUID());
@@ -149,6 +183,14 @@ final class DemoLibrary
     collections.put(pictures, new CollectionSnapshot(pictures, "Pictures", "", List.of(picture)));
     users.get(ana).grant(new Permission(tones, PermissionLevel.MANAGE));
     users.get(luis).grant(new Permission(tones, PermissionLevel.READ));
+    ItemId setlist = add("Setlist.md", SETLIST.getBytes(StandardCharsets.UTF_8), Duration.ZERO);
+    ItemId script = add("tone.py", TONE_SCRIPT.getBytes(StandardCharsets.UTF_8), Duration.ZERO);
+    ItemId notes = new ItemId(UUID.randomUUID());
+    collections.put(
+        notes,
+        new CollectionSnapshot(notes, "Notes", "Text to edit together", List.of(setlist, script)));
+    users.get(ana).grant(new Permission(notes, PermissionLevel.MANAGE));
+    users.get(luis).grant(new Permission(notes, PermissionLevel.WRITE));
 
     // A little history, so the audit screens are not empty on the first visit
     Instant now = Instant.now();
@@ -239,6 +281,10 @@ final class DemoLibrary
               synchronized (library) {
                 return switch (method.getName()) {
                   case "getCatalog" -> CatalogIndex.fromSnapshot(catalog());
+                  case "save" -> {
+                    saveCatalog((CatalogIndex) args[0]);
+                    yield null;
+                  }
                   case "findFile" -> Optional.ofNullable(files.get((ItemId) args[0]));
                   case "toString" -> "demo catalog";
                   case "hashCode" -> System.identityHashCode(proxy);
@@ -249,6 +295,52 @@ final class DemoLibrary
                 };
               }
             });
+  }
+
+  /**
+   * Keeps what changed in a catalog the real domain saved: the text editor changes the fingerprint
+   * and size of a file (ADR 0027). The demo has no optimistic locking.
+   */
+  private void saveCatalog(CatalogIndex index) {
+    for (MediaFileSnapshot saved : index.toSnapshot().files()) {
+      files.computeIfPresent(saved.id(), (id, current) -> saved);
+    }
+    index.pullEvents().forEach(this::publish);
+  }
+
+  /** The files, in memory, for the real text editing service; it only reads and writes them. */
+  IFileStorage fileStorage() {
+    DemoLibrary library = this;
+    return (IFileStorage)
+        Proxy.newProxyInstance(
+            IFileStorage.class.getClassLoader(),
+            new Class<?>[] {IFileStorage.class},
+            (proxy, method, args) -> {
+              synchronized (library) {
+                return switch (method.getName()) {
+                  case "read" -> new ByteArrayInputStream(contents.get(fileAt((Path) args[0])));
+                  case "write" -> {
+                    contents.put(fileAt((Path) args[0]), ((InputStream) args[1]).readAllBytes());
+                    yield null;
+                  }
+                  case "computeFingerprint" -> fingerprint(contents.get(fileAt((Path) args[0])));
+                  case "toString" -> "demo files";
+                  case "hashCode" -> System.identityHashCode(proxy);
+                  case "equals" -> proxy == args[0];
+                  default ->
+                      throw new UnsupportedOperationException(
+                          "The demo files do not answer " + method.getName());
+                };
+              }
+            });
+  }
+
+  private ItemId fileAt(Path path) {
+    return files.values().stream()
+        .filter(f -> f.path().equals(path))
+        .map(MediaFileSnapshot::id)
+        .findFirst()
+        .orElseThrow(() -> new ResourceNotFound("No file at " + path));
   }
 
   /** The audit trail, in memory. */

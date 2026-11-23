@@ -119,6 +119,24 @@
     </div>
   </div>
 
+  <div id="editor" class="editor" hidden>
+    <div class="desk" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+      <div class="desk-bar">
+        <div class="desk-heading">
+          <h2 id="editor-title"></h2>
+          <p class="desk-meta" aria-live="polite">
+            <span id="editor-status" class="editor-status" data-state="connecting"></span>
+            <span id="editor-with"></span>
+          </p>
+        </div>
+        <ul id="editor-people" class="editor-people" aria-label="Who has this file open"></ul>
+        <button id="editor-close" class="quiet" type="button">Close</button>
+      </div>
+      <p id="editor-notice" class="editor-notice" role="alert" hidden></p>
+      <div id="editor-surface" class="editor-surface"></div>
+    </div>
+  </div>
+
   <footer id="now-playing" class="now-playing" hidden>
     <div id="np-cover" class="np-cover" aria-hidden="true"></div>
     <div class="np-text">
