@@ -1,7 +1,6 @@
 package co.omnistream.domain.service;
 
 import static co.omnistream.domain.model.access.AccessFixtures.item;
-import static co.omnistream.domain.service.ServiceTestDoubles.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -15,12 +14,14 @@ import co.omnistream.domain.event.FileIngested;
 import co.omnistream.domain.event.FileModified;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.port.dto.SyncDelta;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryChangeLog;
+import co.omnistream.domain.port.out.memory.InMemoryChangeLog;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class SyncObserverTest {
+
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
 
   private final InMemoryChangeLog changeLog = new InMemoryChangeLog();
   private final SyncObserver observer = new SyncObserver(changeLog);
@@ -46,7 +47,7 @@ class SyncObserverTest {
 
     SyncDelta delta = changeLog.changesSince(NOW);
 
-    assertThat(changeLog.size()).isEqualTo(6);
+    assertThat(changeLog.hasChangesSince(NOW)).isTrue();
     assertThat(delta.added()).containsExactly(addedFile, addedCollection);
     assertThat(delta.modified()).containsExactly(modifiedFile, classifiedFile, modifiedCollection);
     assertThat(delta.removed()).containsExactly(deletedFile);
@@ -58,7 +59,8 @@ class SyncObserverTest {
 
     observer.onCatalogChanged(other);
 
-    assertThat(changeLog.size()).isZero();
+    assertThat(changeLog.hasChangesSince(NOW)).isFalse();
+    assertThat(changeLog.changesSince(NOW).isEmpty()).isTrue();
     assertThatThrownBy(() -> observer.onCatalogChanged(null))
         .isInstanceOf(NullPointerException.class);
   }

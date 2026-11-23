@@ -7,14 +7,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import co.omnistream.domain.exception.ResourceNotFound;
-import co.omnistream.domain.model.catalog.Fingerprint;
 import co.omnistream.domain.model.catalog.IndexingStatus;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.port.dto.MediaStream;
 import co.omnistream.domain.port.dto.StreamProfile;
-import co.omnistream.domain.port.out.IFileStorage;
 import co.omnistream.domain.port.out.ITranscoder;
+import co.omnistream.domain.port.out.memory.InMemoryFileStorage;
 import co.omnistream.domain.snapshot.MediaFileSnapshot;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -22,9 +21,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -37,23 +34,27 @@ class StreamStrategiesTest {
   private static final StreamProfile TRANSCODE_720P =
       new StreamProfile(Optional.of("h264"), Optional.of(1500), Optional.of("720p"));
 
-  private final InMemoryStorage storage = new InMemoryStorage();
+  private final InMemoryFileStorage storage = new InMemoryFileStorage();
   private final StubTranscoder transcoder = new StubTranscoder();
+
+  private void put(Path path, byte[] bytes) {
+    storage.write(path, new ByteArrayInputStream(bytes));
+  }
 
   @Test
   void directStreamSupportsOnlyDirectPlayAndServesFullBytesWithResolvedMime() throws IOException {
     Path videoPath = Path.of("/library/movie.mkv");
     byte[] raw = "matroska-bytes".getBytes(StandardCharsets.UTF_8);
-    storage.put(videoPath, raw);
+    put(videoPath, raw);
 
     MediaFileSnapshot video =
         snapshot("Movie", videoPath, MediaType.VIDEO, raw.length, Duration.ofMinutes(2));
     MediaFileSnapshot unknownDoc =
         snapshot("Notes", Path.of("/library/readme"), MediaType.DOCUMENT, 12L, Duration.ZERO);
-    storage.put(Path.of("/library/readme"), "notes-12-byte".getBytes(StandardCharsets.UTF_8));
+    put(Path.of("/library/readme"), "notes-12-byte".getBytes(StandardCharsets.UTF_8));
     MediaFileSnapshot unknownVideo =
         snapshot("RawStream", Path.of("/library/stream"), MediaType.VIDEO, 4L, Duration.ZERO);
-    storage.put(Path.of("/library/stream"), new byte[] {1, 2, 3, 4});
+    put(Path.of("/library/stream"), new byte[] {1, 2, 3, 4});
 
     DirectStream strategy = new DirectStream(storage);
 
@@ -86,7 +87,7 @@ class StreamStrategiesTest {
   void directStreamFallsBackToFileNameExtensionAndFailsWhenMissingInStorage() throws IOException {
     Path extensionlessPath = Path.of("/blobs/001");
     byte[] audioBytes = "flac-bytes".getBytes(StandardCharsets.UTF_8);
-    storage.put(extensionlessPath, audioBytes);
+    put(extensionlessPath, audioBytes);
 
     MediaFileSnapshot audio =
         snapshot(
@@ -141,58 +142,6 @@ class StreamStrategiesTest {
         NOW,
         List.of(),
         Set.of());
-  }
-
-  private static final class InMemoryStorage implements IFileStorage {
-    private final Map<Path, byte[]> files = new LinkedHashMap<>();
-
-    void put(Path path, byte[] bytes) {
-      files.put(path.normalize(), bytes.clone());
-    }
-
-    @Override
-    public InputStream read(Path path) {
-      byte[] bytes = files.get(path.normalize());
-      if (bytes == null) {
-        throw new ResourceNotFound("Missing: " + path);
-      }
-      return new ByteArrayInputStream(bytes);
-    }
-
-    @Override
-    public void write(Path path, InputStream data) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void delete(Path path) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean exists(Path path) {
-      return files.containsKey(path.normalize());
-    }
-
-    @Override
-    public List<Path> list(Path root) {
-      return List.of();
-    }
-
-    @Override
-    public Fingerprint computeFingerprint(Path path) {
-      return fingerprint('a');
-    }
-
-    @Override
-    public Path copy(Path source, Path destination) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public long freeSpace() {
-      return 0L;
-    }
   }
 
   private static final class StubTranscoder implements ITranscoder {

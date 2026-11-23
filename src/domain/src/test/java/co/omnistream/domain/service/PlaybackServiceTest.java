@@ -3,7 +3,6 @@ package co.omnistream.domain.service;
 import static co.omnistream.domain.model.access.AccessFixtures.item;
 import static co.omnistream.domain.model.access.AccessFixtures.user;
 import static co.omnistream.domain.model.catalog.CatalogFixtures.fingerprint;
-import static co.omnistream.domain.service.ServiceTestDoubles.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -26,40 +25,50 @@ import co.omnistream.domain.model.playback.SessionStatus;
 import co.omnistream.domain.policy.AccessPolicy;
 import co.omnistream.domain.port.dto.MediaStream;
 import co.omnistream.domain.port.dto.StreamProfile;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryCatalog;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryFileStorage;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemorySessions;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryUsers;
-import co.omnistream.domain.service.ServiceTestDoubles.MutableClock;
-import co.omnistream.domain.service.ServiceTestDoubles.StubTranscoder;
+import co.omnistream.domain.port.out.memory.InMemoryCatalogRepository;
+import co.omnistream.domain.port.out.memory.InMemoryFileStorage;
+import co.omnistream.domain.port.out.memory.InMemorySessionRepository;
+import co.omnistream.domain.port.out.memory.InMemoryTranscoder;
+import co.omnistream.domain.port.out.memory.InMemoryUserRepository;
 import co.omnistream.domain.service.stream.DirectStream;
 import co.omnistream.domain.service.stream.TranscodedStream;
 import co.omnistream.domain.snapshot.PlaybackSessionSnapshot;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class PlaybackServiceTest {
 
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
   private static final StreamProfile DIRECT =
       new StreamProfile(Optional.empty(), Optional.empty(), Optional.empty());
   private static final StreamProfile TRANSCODE_720P =
       new StreamProfile(Optional.of("h264"), Optional.of(1200), Optional.of("720p"));
 
   private final MutableClock clock = new MutableClock(NOW);
-  private final InMemoryUsers users = new InMemoryUsers();
-  private final InMemorySessions sessionRepository = new InMemorySessions();
-  private final InMemoryCatalog catalogRepository = new InMemoryCatalog();
+  private final InMemoryUserRepository users = new InMemoryUserRepository();
+  private final InMemorySessionRepository sessionRepository = new InMemorySessionRepository();
+  private final InMemoryCatalogRepository catalogRepository = new InMemoryCatalogRepository();
   private final InMemoryFileStorage storage = new InMemoryFileStorage();
-  private final StubTranscoder transcoder = new StubTranscoder();
+  private final InMemoryTranscoder transcoder =
+      new InMemoryTranscoder(
+          "transcoded-video".getBytes(StandardCharsets.UTF_8),
+          "video/mp4",
+          true,
+          Optional.empty(),
+          MediaType.VIDEO);
 
   private PlaybackService service;
   private UserId adminId;
@@ -195,13 +204,30 @@ class PlaybackServiceTest {
     MediaStream transcoded = service.requestStream(anaId, session.id(), TRANSCODE_720P);
     try (InputStream data = transcoded.data()) {
       assertThat(transcoded.transcoded()).isTrue();
+      assertThat(transcoded.mime()).isEqualTo("video/mp4");
       assertThat(transcoded.sizeBytes()).isEmpty();
-      assertThat(transcoder.lastPosition).isEqualTo(Duration.ofMinutes(4));
-      assertThat(data.readAllBytes()).isNotEmpty();
+      assertThat(data.readAllBytes())
+          .isEqualTo("transcoded-video".getBytes(StandardCharsets.UTF_8));
     }
 
-    transcoder.supportedTypes = Set.of(MediaType.AUDIO);
-    assertThatThrownBy(() -> service.requestStream(anaId, session.id(), TRANSCODE_720P))
+    PlaybackService audioOnlyTranscodeService =
+        new PlaybackService(
+            users,
+            new AccessPolicy(),
+            clock,
+            sessionRepository,
+            catalogRepository,
+            List.of(
+                new DirectStream(storage),
+                new TranscodedStream(
+                    new InMemoryTranscoder(
+                        "transcoded-audio".getBytes(StandardCharsets.UTF_8),
+                        "audio/mpeg",
+                        true,
+                        Optional.empty(),
+                        MediaType.AUDIO))));
+    assertThatThrownBy(
+            () -> audioOnlyTranscodeService.requestStream(anaId, session.id(), TRANSCODE_720P))
         .isInstanceOf(FileRejected.class);
 
     ana = users.findById(anaId).orElseThrow();
@@ -264,7 +290,7 @@ class PlaybackServiceTest {
     service.finishSession(anaId, session.id());
     service.finishSession(anaId, session.id());
 
-    // Late progress and pause on FINISHED session are idempotent no-ops (ADR 0029).
+    // Late progress and pause on FINISHED session are idempotent no-ops (ADR 0031).
     service.recordProgress(anaId, session.id(), Duration.ofMinutes(8));
     service.pauseSession(anaId, session.id());
 
@@ -328,12 +354,39 @@ class PlaybackServiceTest {
       String name, String rawPath, MediaType type, char seed, Duration duration, String payload) {
     Path path = Path.of(rawPath);
     byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
-    storage.put(path, bytes);
+    storage.write(path, new ByteArrayInputStream(bytes));
     MediaFile file =
         MediaFile.create(name, path, fingerprint(seed), type, bytes.length, duration, NOW);
     CatalogIndex catalog = catalogRepository.getCatalog();
     catalog.ingest(file, NOW);
     catalogRepository.save(catalog);
     return file.toSnapshot().id();
+  }
+
+  private static final class MutableClock extends Clock {
+    private Instant instant;
+
+    MutableClock(Instant initial) {
+      this.instant = initial;
+    }
+
+    void advance(Duration delta) {
+      this.instant = this.instant.plus(delta);
+    }
+
+    @Override
+    public ZoneId getZone() {
+      return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(ZoneId zone) {
+      return this;
+    }
+
+    @Override
+    public Instant instant() {
+      return instant;
+    }
   }
 }

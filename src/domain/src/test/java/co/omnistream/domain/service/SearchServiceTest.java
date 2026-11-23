@@ -4,13 +4,12 @@ import static co.omnistream.domain.model.access.AccessFixtures.item;
 import static co.omnistream.domain.model.access.AccessFixtures.user;
 import static co.omnistream.domain.model.catalog.CatalogFixtures.fingerprint;
 import static co.omnistream.domain.model.catalog.CatalogFixtures.video;
-import static co.omnistream.domain.service.ServiceTestDoubles.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import co.omnistream.domain.event.CatalogEvent;
 import co.omnistream.domain.event.CollectionCreated;
 import co.omnistream.domain.event.CollectionModified;
+import co.omnistream.domain.event.DomainEvent;
 import co.omnistream.domain.event.FileModified;
 import co.omnistream.domain.exception.AccessDenied;
 import co.omnistream.domain.exception.CyclicCollection;
@@ -32,9 +31,11 @@ import co.omnistream.domain.model.catalog.TagSource;
 import co.omnistream.domain.policy.AccessPolicy;
 import co.omnistream.domain.port.dto.CollectionCommand;
 import co.omnistream.domain.port.dto.SearchCriteria;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryCatalog;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryUsers;
-import co.omnistream.domain.service.ServiceTestDoubles.TrackingUnitOfWork;
+import co.omnistream.domain.port.out.IUnitOfWork;
+import co.omnistream.domain.port.out.memory.InMemoryCatalogRepository;
+import co.omnistream.domain.port.out.memory.InMemoryOutboxRepository;
+import co.omnistream.domain.port.out.memory.InMemoryUnitOfWork;
+import co.omnistream.domain.port.out.memory.InMemoryUserRepository;
 import co.omnistream.domain.snapshot.CatalogItemSnapshot;
 import co.omnistream.domain.snapshot.CatalogSnapshot;
 import co.omnistream.domain.snapshot.CollectionSnapshot;
@@ -47,16 +48,19 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class SearchServiceTest {
 
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
-  private final InMemoryUsers users = new InMemoryUsers();
-  private final InMemoryCatalog catalogRepository = new InMemoryCatalog();
-  private final TrackingUnitOfWork unitOfWork = new TrackingUnitOfWork();
+  private final InMemoryUserRepository users = new InMemoryUserRepository();
+  private final InMemoryOutboxRepository outbox = new InMemoryOutboxRepository();
+  private final InMemoryCatalogRepository catalogRepository = new InMemoryCatalogRepository(outbox);
+  private final CountingUnitOfWork unitOfWork = new CountingUnitOfWork();
 
   private SearchService service;
   private UserId adminId;
@@ -297,7 +301,7 @@ class SearchServiceTest {
     User ana = users.findById(anaId).orElseThrow();
     ana.grant(new Permission(anaFile.toSnapshot().id(), PermissionLevel.READ));
     users.save(ana);
-    catalogRepository.outbox.clear();
+    int outboxBefore = outbox.pending().size();
 
     CollectionSnapshot created =
         service.manageCollections(
@@ -308,7 +312,7 @@ class SearchServiceTest {
     assertThat(created.name()).isEqualTo("Favorites");
     assertThat(created.items()).containsExactly(anaFile.toSnapshot().id());
     assertThat(unitOfWork.executions).isEqualTo(1);
-    assertThat(eventTypes(catalogRepository.outbox))
+    assertThat(eventTypes(outbox.pending().subList(outboxBefore, outbox.pending().size())))
         .containsExactly(CollectionCreated.class, CollectionModified.class);
 
     User updatedAna = users.findById(anaId).orElseThrow();
@@ -351,7 +355,7 @@ class SearchServiceTest {
     ana.grant(new Permission(child.toSnapshot().id(), PermissionLevel.WRITE));
     ana.grant(new Permission(file.toSnapshot().id(), PermissionLevel.READ));
     users.save(ana);
-    catalogRepository.outbox.clear();
+    int outboxBefore = outbox.pending().size();
 
     CollectionSnapshot updated =
         service.manageCollections(
@@ -363,7 +367,8 @@ class SearchServiceTest {
 
     assertThat(updated.name()).isEqualTo("Summer Beach");
     assertThat(updated.items()).containsExactly(file.toSnapshot().id());
-    assertThat(eventTypes(catalogRepository.outbox)).containsExactly(CollectionModified.class);
+    assertThat(eventTypes(outbox.pending().subList(outboxBefore, outbox.pending().size())))
+        .containsExactly(CollectionModified.class);
 
     assertThatThrownBy(() ->
             service.manageCollections(
@@ -428,7 +433,7 @@ class SearchServiceTest {
     User luis = users.findById(luisId).orElseThrow();
     luis.grant(new Permission(folder.toSnapshot().id(), PermissionLevel.WRITE));
     users.save(luis);
-    catalogRepository.outbox.clear();
+    int outboxBefore = outbox.pending().size();
     int executionsBefore = unitOfWork.executions;
 
     service.tagFile(luisId, file.toSnapshot().id(), new Tag("Important", TagSource.MANUAL));
@@ -436,7 +441,8 @@ class SearchServiceTest {
     MediaFileSnapshot tagged = catalogRepository.findFile(file.toSnapshot().id()).orElseThrow();
     assertThat(tagged.tags()).containsExactly(new Tag("Important", TagSource.MANUAL));
     assertThat(unitOfWork.executions).isEqualTo(executionsBefore + 1);
-    assertThat(eventTypes(catalogRepository.outbox)).containsExactly(FileModified.class);
+    assertThat(eventTypes(outbox.pending().subList(outboxBefore, outbox.pending().size())))
+        .containsExactly(FileModified.class);
 
     assertThatThrownBy(() -> service.tagFile(adminId, item(), new Tag("x", TagSource.MANUAL)))
         .isInstanceOf(ResourceNotFound.class);
@@ -445,7 +451,18 @@ class SearchServiceTest {
         .isInstanceOf(ResourceNotFound.class);
   }
 
-  private static List<Class<?>> eventTypes(List<CatalogEvent> events) {
+  private static List<Class<?>> eventTypes(List<DomainEvent> events) {
     return events.stream().<Class<?>>map(Object::getClass).toList();
+  }
+
+  private static final class CountingUnitOfWork implements IUnitOfWork {
+    private final InMemoryUnitOfWork delegate = new InMemoryUnitOfWork();
+    int executions;
+
+    @Override
+    public <T> T execute(Supplier<T> work) {
+      executions++;
+      return delegate.execute(work);
+    }
   }
 }

@@ -2,7 +2,6 @@ package co.omnistream.domain.service;
 
 import static co.omnistream.domain.model.access.AccessFixtures.item;
 import static co.omnistream.domain.model.access.AccessFixtures.user;
-import static co.omnistream.domain.service.ServiceTestDoubles.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -18,9 +17,10 @@ import co.omnistream.domain.model.audit.AuditEntry;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.policy.AccessPolicy;
 import co.omnistream.domain.port.dto.AuditQuery;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryAuditLog;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryUsers;
+import co.omnistream.domain.port.out.memory.InMemoryAuditLog;
+import co.omnistream.domain.port.out.memory.InMemoryUserRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -31,9 +31,10 @@ import org.junit.jupiter.api.Test;
 
 class AuditServiceTest {
 
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
-  private final InMemoryUsers users = new InMemoryUsers();
+  private final InMemoryUserRepository users = new InMemoryUserRepository();
   private final InMemoryAuditLog auditLog = new InMemoryAuditLog();
 
   private AuditService service;

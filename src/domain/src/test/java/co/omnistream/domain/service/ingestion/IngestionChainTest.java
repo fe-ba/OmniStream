@@ -12,7 +12,6 @@ import co.omnistream.domain.exception.ResourceNotFound;
 import co.omnistream.domain.model.catalog.CatalogId;
 import co.omnistream.domain.model.catalog.CatalogIndex;
 import co.omnistream.domain.model.catalog.DuplicateAction;
-import co.omnistream.domain.model.catalog.Fingerprint;
 import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.model.catalog.MediaFile;
 import co.omnistream.domain.model.catalog.MediaType;
@@ -21,24 +20,20 @@ import co.omnistream.domain.model.catalog.MetadataSource;
 import co.omnistream.domain.model.catalog.Tag;
 import co.omnistream.domain.model.catalog.TagSource;
 import co.omnistream.domain.policy.DeduplicationPolicy;
-import co.omnistream.domain.port.out.IFileStorage;
 import co.omnistream.domain.port.out.IMetadataExtractor;
+import co.omnistream.domain.port.out.memory.InMemoryFileStorage;
 import co.omnistream.domain.service.classification.DateRule;
 import co.omnistream.domain.service.classification.MediaTypeRule;
 import co.omnistream.domain.snapshot.CatalogSnapshot;
 import co.omnistream.domain.snapshot.MediaFileSnapshot;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,8 +44,12 @@ class IngestionChainTest {
 
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
-  private final InMemoryStorage storage = new InMemoryStorage();
+  private final InMemoryFileStorage storage = new InMemoryFileStorage();
   private final StubMetadataExtractor extractor = new StubMetadataExtractor();
+
+  private void put(Path path, byte[] bytes) {
+    storage.write(path, new ByteArrayInputStream(bytes));
+  }
 
   private IngestionStep fullChain() {
     ExtractionStep extraction = new ExtractionStep(storage, extractor, CLOCK);
@@ -100,7 +99,7 @@ class IngestionChainTest {
   void ingestsExtractsAndAppliesFixedClassificationRules() {
     Path path = Path.of("/library/concert.mp4");
     byte[] bytes = "video-content".getBytes(StandardCharsets.UTF_8);
-    storage.put(path, bytes);
+    put(path, bytes);
     extractor.put(
         path,
         List.of(
@@ -129,7 +128,7 @@ class IngestionChainTest {
   @Test
   void stopsChainWhenDuplicateAtSamePathIsRejected() {
     Path path = Path.of("/library/song.mp3");
-    storage.put(path, "same-audio".getBytes(StandardCharsets.UTF_8));
+    put(path, "same-audio".getBytes(StandardCharsets.UTF_8));
     extractor.put(path, List.of(new MetadataEntry("duration", "PT3M", MetadataSource.EXTRACTED)));
     CatalogIndex catalog = emptyCatalog();
     IngestionResult first = fullChain().execute(context(catalog, path));
@@ -149,8 +148,8 @@ class IngestionChainTest {
     Path original = Path.of("/library/photo.jpg");
     Path backup = Path.of("/backup/photo.jpg");
     byte[] bytes = "image-data".getBytes(StandardCharsets.UTF_8);
-    storage.put(original, bytes);
-    storage.put(backup, bytes);
+    put(original, bytes);
+    put(backup, bytes);
     CatalogIndex catalog = emptyCatalog();
     IngestionResult first = fullChain().execute(context(catalog, original));
     MediaFile firstEntity = (MediaFile) catalog.findItem(first.fileId()).orElseThrow();
@@ -164,7 +163,7 @@ class IngestionChainTest {
     firstEntity.markFailed("corrupted index");
     catalog.pullEvents();
     Path replacement = Path.of("/incoming/photo.jpg");
-    storage.put(replacement, bytes);
+    put(replacement, bytes);
 
     IngestionResult replaced = fullChain().execute(context(catalog, replacement));
     assertThat(replaced.wasIndexed()).isTrue();
@@ -178,8 +177,8 @@ class IngestionChainTest {
     Path missing = Path.of("/library/missing.mp4");
     Path unknownExt = Path.of("/library/archive.bin");
     Path doc = Path.of("/library/notes.md");
-    storage.put(unknownExt, "binary".getBytes(StandardCharsets.UTF_8));
-    storage.put(doc, "hello".getBytes(StandardCharsets.UTF_8));
+    put(unknownExt, "binary".getBytes(StandardCharsets.UTF_8));
+    put(doc, "hello".getBytes(StandardCharsets.UTF_8));
     extractor.unsupportedTypes = Set.of(MediaType.DOCUMENT);
 
     CatalogIndex catalog = emptyCatalog();
@@ -200,7 +199,7 @@ class IngestionChainTest {
     assertThat(docSnapshot.sizeBytes()).isEqualTo(5);
 
     Path sized = Path.of("/library/clip.mkv");
-    storage.put(sized, "short".getBytes(StandardCharsets.UTF_8));
+    put(sized, "short".getBytes(StandardCharsets.UTF_8));
     extractor.unsupportedTypes = Set.of();
     extractor.put(sized, List.of(new MetadataEntry("sizeBytes", "4096", MetadataSource.EXTRACTED)));
     IngestionResult sizedResult = fullChain().execute(context(catalog, sized));
@@ -218,58 +217,6 @@ class IngestionChainTest {
     ctx.catalog = catalog;
     ctx.path = path;
     return ctx;
-  }
-
-  private static final class InMemoryStorage implements IFileStorage {
-    private final Map<Path, byte[]> files = new HashMap<>();
-
-    void put(Path path, byte[] content) {
-      files.put(path, content);
-    }
-
-    @Override
-    public InputStream read(Path path) {
-      return new ByteArrayInputStream(files.get(path));
-    }
-
-    @Override
-    public void write(Path path, InputStream data) {}
-
-    @Override
-    public void delete(Path path) {
-      files.remove(path);
-    }
-
-    @Override
-    public boolean exists(Path path) {
-      return files.containsKey(path);
-    }
-
-    @Override
-    public List<Path> list(Path root) {
-      return List.copyOf(files.keySet());
-    }
-
-    @Override
-    public Fingerprint computeFingerprint(Path path) {
-      try {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(files.get(path));
-        return new Fingerprint("SHA-256", HexFormat.of().formatHex(digest));
-      } catch (NoSuchAlgorithmException e) {
-        throw new IllegalStateException(e);
-      }
-    }
-
-    @Override
-    public Path copy(Path source, Path destination) {
-      files.put(destination, files.get(source));
-      return destination;
-    }
-
-    @Override
-    public long freeSpace() {
-      return 10_000_000L;
-    }
   }
 
   private static final class StubMetadataExtractor implements IMetadataExtractor {

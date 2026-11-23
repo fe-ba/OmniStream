@@ -2,7 +2,6 @@ package co.omnistream.domain.service;
 
 import static co.omnistream.domain.model.access.AccessFixtures.item;
 import static co.omnistream.domain.model.catalog.CatalogFixtures.video;
-import static co.omnistream.domain.service.ServiceTestDoubles.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -28,12 +27,13 @@ import co.omnistream.domain.port.dto.Credentials;
 import co.omnistream.domain.port.dto.LocalCredentials;
 import co.omnistream.domain.port.dto.SessionToken;
 import co.omnistream.domain.port.out.IIdentityProvider;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryCatalog;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryCredentials;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemorySharedLinks;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryTokens;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryUsers;
-import co.omnistream.domain.service.ServiceTestDoubles.TrackingUnitOfWork;
+import co.omnistream.domain.port.out.IUnitOfWork;
+import co.omnistream.domain.port.out.memory.InMemoryCatalogRepository;
+import co.omnistream.domain.port.out.memory.InMemoryCredentialRegistry;
+import co.omnistream.domain.port.out.memory.InMemorySharedLinkRepository;
+import co.omnistream.domain.port.out.memory.InMemoryTokenRepository;
+import co.omnistream.domain.port.out.memory.InMemoryUnitOfWork;
+import co.omnistream.domain.port.out.memory.InMemoryUserRepository;
 import co.omnistream.domain.snapshot.SharedLinkSnapshot;
 import co.omnistream.domain.snapshot.UserSnapshot;
 import java.time.Clock;
@@ -43,21 +43,23 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 class AccessServiceTest {
 
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
   private static final Duration TOKEN_LIFETIME = Duration.ofHours(12);
 
-  private final InMemoryUsers users = new InMemoryUsers();
-  private final InMemoryTokens tokens = new InMemoryTokens();
-  private final InMemorySharedLinks links = new InMemorySharedLinks();
-  private final InMemoryCredentials credentials = new InMemoryCredentials();
-  private final InMemoryCatalog catalogRepository = new InMemoryCatalog();
-  private final TrackingUnitOfWork unitOfWork = new TrackingUnitOfWork();
   private final MutableClock clock = new MutableClock(NOW);
+  private final InMemoryUserRepository users = new InMemoryUserRepository();
+  private final InMemoryTokenRepository tokens = new InMemoryTokenRepository(clock);
+  private final InMemorySharedLinkRepository links = new InMemorySharedLinkRepository();
+  private final InMemoryCredentialRegistry credentials = new InMemoryCredentialRegistry();
+  private final IIdentityProvider localProvider = new LocalCredentialVerifier(credentials);
+  private final InMemoryCatalogRepository catalogRepository = new InMemoryCatalogRepository();
+  private final CountingUnitOfWork unitOfWork = new CountingUnitOfWork();
 
   private AccessService service;
   private UserId adminId;
@@ -69,7 +71,7 @@ class AccessServiceTest {
             users,
             new AccessPolicy(),
             clock,
-            List.of(credentials),
+            List.of(localProvider),
             credentials,
             tokens,
             links,
@@ -145,7 +147,7 @@ class AccessServiceTest {
             users,
             new AccessPolicy(),
             clock,
-            List.of(credentials, secondProvider),
+            List.of(localProvider, secondProvider),
             credentials,
             tokens,
             links,
@@ -161,10 +163,12 @@ class AccessServiceTest {
   // ---------------------------------------------------------------- tokens and logout
 
   @Test
-  @Disabled("Waiting for #5: SessionToken.isValidAt()")
   void validatesTokenBeforeExpiryAndRejectsAfterExpiry() {
     SessionToken token = service.authenticateUser(new LocalCredentials("local", "root", "secret"));
 
+    assertThat(service.validateToken(token.value())).contains(token);
+
+    clock.set(NOW.plus(TOKEN_LIFETIME).minusSeconds(1));
     assertThat(service.validateToken(token.value())).contains(token);
 
     clock.set(NOW.plus(TOKEN_LIFETIME));
@@ -173,7 +177,6 @@ class AccessServiceTest {
   }
 
   @Test
-  @Disabled("Waiting for #5: SessionToken.isValidAt()")
   void deactivatingAUserInvalidatesTheirExistingTokenImmediately() {
     UserId anaId = service.createUser(adminId, "ana", "pass-123", Role.USER);
     SessionToken token = service.authenticateUser(new LocalCredentials("local", "ana", "pass-123"));
@@ -420,6 +423,47 @@ class AccessServiceTest {
   private static final class UnsupportedCredentials extends Credentials {
     UnsupportedCredentials() {
       super("oidc");
+    }
+  }
+
+  private static final class LocalCredentialVerifier implements IIdentityProvider {
+    private final InMemoryCredentialRegistry credentials;
+
+    LocalCredentialVerifier(InMemoryCredentialRegistry credentials) {
+      this.credentials = credentials;
+    }
+
+    @Override
+    public boolean supports(Credentials c) {
+      return c != null && LinkedIdentity.LOCAL_ISSUER.equals(c.provider());
+    }
+
+    @Override
+    public Optional<LinkedIdentity> verify(Credentials c) {
+      if (!(c instanceof LocalCredentials local) || !supports(c)) {
+        return Optional.empty();
+      }
+      String username = local.username().strip();
+      String expected = credentials.passwords().get(username);
+      if (expected == null || !expected.equals(local.password())) {
+        return Optional.empty();
+      }
+      return Optional.of(new LinkedIdentity(LinkedIdentity.LOCAL_ISSUER, username));
+    }
+  }
+
+  private static final class CountingUnitOfWork implements IUnitOfWork {
+    private final InMemoryUnitOfWork delegate = new InMemoryUnitOfWork();
+    int executions;
+
+    @Override
+    public <T> T execute(Supplier<T> work) {
+      executions++;
+      return delegate.execute(work);
+    }
+
+    boolean inside() {
+      return delegate.inside();
     }
   }
 

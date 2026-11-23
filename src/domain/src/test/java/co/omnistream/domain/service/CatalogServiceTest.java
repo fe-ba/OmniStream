@@ -2,11 +2,10 @@ package co.omnistream.domain.service;
 
 import static co.omnistream.domain.model.access.AccessFixtures.item;
 import static co.omnistream.domain.model.access.AccessFixtures.user;
-import static co.omnistream.domain.service.ServiceTestDoubles.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import co.omnistream.domain.event.CatalogEvent;
+import co.omnistream.domain.event.DomainEvent;
 import co.omnistream.domain.event.FileClassified;
 import co.omnistream.domain.event.FileDeleted;
 import co.omnistream.domain.event.FileIngested;
@@ -24,6 +23,7 @@ import co.omnistream.domain.model.catalog.CatalogIndex;
 import co.omnistream.domain.model.catalog.DuplicateAction;
 import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.model.catalog.ItemId;
+import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.model.catalog.MetadataEntry;
 import co.omnistream.domain.model.catalog.MetadataSource;
 import co.omnistream.domain.model.catalog.Tag;
@@ -32,14 +32,17 @@ import co.omnistream.domain.model.playback.PlaybackSession;
 import co.omnistream.domain.policy.AccessPolicy;
 import co.omnistream.domain.policy.DeduplicationPolicy;
 import co.omnistream.domain.port.dto.ServerStatus;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryCatalog;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryConfiguration;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryFileStorage;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemorySessions;
-import co.omnistream.domain.service.ServiceTestDoubles.InMemoryUsers;
-import co.omnistream.domain.service.ServiceTestDoubles.StubDataBackup;
-import co.omnistream.domain.service.ServiceTestDoubles.StubMetadataExtractor;
-import co.omnistream.domain.service.ServiceTestDoubles.TrackingUnitOfWork;
+import co.omnistream.domain.port.out.IMetadataExtractor;
+import co.omnistream.domain.port.out.IUnitOfWork;
+import co.omnistream.domain.port.out.memory.InMemoryCatalogRepository;
+import co.omnistream.domain.port.out.memory.InMemoryConfigurationRepository;
+import co.omnistream.domain.port.out.memory.InMemoryDataBackup;
+import co.omnistream.domain.port.out.memory.InMemoryFileStorage;
+import co.omnistream.domain.port.out.memory.InMemoryMetadataExtractor;
+import co.omnistream.domain.port.out.memory.InMemoryOutboxRepository;
+import co.omnistream.domain.port.out.memory.InMemorySessionRepository;
+import co.omnistream.domain.port.out.memory.InMemoryUnitOfWork;
+import co.omnistream.domain.port.out.memory.InMemoryUserRepository;
 import co.omnistream.domain.service.classification.DateRule;
 import co.omnistream.domain.service.classification.MediaTypeRule;
 import co.omnistream.domain.service.ingestion.ClassificationStep;
@@ -53,23 +56,28 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class CatalogServiceTest {
 
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
-  private final InMemoryUsers users = new InMemoryUsers();
-  private final InMemoryCatalog catalogRepository = new InMemoryCatalog();
-  private final InMemorySessions sessionRepository = new InMemorySessions();
-  private final InMemoryFileStorage storage = new InMemoryFileStorage();
-  private final StubMetadataExtractor extractor = new StubMetadataExtractor();
-  private final StubDataBackup dataBackup = new StubDataBackup();
-  private final InMemoryConfiguration configuration = new InMemoryConfiguration();
-  private final TrackingUnitOfWork unitOfWork = new TrackingUnitOfWork();
+  private final InMemoryUserRepository users = new InMemoryUserRepository();
+  private final InMemoryOutboxRepository outbox = new InMemoryOutboxRepository();
+  private final InMemoryCatalogRepository catalogRepository = new InMemoryCatalogRepository(outbox);
+  private final InMemorySessionRepository sessionRepository = new InMemorySessionRepository();
+  private final InMemoryFileStorage storage = new InMemoryFileStorage(5_000_000L);
+  private final InMemoryDataBackup dataBackup = new InMemoryDataBackup();
+  private final InMemoryConfigurationRepository configuration =
+      new InMemoryConfigurationRepository();
+  private final CountingUnitOfWork unitOfWork = new CountingUnitOfWork();
+  private final DeduplicationPolicy deduplicationPolicy = new DeduplicationPolicy();
 
   private CatalogService service;
   private UserId adminId;
@@ -78,26 +86,8 @@ class CatalogServiceTest {
 
   @BeforeEach
   void setUp() {
-    DeduplicationPolicy deduplicationPolicy = new DeduplicationPolicy();
-    IngestionStep extraction = new ExtractionStep(storage, extractor, CLOCK);
-    extraction
-        .chain(new DuplicatesStep(deduplicationPolicy))
-        .chain(new ClassificationStep(List.of(new MediaTypeRule(), new DateRule())))
-        .chain(new IndexingStep());
-
-    service =
-        new CatalogService(
-            users,
-            new AccessPolicy(),
-            CLOCK,
-            extraction,
-            catalogRepository,
-            sessionRepository,
-            storage,
-            dataBackup,
-            configuration,
-            deduplicationPolicy,
-            unitOfWork);
+    configuration.saveLibraryPath(Path.of("/library"));
+    service = serviceWith(new InMemoryMetadataExtractor());
 
     User admin = user("root", Role.ADMIN);
     User ana = user("ana", Role.USER);
@@ -110,18 +100,45 @@ class CatalogServiceTest {
     luisId = luis.toSnapshot().id();
   }
 
+  private CatalogService serviceWith(IMetadataExtractor extractor) {
+    IngestionStep extraction = new ExtractionStep(storage, extractor, CLOCK);
+    extraction
+        .chain(new DuplicatesStep(deduplicationPolicy))
+        .chain(new ClassificationStep(List.of(new MediaTypeRule(), new DateRule())))
+        .chain(new IndexingStep());
+    return new CatalogService(
+        users,
+        new AccessPolicy(),
+        CLOCK,
+        extraction,
+        catalogRepository,
+        sessionRepository,
+        storage,
+        dataBackup,
+        configuration,
+        deduplicationPolicy,
+        unitOfWork);
+  }
+
+  private void put(Path path, byte[] bytes) {
+    storage.write(path, new ByteArrayInputStream(bytes));
+  }
+
   @Test
   void ingestFileIndexesClassifiesPersistsOutboxAndGrantsManageToUploader() {
     Path path = Path.of("/library/concert.mp4");
-    storage.put(path, "concert-video".getBytes(StandardCharsets.UTF_8));
-    extractor.put(
-        path,
-        List.of(
-            new MetadataEntry("captureDate", "2026-03-10", MetadataSource.EXTRACTED),
-            new MetadataEntry("duration", "PT2M", MetadataSource.EXTRACTED)));
+    put(path, "concert-video".getBytes(StandardCharsets.UTF_8));
+    CatalogService customService =
+        serviceWith(
+            new InMemoryMetadataExtractor(
+                List.of(
+                    new MetadataEntry("captureDate", "2026-03-10", MetadataSource.EXTRACTED),
+                    new MetadataEntry("duration", "PT2M", MetadataSource.EXTRACTED)),
+                MediaType.values()));
     int executionsBefore = unitOfWork.executions;
+    int outboxBefore = outbox.pending().size();
 
-    IngestionResult result = service.ingestFile(anaId, path);
+    IngestionResult result = customService.ingestFile(anaId, path);
 
     assertThat(unitOfWork.executions).isEqualTo(executionsBefore + 1);
     assertThat(result.wasIndexed()).isTrue();
@@ -131,7 +148,7 @@ class CatalogServiceTest {
             new Tag("video", TagSource.AUTOMATIC),
             new Tag("2026", TagSource.AUTOMATIC),
             new Tag("2026-03", TagSource.AUTOMATIC));
-    assertThat(eventTypes(catalogRepository.outbox))
+    assertThat(eventTypes(outbox.pending().subList(outboxBefore, outbox.pending().size())))
         .containsExactly(FileIngested.class, FileClassified.class);
     assertThat(users.findById(anaId).orElseThrow().canAccess(result.fileId(), AccessType.DELETE))
         .isTrue();
@@ -140,9 +157,9 @@ class CatalogServiceTest {
   @Test
   void ingestFileSkipsSavingOnRejectedDuplicateAndRejectsGuestsOrDeactivatedUsers() {
     Path path = Path.of("/library/song.mp3");
-    storage.put(path, "audio-bytes".getBytes(StandardCharsets.UTF_8));
+    put(path, "audio-bytes".getBytes(StandardCharsets.UTF_8));
     IngestionResult first = service.ingestFile(anaId, path);
-    catalogRepository.outbox.clear();
+    int outboxBefore = outbox.pending().size();
     long versionAfterFirst = catalogRepository.getCatalog().toSnapshot().version();
 
     IngestionResult duplicate = service.ingestFile(anaId, path);
@@ -151,7 +168,7 @@ class CatalogServiceTest {
     assertThat(duplicate.action()).contains(DuplicateAction.REJECT);
     assertThat(duplicate.fileId()).isEqualTo(first.fileId());
     assertThat(catalogRepository.getCatalog().toSnapshot().version()).isEqualTo(versionAfterFirst);
-    assertThat(catalogRepository.outbox).isEmpty();
+    assertThat(outbox.pending()).hasSize(outboxBefore);
 
     User guest = User.createGuest(item(), PermissionLevel.MANAGE);
     users.save(guest);
@@ -202,10 +219,10 @@ class CatalogServiceTest {
   @Test
   void reindexLibraryIndexesSupportedFilesSkipsUnsupportedAndRequiresAdmin() {
     Path root = Path.of("/library");
-    storage.put(root.resolve("a.mp4"), "video-1".getBytes(StandardCharsets.UTF_8));
-    storage.put(root.resolve("b.png"), "image-2".getBytes(StandardCharsets.UTF_8));
-    storage.put(root.resolve("ignored.bin"), "binary".getBytes(StandardCharsets.UTF_8));
-    storage.put(Path.of("/other/c.mp3"), "outside".getBytes(StandardCharsets.UTF_8));
+    put(root.resolve("a.mp4"), "video-1".getBytes(StandardCharsets.UTF_8));
+    put(root.resolve("b.png"), "image-2".getBytes(StandardCharsets.UTF_8));
+    put(root.resolve("ignored.bin"), "binary".getBytes(StandardCharsets.UTF_8));
+    put(Path.of("/other/c.mp3"), "outside".getBytes(StandardCharsets.UTF_8));
 
     assertThatThrownBy(() -> service.reindexLibrary(anaId, root)).isInstanceOf(AccessDenied.class);
 
@@ -223,9 +240,9 @@ class CatalogServiceTest {
     Path anaPath = Path.of("/library/ana-copy.mp4");
     Path backupPath = Path.of("/backup/ana-copy.mp4");
     Path luisPath = Path.of("/library/luis-unique.mp4");
-    storage.put(anaPath, sharedContent);
-    storage.put(backupPath, sharedContent);
-    storage.put(luisPath, "unique-video".getBytes(StandardCharsets.UTF_8));
+    put(anaPath, sharedContent);
+    put(backupPath, sharedContent);
+    put(luisPath, "unique-video".getBytes(StandardCharsets.UTF_8));
 
     IngestionResult first = service.ingestFile(anaId, anaPath);
     IngestionResult second = service.ingestFile(luisId, backupPath);
@@ -252,7 +269,7 @@ class CatalogServiceTest {
   @Test
   void editMetadataAndDeleteFileEnforceAccessAndCollectionInheritance() {
     Path path = Path.of("/library/doc.pdf");
-    storage.put(path, "pdf-bytes".getBytes(StandardCharsets.UTF_8));
+    put(path, "pdf-bytes".getBytes(StandardCharsets.UTF_8));
     IngestionResult ingested = service.ingestFile(luisId, path);
     ItemId fileId = ingested.fileId();
 
@@ -268,21 +285,23 @@ class CatalogServiceTest {
     ana.grant(new Permission(folderId, PermissionLevel.WRITE));
     users.save(ana);
 
-    catalogRepository.outbox.clear();
+    int outboxBeforeEdit = outbox.pending().size();
     service.editMetadata(anaId, fileId, "title", "Spec");
 
     MediaFileSnapshot updated = catalogRepository.findFile(fileId).orElseThrow();
     assertThat(updated.metadata())
         .contains(new MetadataEntry("title", "Spec", MetadataSource.MANUAL));
-    assertThat(eventTypes(catalogRepository.outbox)).containsExactly(FileModified.class);
+    assertThat(eventTypes(outbox.pending().subList(outboxBeforeEdit, outbox.pending().size())))
+        .containsExactly(FileModified.class);
 
     assertThatThrownBy(() -> service.deleteFile(anaId, fileId)).isInstanceOf(AccessDenied.class);
 
-    catalogRepository.outbox.clear();
+    int outboxBeforeDelete = outbox.pending().size();
     service.deleteFile(luisId, fileId);
 
     assertThat(catalogRepository.findFile(fileId)).isEmpty();
-    assertThat(catalogRepository.outbox).anyMatch(event -> event instanceof FileDeleted);
+    assertThat(outbox.pending().subList(outboxBeforeDelete, outbox.pending().size()))
+        .anyMatch(event -> event instanceof FileDeleted);
     assertThatThrownBy(() -> service.deleteFile(adminId, item()))
         .isInstanceOf(ResourceNotFound.class);
   }
@@ -290,9 +309,8 @@ class CatalogServiceTest {
   @Test
   void adminOperationsBackUpConfigureLibraryPathAndMonitorStatus() {
     Path path = Path.of("/library/clip.mp4");
-    storage.put(path, "clip".getBytes(StandardCharsets.UTF_8));
+    put(path, "clip".getBytes(StandardCharsets.UTF_8));
     IngestionResult ingested = service.ingestFile(adminId, path);
-    storage.freeSpaceBytes = 5_000_000L;
 
     PlaybackSession active =
         PlaybackSession.start(ingested.fileId(), anaId, Duration.ofMinutes(2), NOW);
@@ -316,12 +334,24 @@ class CatalogServiceTest {
     service.configureLibraryPath(adminId, Path.of("/media"));
     ServerStatus status = service.monitorServerStatus(adminId);
 
-    assertThat(backup).isEqualTo(Path.of("/backups/omnistream-backup.db"));
+    assertThat(backup).isEqualTo(Path.of("/backups"));
+    assertThat(dataBackup.backups()).containsExactly(Path.of("/backups"));
     assertThat(configuration.getLibraryPath()).isEqualTo(Path.of("/media"));
     assertThat(status).isEqualTo(new ServerStatus(1, 5_000_000L, 2));
   }
 
-  private static List<Class<?>> eventTypes(List<CatalogEvent> events) {
+  private static List<Class<?>> eventTypes(List<DomainEvent> events) {
     return events.stream().<Class<?>>map(Object::getClass).toList();
+  }
+
+  private static final class CountingUnitOfWork implements IUnitOfWork {
+    private final InMemoryUnitOfWork delegate = new InMemoryUnitOfWork();
+    int executions;
+
+    @Override
+    public <T> T execute(Supplier<T> work) {
+      executions++;
+      return delegate.execute(work);
+    }
   }
 }
