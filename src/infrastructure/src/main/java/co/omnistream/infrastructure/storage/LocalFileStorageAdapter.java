@@ -99,10 +99,11 @@ public class LocalFileStorageAdapter implements IFileStorage {
 
   @Override
   public Path copy(Path source, Path destination) {
+    Path origin = resolve(source);
     Path target = resolve(destination);
     try {
       createParents(target);
-      Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+      Files.copy(origin, target, StandardCopyOption.REPLACE_EXISTING);
       return target;
     } catch (IOException e) {
       throw new StorageException("Cannot copy " + source + " to " + destination, e);
