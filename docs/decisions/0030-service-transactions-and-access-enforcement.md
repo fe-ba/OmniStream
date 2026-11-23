@@ -1,6 +1,6 @@
 # 0030. Service transactions and access enforcement
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-21
 
 ## Context

@@ -1,6 +1,6 @@
 # 0032. Ingestion pipeline conventions and fixed classification rules
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-21
 
 ## Context

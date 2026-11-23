@@ -1,6 +1,6 @@
 # 0031. Session lifecycle and playback resilience
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-21
 
 ## Context
