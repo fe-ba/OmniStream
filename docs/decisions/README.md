@@ -37,6 +37,9 @@ decision changes, a new ADR supersedes the old one.
 | [0027](0027-collaborative-text-editing.md) | Collaborative editing of text files | Accepted |
 | [0028](0028-one-installation-per-context.md) | One installation per context | Accepted |
 | [0029](0029-system-account-and-first-administrator.md) | System account and first administrator | Accepted |
+| [0030](0030-service-transactions-and-access-enforcement.md) | Service transactions and access enforcement | Accepted |
+| [0031](0031-session-lifecycle-and-playback-resilience.md) | Session lifecycle and playback resilience | Accepted |
+| [0032](0032-ingestion-pipeline-and-fixed-classification-rules.md) | Ingestion pipeline conventions and fixed classification rules | Accepted |
 
 ## Adding an ADR
 

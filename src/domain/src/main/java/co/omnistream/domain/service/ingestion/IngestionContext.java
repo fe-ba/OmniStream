@@ -6,7 +6,7 @@ import co.omnistream.domain.model.catalog.IngestionResult;
 import co.omnistream.domain.model.catalog.MediaFile;
 import java.nio.file.Path;
 
-/** Data transfer object of the ports. */
+/** Mutable state carried along the ingestion chain ({@link IngestionStep}). */
 public final class IngestionContext {
   public CatalogIndex catalog;
   public Path path;

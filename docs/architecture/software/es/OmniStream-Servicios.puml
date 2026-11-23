@@ -92,6 +92,7 @@ package "Base de autorizacion" {
     __
     # cargarUsuario(u : UsuarioId) : Usuario
     # verificarAcceso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : void
+    # verificarAcceso(u : UsuarioId, r : ElementoId, acc : TipoAcceso, catalogo : InstantaneaCatalogo) : void
     # exigirAdministrador(admin : UsuarioId) : void
   }
 
@@ -115,6 +116,7 @@ package "Acceso y seguridad" {
     - repositorioEnlaces : IRepositorioEnlaces
     - repositorioCatalogo : IRepositorioCatalogo
     - unidadDeTrabajo : IUnidadDeTrabajo
+    - vigenciaToken : Duration
     __
     + autenticarUsuario(c : Credenciales) : TokenSesion
     + validarToken(valor : String) : Optional<TokenSesion>
@@ -167,6 +169,7 @@ package "Catalogo e ingesta" {
     - respaldoDatos : IRespaldoDatos
     - repositorioConfiguracion : IRepositorioConfiguracion
     - politicaDeduplicacion : PoliticaDeduplicacion
+    - unidadDeTrabajo : IUnidadDeTrabajo
     __
     + ingestarArchivo(u : UsuarioId, ruta : Path) : ResultadoIngesta
     + subirArchivo(u : UsuarioId, nombreArchivo : String, datos : InputStream) : ResultadoIngesta
@@ -284,6 +287,7 @@ package "Busqueda y organizacion" {
 
   class ServicioBusqueda <<domain service>> {
     - repositorioCatalogo : IRepositorioCatalogo
+    - unidadDeTrabajo : IUnidadDeTrabajo
     __
     + buscarContenido(u : UsuarioId, txt : String) : List<InstantaneaElemento>
     + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<InstantaneaArchivo>

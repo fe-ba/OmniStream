@@ -92,6 +92,7 @@ package "Authorization base" {
     __
     # loadUser(u : UserId) : User
     # checkAccess(u : UserId, r : ItemId, acc : AccessType) : void
+    # checkAccess(u : UserId, r : ItemId, acc : AccessType, catalog : CatalogSnapshot) : void
     # requireAdmin(admin : UserId) : void
   }
 
@@ -115,6 +116,7 @@ package "Access and security" {
     - sharedLinkRepository : ISharedLinkRepository
     - catalogRepository : ICatalogRepository
     - unitOfWork : IUnitOfWork
+    - tokenLifetime : Duration
     __
     + authenticateUser(c : Credentials) : SessionToken
     + validateToken(value : String) : Optional<SessionToken>
@@ -167,6 +169,7 @@ package "Catalog and ingestion" {
     - dataBackup : IDataBackup
     - configurationRepository : IConfigurationRepository
     - deduplicationPolicy : DeduplicationPolicy
+    - unitOfWork : IUnitOfWork
     __
     + ingestFile(u : UserId, path : Path) : IngestionResult
     + uploadFile(u : UserId, fileName : String, data : InputStream) : IngestionResult
@@ -284,6 +287,7 @@ package "Search and organization" {
 
   class SearchService <<domain service>> {
     - catalogRepository : ICatalogRepository
+    - unitOfWork : IUnitOfWork
     __
     + searchContent(u : UserId, txt : String) : List<CatalogItemSnapshot>
     + filterByCriteria(u : UserId, c : SearchCriteria) : List<MediaFileSnapshot>

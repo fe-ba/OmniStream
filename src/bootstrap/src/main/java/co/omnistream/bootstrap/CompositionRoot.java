@@ -190,7 +190,8 @@ public final class CompositionRoot implements AutoCloseable {
             factory.createTokenRepository(),
             factory.createSharedLinkRepository(),
             catalogRepository,
-            unitOfWork);
+            unitOfWork,
+            config.tokenLifetime());
     ICatalogManagement catalogService =
         new CatalogService(
             userRepository,
@@ -202,7 +203,8 @@ public final class CompositionRoot implements AutoCloseable {
             storage,
             factory.createDataBackup(),
             factory.createConfigurationRepository(),
-            deduplicationPolicy);
+            deduplicationPolicy,
+            unitOfWork);
     playback =
         new PlaybackService(
             userRepository,
@@ -212,7 +214,7 @@ public final class CompositionRoot implements AutoCloseable {
             catalogRepository,
             List.of(new DirectStream(storage), new TranscodedStream(factory.createTranscoder())));
     ISearch searchService =
-        new SearchService(userRepository, accessPolicy, clock, catalogRepository);
+        new SearchService(userRepository, accessPolicy, clock, catalogRepository, unitOfWork);
     ISync syncService =
         new SyncService(userRepository, accessPolicy, clock, changeLog, catalogRepository, storage);
     auditTrail = new AuditService(userRepository, accessPolicy, clock, auditLog);

@@ -1,80 +1,88 @@
 package co.omnistream.domain.service;
 
+import static co.omnistream.domain.model.access.AccessFixtures.item;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import co.omnistream.domain.event.CollectionCreated;
 import co.omnistream.domain.event.DomainEvent;
-import co.omnistream.domain.event.EventId;
-import co.omnistream.domain.model.catalog.ItemId;
-import co.omnistream.domain.port.out.IOutboxRepository;
+import co.omnistream.domain.event.FileDeleted;
+import co.omnistream.domain.event.FileIngested;
+import co.omnistream.domain.event.FileModified;
+import co.omnistream.domain.port.out.IEventPublisher;
+import co.omnistream.domain.port.out.memory.InMemoryEventBus;
+import co.omnistream.domain.port.out.memory.InMemoryOutboxRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class EventDispatchServiceTest {
 
-  @Test
-  void publishesThePendingEventsAndMarksThem() {
-    InMemoryOutbox outbox = new InMemoryOutbox();
-    List<DomainEvent> published = new ArrayList<>();
-    DomainEvent first = event();
-    DomainEvent second = event();
-    outbox.pending.add(first);
-    outbox.pending.add(second);
-    EventDispatchService service = new EventDispatchService(outbox, published::add);
+  private static final Instant NOW = Instant.parse("2026-11-21T18:00:00Z");
 
-    assertThat(service.publishPending(10)).isEqualTo(2);
-    assertThat(published).containsExactly(first, second);
-    assertThat(outbox.pending).isEmpty();
-    assertThat(outbox.marked).containsExactly(first.id(), second.id());
+  private final InMemoryOutboxRepository outbox = new InMemoryOutboxRepository();
+  private final InMemoryEventBus eventBus = new InMemoryEventBus();
+
+  @Test
+  void publishPendingBatchesUpToLimitAndReturnsZeroWhenEmpty() {
+    List<DomainEvent> received = new ArrayList<>();
+    eventBus.subscribe(received::add);
+    EventDispatchService service = new EventDispatchService(outbox, eventBus);
+
+    FileIngested first = new FileIngested(item(), NOW);
+    FileModified second = new FileModified(item(), NOW.plusSeconds(1));
+    FileDeleted third = new FileDeleted(item(), NOW.plusSeconds(2));
+    outbox.add(first);
+    outbox.add(second);
+    outbox.add(third);
+
+    int firstBatch = service.publishPending(2);
+    assertThat(firstBatch).isEqualTo(2);
+    assertThat(received).containsExactly(first, second);
+    assertThat(outbox.published()).containsExactlyInAnyOrder(first.id(), second.id());
+    assertThat(outbox.pending()).hasSize(1);
+
+    int secondBatch = service.publishPending(5);
+    assertThat(secondBatch).isEqualTo(1);
+    assertThat(received).containsExactly(first, second, third);
+    assertThat(outbox.published()).containsExactlyInAnyOrder(first.id(), second.id(), third.id());
+    assertThat(outbox.pending()).isEmpty();
+
+    assertThat(service.publishPending(10)).isZero();
   }
 
   @Test
-  void leavesAnEventPendingWhenTheBusFails() {
-    InMemoryOutbox outbox = new InMemoryOutbox();
-    DomainEvent event = event();
-    outbox.pending.add(event);
-    EventDispatchService service =
-        new EventDispatchService(
-            outbox,
-            e -> {
-              throw new IllegalStateException("bus down");
-            });
+  void publishPendingLeavesFailedAndLaterEventsUnmarkedWhenPublisherFails() {
+    FileIngested first = new FileIngested(item(), NOW);
+    FileModified failing = new FileModified(item(), NOW.plusSeconds(1));
+    FileDeleted third = new FileDeleted(item(), NOW.plusSeconds(2));
+    outbox.add(first);
+    outbox.add(failing);
+    outbox.add(third);
+
+    List<DomainEvent> received = new ArrayList<>();
+    IEventPublisher failingPublisher =
+        event -> {
+          if (event.id().equals(failing.id())) {
+            throw new IllegalStateException("broker down");
+          }
+          received.add(event);
+        };
+    EventDispatchService service = new EventDispatchService(outbox, failingPublisher);
 
     assertThatThrownBy(() -> service.publishPending(10)).isInstanceOf(IllegalStateException.class);
-    assertThat(outbox.pending).containsExactly(event);
-    assertThat(outbox.marked).isEmpty();
+
+    assertThat(received).containsExactly(first);
+    assertThat(outbox.published()).containsExactly(first.id());
+    assertThat(outbox.fetchPending(10)).containsExactly(failing, third);
   }
 
   @Test
-  void refusesANonPositiveLimit() {
-    EventDispatchService service = new EventDispatchService(new InMemoryOutbox(), e -> {});
-
+  void publishPendingRejectsNonPositiveLimit() {
+    EventDispatchService service = new EventDispatchService(outbox, eventBus);
     assertThatThrownBy(() -> service.publishPending(0))
         .isInstanceOf(IllegalArgumentException.class);
-  }
-
-  private static DomainEvent event() {
-    return new CollectionCreated(
-        new ItemId(UUID.randomUUID()), Instant.parse("2026-01-01T10:00:00Z"));
-  }
-
-  private static final class InMemoryOutbox implements IOutboxRepository {
-    private final List<DomainEvent> pending = new ArrayList<>();
-    private final List<EventId> marked = new ArrayList<>();
-
-    @Override
-    public List<DomainEvent> fetchPending(int limit) {
-      return List.copyOf(pending.subList(0, Math.min(limit, pending.size())));
-    }
-
-    @Override
-    public void markPublished(EventId id) {
-      marked.add(id);
-      pending.removeIf(event -> event.id().equals(id));
-    }
+    assertThatThrownBy(() -> service.publishPending(-3))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 }

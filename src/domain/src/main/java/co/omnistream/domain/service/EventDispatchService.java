@@ -24,14 +24,16 @@ public final class EventDispatchService implements IEventDispatch {
    */
   @Override
   public int publishPending(int limit) {
-    if (limit < 1) {
-      throw new IllegalArgumentException("A limit must be positive");
+    if (limit <= 0) {
+      throw new IllegalArgumentException("Limit must be positive");
     }
     List<DomainEvent> pending = outbox.fetchPending(limit);
+    int published = 0;
     for (DomainEvent event : pending) {
       publisher.publish(event);
       outbox.markPublished(event.id());
+      published++;
     }
-    return pending.size();
+    return published;
   }
 }

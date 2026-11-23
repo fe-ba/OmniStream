@@ -3,7 +3,12 @@ package co.omnistream.domain.service.ingestion;
 import co.omnistream.domain.model.catalog.IngestionResult;
 import java.util.Objects;
 
-/** Handler of the ingestion chain (Chain of Responsibility, Template Method). */
+/**
+ * Handler of the ingestion chain (Chain of Responsibility, Template Method).
+ *
+ * <p>Subclasses implement {@link #process(IngestionContext)}; {@link #execute(IngestionContext)}
+ * forwards to the next handler only when {@code process} returns {@code true}.
+ */
 public abstract class IngestionStep {
   private IngestionStep next;
 
@@ -17,7 +22,13 @@ public abstract class IngestionStep {
   public IngestionStep chain(IngestionStep next) {
     Objects.requireNonNull(next, "next");
     IngestionStep last = this;
-    while (last.next != null) {
+    while (true) {
+      if (last == next) {
+        throw new IllegalArgumentException("An ingestion step cannot chain to itself");
+      }
+      if (last.next == null) {
+        break;
+      }
       last = last.next;
     }
     last.next = next;
@@ -25,13 +36,12 @@ public abstract class IngestionStep {
   }
 
   /**
-   * Runs this step's {@link #process} and, if it says to go on, runs the next one. The result of
-   * the last step that ran stays in the context.
+   * Template Method: runs {@link #process(IngestionContext)} and moves to the next step while each
+   * step returns {@code true}.
    */
   public IngestionResult execute(IngestionContext ctx) {
     Objects.requireNonNull(ctx, "ctx");
-    boolean keepGoing = process(ctx);
-    if (keepGoing && next != null) {
+    if (process(ctx) && next != null) {
       return next.execute(ctx);
     }
     return ctx.result;

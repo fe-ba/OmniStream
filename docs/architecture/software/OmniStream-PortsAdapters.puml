@@ -840,10 +840,12 @@ package "Composition (bootstrap)" #FFFDE7 {
 
  note bottom of IUnitOfWork
    Used when an operation touches two aggregates:
-   creating a user (User + local credential) and sharing
-   a collection (guest User + SharedLink); and by the
-   audit decorators, so a change and its AuditEntry are
-   saved together. A nested call joins the running one.
+   creating a user (User + local credential), sharing
+   a collection (guest User + SharedLink), ingesting a
+   file or creating a collection (CatalogIndex + User);
+   and by the audit decorators, so a change and its
+   AuditEntry are saved together. A nested call joins
+   the running one.
  end note
 
  note bottom of IEventBus

@@ -840,10 +840,12 @@ package "Composicion (arranque)" #FFFDE7 {
 
  note bottom of IUnidadDeTrabajo
    Se usa cuando una operacion toca dos agregados:
-   crear usuario (Usuario + credencial local) y compartir
-   coleccion (Usuario invitado + EnlaceCompartido); y en los
-   decoradores de auditoria, para guardar el cambio y su
-   EntradaAuditoria juntos. Una llamada anidada se une a la que corre.
+   crear usuario (Usuario + credencial local), compartir
+   coleccion (Usuario invitado + EnlaceCompartido),
+   ingestar un archivo o crear una coleccion (CatalogoIndice
+   + Usuario); y en los decoradores de auditoria, para
+   guardar el cambio y su EntradaAuditoria juntos. Una
+   llamada anidada se une a la que corre.
  end note
 
  note bottom of IBusEventos
