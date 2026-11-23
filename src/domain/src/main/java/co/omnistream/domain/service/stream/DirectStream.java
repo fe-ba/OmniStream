@@ -1,5 +1,6 @@
 package co.omnistream.domain.service.stream;
 
+import co.omnistream.domain.exception.ResourceNotFound;
 import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.port.dto.MediaStream;
 import co.omnistream.domain.port.dto.StreamProfile;
@@ -76,6 +77,9 @@ public final class DirectStream implements StreamStrategy {
     Objects.requireNonNull(a, "file");
     Objects.requireNonNull(p, "profile");
     Objects.requireNonNull(pos, "position");
+    if (!storage.exists(a.path())) {
+      throw new ResourceNotFound("File not found in storage: " + a.path());
+    }
     InputStream data = storage.read(a.path());
     String mime = resolveMime(a);
     return new MediaStream(data, mime, false, Optional.of(a.sizeBytes()));

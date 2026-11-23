@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /**
  * Concrete handler of the ingestion chain: indexes the file and applies classification (Chain of
- * Responsibility, ADR 0030).
+ * Responsibility, ADR 0032).
  */
 public final class IndexingStep extends IngestionStep {
   @Override

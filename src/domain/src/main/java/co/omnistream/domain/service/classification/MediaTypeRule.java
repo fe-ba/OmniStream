@@ -8,7 +8,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
-/** Concrete classification rule: by media type (Strategy, ADR 0016, ADR 0030). */
+/** Concrete classification rule: by media type (Strategy, ADR 0016, ADR 0032). */
 public final class MediaTypeRule implements ClassificationRule {
 
   @Override

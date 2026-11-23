@@ -268,10 +268,9 @@ public final class AccessService extends AuthorizedService implements IAccessCon
         .filter(snapshot ->
             snapshot.identities().stream()
                 .noneMatch(id -> LinkedIdentity.SYSTEM_ISSUER.equals(id.issuer())))
-        .filter(
-            snapshot ->
-                snapshot.identities().stream()
-                    .noneMatch(id -> LinkedIdentity.SYSTEM_ISSUER.equals(id.issuer())))
+        .filter(snapshot ->
+            snapshot.identities().stream()
+                .noneMatch(id -> LinkedIdentity.SYSTEM_ISSUER.equals(id.issuer())))
         .sorted(Comparator.comparing(UserSnapshot::username))
         .toList();
   }

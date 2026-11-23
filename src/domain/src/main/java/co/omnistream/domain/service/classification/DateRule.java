@@ -19,7 +19,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-/** Concrete classification rule: by capture date (Strategy, ADR 0016, ADR 0030). */
+/** Concrete classification rule: by capture date (Strategy, ADR 0016, ADR 0032). */
 public final class DateRule implements ClassificationRule {
 
   private static final List<String> DATE_KEYS = List.of("captureDate", "creation_time", "date");
