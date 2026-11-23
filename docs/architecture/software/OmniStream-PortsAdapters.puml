@@ -93,7 +93,7 @@ package "Primary adapters (presentation)" #EAF3F8 {
      - printHelp() : void
    }
    class WebUiAdapter <<primary adapter>> {
-     - staticDirectory : Path
+     - resourceFolder : String
      + registerRoutes(config : JavalinConfig) : void
    }
    class RestApiAdapter <<primary adapter>> {
@@ -111,6 +111,26 @@ package "Primary adapters (presentation)" #EAF3F8 {
    class ApiJson <<adapter helper>> {
      + {static} mapper() : JsonMapper
      + {static} forJavalin() : JavalinJackson3
+   }
+   class TextEditingRelay <<primary adapter>> {
+     - accessControl : IAccessControl
+     - rooms : EditingRooms
+     + registerRoutes(config : JavalinConfig) : void
+     - handshake(ctx : Context) : void
+     - connect(ctx : WsConnectContext) : void
+     - disconnect(ctx : WsContext) : void
+   }
+   class EditingRooms <<adapter helper>> {
+     - textEditing : ITextEditing
+     + join(file : ItemId, p : Peer) : void
+     + receive(p : Peer, frame : byte[]) : void
+     + leave(p : Peer) : void
+   }
+   interface Peer <<callback>> {
+     + user() : UserId
+     + send(message : Map<String,Object>) : void
+     + send(frame : byte[]) : void
+     + close(statusCode : int, reason : String) : void
    }
    class ApiErrors <<adapter helper>> {
      + {static} register(config : JavalinConfig) : void
@@ -224,6 +244,10 @@ package "Driving ports (domain)" #E8F5E9 {
    interface FeedSubscription <<callback>> {
      + close() : void
    }
+   interface ITextEditing <<driving port>> {
+     + open(u : UserId, file : ItemId) : TextDocument
+     + save(u : UserId, file : ItemId, text : String, basedOn : Fingerprint) : TextDocument
+   }
    ICatalogFeed ..> CatalogChangeListener : tells
    ICatalogFeed ..> FeedSubscription : returns
    interface IRuleManagement <<driving port>> #E8F5E9;line.dashed;line:999999 {
@@ -253,11 +277,13 @@ package "Domain services (see services diagram)" #FFF8E1 {
    ICatalogObserver <|.. SyncObserver
    class AuditService <<domain service>>
    class CatalogFeedService <<domain service>>
+   class TextEditingService <<domain service>>
    abstract class AuditingDecorator <<decorator>>
    class AuditedAccessControl <<decorator>>
    class AuditedCatalogManagement <<decorator>>
    class AuditedSearch <<decorator>>
    class AuditedSync <<decorator>>
+   class AuditedTextEditing <<decorator>>
  }
 
  ICatalogManagement <|.. CatalogService
@@ -269,6 +295,7 @@ package "Domain services (see services diagram)" #FFF8E1 {
  IRuleManagement <|.. ClassificationService
  IAuditTrail <|.. AuditService
  ICatalogFeed <|.. CatalogFeedService
+ ITextEditing <|.. TextEditingService
  IAccessControl <|.. AuditedAccessControl
  ICatalogManagement <|.. AuditedCatalogManagement
  ISearch <|.. AuditedSearch
@@ -277,6 +304,8 @@ package "Domain services (see services diagram)" #FFF8E1 {
  AuditedCatalogManagement --> ICatalogManagement : delegate (CatalogService)
  AuditedSearch --> ISearch : delegate (SearchService)
  AuditedSync --> ISync : delegate (SyncService)
+ ITextEditing <|.. AuditedTextEditing
+ AuditedTextEditing --> ITextEditing : delegate (TextEditingService)
 
  CliAdapter --> ICatalogManagement : invokes
  RestApiAdapter ..> ApiJson : configures JSON
@@ -289,6 +318,18 @@ package "Domain services (see services diagram)" #FFF8E1 {
  RestApiAdapter --> IAuditTrail : invokes
  RestApiAdapter --> ICatalogFeed : follows (server-sent events)
  RestApiAdapter ..> IRuleManagement : invokes (2.0)
+ TextEditingRelay --> IAccessControl : validates the session
+ TextEditingRelay *-- EditingRooms : rooms
+ EditingRooms --> ITextEditing : opens and saves
+ EditingRooms ..> Peer : relays to each one
+ note bottom of TextEditingRelay
+   WebSocket at /api/v1/files/{id}/edit (ADR 0027).
+   Refuses the handshake without a session (401) or
+   from another site (403). Each room relays the Yjs
+   edits without decoding them, keeps them in memory
+   for whoever joins later, and saves the text with
+   ITextEditing, based on the last fingerprint it knows.
+ end note
  SchedulerAdapter ..> ScheduledTask : fires
  ReindexTask --> ICatalogManagement : invokes
  BackupTask --> ICatalogManagement : invokes
@@ -423,6 +464,10 @@ AccessService ..> ICatalogRepository : reads collections for inherited access
  AuditService ..> IAuditLog : reads the trail
  CatalogFeedService ..> IEventSubscriber : subscribes each follower
  CatalogFeedService ..> ICatalogRepository : checks what each follower can see
+ TextEditingService ..> IFileStorage : reads and writes the text
+ TextEditingService ..> ICatalogRepository : records the new fingerprint
+ TextEditingService ..> IUnitOfWork : file and catalog together
+ AuditedTextEditing ..> ICatalogRepository : compares fingerprints
  AuditingDecorator ..> IAuditLog : appends entries
  AuditingDecorator ..> IUnitOfWork : change and entry together
  AuditedAccessControl ..> IUserRepository : names failed logins
@@ -710,14 +755,19 @@ package "Composition (bootstrap)" #FFFDE7 {
      - factory : InfrastructureFactory
      + start() : void
      + stop() : void
+     + runCommand(args : List<String>) : int
+     + port() : int
      - selectFactory(config : AppConfiguration) : InfrastructureFactory
      - decoratePorts() : void
-     - auditDrivingPorts() : void
      - buildIngestionChain() : IngestionStep
-     - createServices() : void
      - createHttpServer() : Javalin
-     - createPrimaryAdapters() : void
+     - createScheduler(system : UserId) : SchedulerAdapter
      - registerObservers() : void
+     - ensureSystemAccount() : UserId
+     - ensureFirstAdmin() : void
+   }
+   class Main <<entry point>> {
+     + {static} main(args : String[]) : void
    }
    InfrastructureFactory <|-- LocalFactory
    InfrastructureFactory <|-- ServerFactory
@@ -726,6 +776,18 @@ package "Composition (bootstrap)" #FFFDE7 {
    CompositionRoot --> InfrastructureFactory : selects by profile
    CompositionRoot ..> IEventSubscriber : registers observers
    CompositionRoot ..> SyncObserver : creates and subscribes
+   Main ..> ConfigurationLoader : reads the configuration
+   Main ..> CompositionRoot : serves or runs a command
+   note top of CompositionRoot
+     The constructor creates the services, wraps them in
+     the audit decorators and hands them to the
+     primary adapters. Before serving it ensures the
+     system account (used by the CLI and the tasks) and,
+     if nobody can administer, creates "admin" with a
+     random password shown only once on the
+     console (ADR 0029). decoratePorts (cache) comes
+     with the infrastructure adapters.
+   end note
 
    LocalFactory ..> SqlitePersistenceAdapter : creates
    LocalFactory ..> LocalFileStorageAdapter : creates
@@ -778,10 +840,12 @@ package "Composition (bootstrap)" #FFFDE7 {
 
  note bottom of IUnitOfWork
    Used when an operation touches two aggregates:
-   creating a user (User + local credential) and sharing
-   a collection (guest User + SharedLink); and by the
-   audit decorators, so a change and its AuditEntry are
-   saved together. A nested call joins the running one.
+   creating a user (User + local credential), sharing
+   a collection (guest User + SharedLink), ingesting a
+   file or creating a collection (CatalogIndex + User);
+   and by the audit decorators, so a change and its
+   AuditEntry are saved together. A nested call joins
+   the running one.
  end note
 
  note bottom of IEventBus

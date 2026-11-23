@@ -381,6 +381,11 @@ class AccessServiceTest {
     UserId anaId = service.createUser(adminId, "ana", "pass", Role.USER);
     UserId bobId = service.createUser(adminId, "bob", "pass", Role.USER);
     service.shareCollection(adminId, folderId, PermissionLevel.READ, Duration.ofHours(1));
+    users.save(
+        User.create(
+            "omnistream-system",
+            Role.ADMIN,
+            new LinkedIdentity(LinkedIdentity.SYSTEM_ISSUER, "omnistream")));
 
     service.grantPermission(adminId, anaId, new Permission(folderId, PermissionLevel.MANAGE));
     service.grantPermission(adminId, zoeId, new Permission(folderId, PermissionLevel.READ));

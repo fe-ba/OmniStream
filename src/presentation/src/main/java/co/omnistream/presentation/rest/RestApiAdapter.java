@@ -122,6 +122,16 @@ public final class RestApiAdapter {
                   new LocalCredentials(body.provider(), body.username(), body.password()));
           startSession(ctx, token);
         });
+    // Who is logged in, for the web UI after a reload: the token itself stays in its HttpOnly
+    // cookie
+    routes.get(
+        API + "/auth/session",
+        ctx -> {
+          SessionToken token = authenticateRequest(ctx);
+          ctx.json(
+              Map.of(
+                  "userId", token.userId(), "role", token.role(), "expiresAt", token.expiresAt()));
+        });
     routes.post(
         API + "/auth/logout",
         ctx -> {
@@ -528,7 +538,7 @@ public final class RestApiAdapter {
     return authenticateRequest(ctx).userId();
   }
 
-  private static String tokenValue(Context ctx) {
+  static String tokenValue(Context ctx) {
     String header = ctx.header("Authorization");
     String bearer = "Bearer ";
     if (header != null && header.regionMatches(true, 0, bearer, 0, bearer.length())) {
@@ -551,7 +561,7 @@ public final class RestApiAdapter {
     return new UserId(uuid(ctx.pathParam(name), name));
   }
 
-  private static UUID uuid(String value, String name) {
+  static UUID uuid(String value, String name) {
     try {
       return UUID.fromString(value);
     } catch (IllegalArgumentException e) {

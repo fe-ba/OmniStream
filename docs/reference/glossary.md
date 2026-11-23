@@ -225,8 +225,9 @@ below.
 | `inicio` / `fin` / `limite` / `ultimas()` / `coincide()` | `from` / `to` / `limit` / `latest()` / `matches()` | `AuditQuery` |
 | `anexar()` / `historial()` | `append()` / `history()` | `IAuditLog`, `IAuditTrail` |
 | `auditado()` / `anotar()` / `entrada()` / `delegado` | `audited()` / `record()` / `entry()` / `delegate` | `AuditingDecorator` and its subclasses |
-| `auditarPuertosEntrada()` / `crearRegistroAuditoria()` | `auditDrivingPorts()` / `createAuditLog()` | Composition |
+| `crearRegistroAuditoria()` | `createAuditLog()` | `InfrastructureFactory` |
 | `Gestionar acceso a una coleccion` (UC28) / `Consultar historial de cambios` (UC29) | `Manage access to a collection` / `Review change history` | Use cases |
+| `Editar texto en conjunto` (UC30) | `Edit text together` | Use case (ADR 0027) |
 
 ## Live changes (ADR 0026)
 
@@ -237,6 +238,33 @@ below.
 | `elemento` / `cambio` / `evento` | `item` / `change` / `event` | Parts of a `CatalogChange` |
 | `puedeVer()` / `detener()` / `usuarioActivo()` | `canSee()` / `stop()` / `activeUser()` | `CatalogFeedService` and its `Follower` |
 
+## Text editing (ADR 0027)
+
+| Spanish | English | Where |
+|---|---|---|
+| `IEdicionTexto` / `ServicioEdicionTexto` | `ITextEditing` / `TextEditingService` | Driving port and its service |
+| `DocumentoTexto` | `TextDocument` | What the editor receives: text, fingerprint, whether it may save |
+| `PoliticaArchivoTexto` / `esTexto()` / `decodificar()` | `TextFilePolicy` / `isText()` / `decode()` | Which files are text: extension, at most 1 MiB, UTF-8 |
+| `abrir()` / `guardar()` / `basadoEn` | `open()` / `save()` / `basedOn` | `ITextEditing` |
+| `reemplazarContenido()` / `nuevaHuella` / `nuevoTamanioBytes` | `replaceContent()` / `newFingerprint` / `newSizeBytes` | `CatalogIndex`, `MediaFile` |
+| `archivoTexto()` / `politicaArchivoTexto` | `textFile()` / `textFilePolicy` | `TextEditingService` |
+| `EdicionTextoAuditada` / `ARCHIVO_EDITADO` | `AuditedTextEditing` / `FILE_EDITED` | Audit of the saves that changed the file |
+| `RelayEdicionTexto` / `SalasEdicion` / `Participante` | `TextEditingRelay` / `EditingRooms` / `Peer` | WebSocket relay of the editor and its rooms |
+| `unirse()` / `recibir()` / `salir()` / `trama` | `join()` / `receive()` / `leave()` / `frame` | `EditingRooms` |
+| `saludo()` / `conectar()` / `desconectar()` | `handshake()` / `connect()` / `disconnect()` | `TextEditingRelay` |
+
+## Start-up (ADR 0028, ADR 0029)
+
+| Spanish | English | Where |
+|---|---|---|
+| `Principal` | `Main` | Entry point: serves, or runs one command |
+| `ejecutarComando()` / `puerto()` / `crearPlanificador()` | `runCommand()` / `port()` / `createScheduler()` | `CompositionRoot` |
+| `asegurarCuentaSistema()` / `asegurarPrimerAdministrador()` | `ensureSystemAccount()` / `ensureFirstAdmin()` | `CompositionRoot` |
+| `sistema` | `system` | The account the CLI and the scheduled tasks act as |
+| cuenta del sistema | system account | `omnistream-system`, identity `("system", "omnistream")`; nobody logs in with it |
+| primer administrador | first administrator | `admin`, created when nobody can administer; password shown once on the console |
+| instalacion | installation | One per context (personal or organization); no multi-tenancy |
+
 ## Recurring member names
 
 | Spanish | English |
@@ -245,6 +273,7 @@ below.
 | `aValor()` / `asignar()` (mappers) | `toValue()` / `bind()` |
 | `buscar...` / `guardar` / `eliminar` | `find...` / `save` / `delete` |
 | `ahora` / `reloj` | `now` / `clock` |
+| `carpetaRecursos` (`AdaptadorWebUI`) | `resourceFolder` (`WebUiAdapter`) |
 
 ## Enum constants
 

@@ -34,7 +34,12 @@ decision changes, a new ADR supersedes the old one.
 | [0024](0024-delegate-permissions-per-collection.md) | Delegate permissions per collection | Accepted |
 | [0025](0025-audit-trail-with-decorators.md) | Audit trail with decorators | Accepted |
 | [0026](0026-live-catalog-changes.md) | Live catalog changes over server-sent events | Accepted |
-| [0027](0027-collaborative-text-editing.md) | Collaborative editing of text files | Accepted (implementation pending) |
+| [0027](0027-collaborative-text-editing.md) | Collaborative editing of text files | Accepted |
+| [0028](0028-one-installation-per-context.md) | One installation per context | Accepted |
+| [0029](0029-system-account-and-first-administrator.md) | System account and first administrator | Accepted |
+| [0030](0030-service-transactions-and-access-enforcement.md) | Service transactions and access enforcement | Proposed |
+| [0031](0031-session-lifecycle-and-playback-resilience.md) | Session lifecycle and playback resilience | Proposed |
+| [0032](0032-ingestion-pipeline-and-fixed-classification-rules.md) | Ingestion pipeline conventions and fixed classification rules | Proposed |
 
 ## Adding an ADR
 

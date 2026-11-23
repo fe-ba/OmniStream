@@ -76,6 +76,7 @@ rectangle "Capa de presentacion\n(adaptadores primarios / driving)" <<present>> 
   component "Adaptador Web UI\n<<Javalin>>"                     as AdWeb
   component "Adaptador CLI\n<<controlador>>"                    as AdCli
   component "Adaptador API REST\n<<Javalin>>"                   as AdApi
+  component "Relay de edicion de texto\n<<WebSocket>>"           as AdEdit
   component "Adaptador Programador\n<<tareas programadas>>"     as AdProg
 }
 
@@ -91,6 +92,7 @@ rectangle "Puertos de entrada" <<dominio>> {
   interface "IDespachoEventos" as PIN_DES
   interface "IHistorialAuditoria" as PIN_AUD
   interface "IFlujoCatalogo"      as PIN_FLU
+  interface "IEdicionTexto"       as PIN_TXT
   interface "IGestionReglas"   as PIN_REG #FFFFFF;line.dashed;line:999999
 }
 
@@ -110,6 +112,7 @@ rectangle "Dominio" <<dominio>> {
     component "Servicio de Clasificacion\n..\ncrearRegla()\nreclasificarBiblioteca()"                      as SvCla #FFFFFF;line.dashed;line:999999
     component "Servicio de Auditoria\n..\nhistorial()"                                         as SvAud
     component "Servicio de Flujo del Catalogo\n..\nseguir()"                                  as SvFlu
+    component "Servicio de Edicion de Texto\n..\nabrir()\nguardar()"                         as SvTxt
     component "Decoradores de auditoria\n<<decorator>>\n..\nregistran cada cambio"           as DecAud
   }
 
@@ -189,6 +192,7 @@ rectangle "Arranque" <<arranque>> {
 ' ============================================================
 CliWeb    --> AdWeb
 CliWeb    --> AdApi : HTTP/JSON
+CliWeb    --> AdEdit : WebSocket (Yjs)
 CliMobile ..> AdApi : HTTP/JSON
 CliCli    --> AdCli
 
@@ -203,6 +207,8 @@ AdApi    ..> PIN_SIN
 AdApi    ..> PIN_REG
 AdApi    ..> PIN_AUD
 AdApi    ..> PIN_FLU : cambios en vivo (SSE)
+AdEdit   ..> PIN_TXT
+AdEdit   ..> PIN_ACC
 AdCli    ..> PIN_CAT
 AdProg   ..> PIN_CAT : reindexar / respaldar
 AdProg   ..> PIN_DES : sincronizar
@@ -219,6 +225,7 @@ SvDes -up- PIN_DES
 SvCla -up- PIN_REG
 SvAud -up- PIN_AUD
 SvFlu -up- PIN_FLU
+SvTxt -up- PIN_TXT
 
 ' ============================================================
 ' SERVICIOS -> MODELO DE DOMINIO
@@ -233,11 +240,13 @@ SvDes --> EnEventos : publica
 SvCat --> EnClasif : clasifica al ingerir
 SvCla --> EnClasif
 SvAud --> EnAuditoria
+SvTxt --> EnCatalogo : reemplaza contenido
 DecAud --> EnAuditoria : registra
 DecAud ..> SvAcc : envuelve
 DecAud ..> SvCat : envuelve
 DecAud ..> SvBus : envuelve
 DecAud ..> SvSin : envuelve
+DecAud ..> SvTxt : envuelve
 
 ' --- relaciones internas del modelo ---
 EnCatalogo *-- EnArchivo
@@ -284,6 +293,9 @@ SvCla ..> POUT_REPO
 SvAud ..> POUT_AUD
 SvFlu ..> POUT_SUS
 SvFlu ..> POUT_REPO
+SvTxt ..> POUT_REPO
+SvTxt ..> POUT_FS
+SvTxt ..> POUT_UOW
 DecAud ..> POUT_AUD
 DecAud ..> POUT_UOW
 

@@ -17,6 +17,11 @@ public final class EventDispatchService implements IEventDispatch {
     this.publisher = Objects.requireNonNull(publisher, "publisher");
   }
 
+  /**
+   * Publishes at most {@code limit} pending events and marks them as published. An event is marked
+   * only after the bus accepted it, so a failure leaves it pending for the next run: delivery is at
+   * least once (Transactional Outbox).
+   */
   @Override
   public int publishPending(int limit) {
     if (limit <= 0) {

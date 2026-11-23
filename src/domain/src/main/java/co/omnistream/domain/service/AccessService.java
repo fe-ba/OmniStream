@@ -255,8 +255,9 @@ public final class AccessService extends AuthorizedService implements IAccessCon
 
   /**
    * For the administration screen: {@code requireAdmin(admin)}, then {@code
-   * userRepository.findAll()} without the guests (they belong to their shared links), as snapshots
-   * sorted by username.
+   * userRepository.findAll()} without the guests (they belong to their shared links) and without
+   * the system account (its identity is issued by {@code LinkedIdentity.SYSTEM_ISSUER}), as
+   * snapshots sorted by username.
    */
   @Override
   public List<UserSnapshot> listUsers(UserId admin) {
@@ -264,6 +265,13 @@ public final class AccessService extends AuthorizedService implements IAccessCon
     return userRepository.findAll().stream()
         .map(User::toSnapshot)
         .filter(snapshot -> snapshot.role() != Role.GUEST)
+        .filter(snapshot ->
+            snapshot.identities().stream()
+                .noneMatch(id -> LinkedIdentity.SYSTEM_ISSUER.equals(id.issuer())))
+        .filter(
+            snapshot ->
+                snapshot.identities().stream()
+                    .noneMatch(id -> LinkedIdentity.SYSTEM_ISSUER.equals(id.issuer())))
         .sorted(Comparator.comparing(UserSnapshot::username))
         .toList();
   }

@@ -1,4 +1,4 @@
-# 0029. Session lifecycle and playback resilience
+# 0031. Session lifecycle and playback resilience
 
 - **Status:** Proposed
 - **Date:** 2026-11-21

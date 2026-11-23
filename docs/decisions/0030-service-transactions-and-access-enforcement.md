@@ -1,4 +1,4 @@
-# 0028. Service transactions and access enforcement
+# 0030. Service transactions and access enforcement
 
 - **Status:** Proposed
 - **Date:** 2026-11-21

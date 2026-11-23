@@ -13,15 +13,26 @@ public abstract class IngestionStep {
   private IngestionStep next;
 
   /**
-   * Appends {@code next} after this step and returns {@code next} so steps can be chained fluently.
+   * Appends {@code next} at the end of the chain and returns the first step, so the chain can be
+   * built in one expression: {@code new ExtractionStep(...).chain(new
+   * DuplicatesStep(...)).chain(new IndexingStep())}.
+   *
+   * @return this first step, to keep chaining
    */
   public IngestionStep chain(IngestionStep next) {
     Objects.requireNonNull(next, "next");
-    if (next == this) {
-      throw new IllegalArgumentException("An ingestion step cannot chain to itself");
+    IngestionStep last = this;
+    while (true) {
+      if (last == next) {
+        throw new IllegalArgumentException("An ingestion step cannot chain to itself");
+      }
+      if (last.next == null) {
+        break;
+      }
+      last = last.next;
     }
-    this.next = next;
-    return next;
+    last.next = next;
+    return this;
   }
 
   /**

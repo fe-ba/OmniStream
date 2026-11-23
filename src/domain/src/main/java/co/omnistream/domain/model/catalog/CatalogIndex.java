@@ -146,6 +146,22 @@ public final class CatalogIndex {
   }
 
   /**
+   * Records that the content of a file was replaced (ADR 0027): its new fingerprint and size. The
+   * same content again records nothing. The new content is not checked for duplicates: that only
+   * happens when a file enters the catalog.
+   *
+   * @throws ResourceNotFound if there is no file with that identifier
+   */
+  public void replaceContent(
+      ItemId id, Fingerprint newFingerprint, long newSizeBytes, Instant now) {
+    Objects.requireNonNull(now, "now");
+    MediaFile file = requireFile(id);
+    if (file.replaceContent(newFingerprint, newSizeBytes)) {
+      register(new FileModified(file.id, now));
+    }
+  }
+
+  /**
    * Removes a file from the catalog and from every collection that holds it. Only files are
    * deleted: version 1.0 has no use case for deleting collections.
    *

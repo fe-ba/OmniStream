@@ -136,6 +136,24 @@ class RestApiAccessTest {
   }
 
   @Test
+  void theSessionSaysWhoIsLoggedInWithoutTheToken() {
+    JavalinTest.test(
+        app(),
+        (server, client) -> {
+          var response = client.get(API + "/auth/session", bearer(TOKEN));
+          var anonymous = client.get(API + "/auth/session");
+
+          assertThat(response.code()).isEqualTo(200);
+          JsonNode session = json(response.body().string());
+          assertThat(session.get("userId").asString()).isEqualTo(ADMIN.value().toString());
+          assertThat(session.get("role").asString()).isEqualTo("ADMIN");
+          assertThat(session.get("expiresAt").asString()).isEqualTo("2026-11-21T03:00:00Z");
+          assertThat(session.has("value")).isFalse();
+          assertThat(anonymous.code()).isEqualTo(401);
+        });
+  }
+
+  @Test
   void logoutEndsTheSessionAndClearsTheCookie() {
     JavalinTest.test(
         app(),

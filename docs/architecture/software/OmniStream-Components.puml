@@ -76,6 +76,7 @@ rectangle "Presentation layer\n(primary / driving adapters)" <<presentation>> {
   component "Web UI adapter\n<<Javalin>>"                     as AdWeb
   component "CLI adapter\n<<controller>>"                    as AdCli
   component "REST API adapter\n<<Javalin>>"                   as AdApi
+  component "Text editing relay\n<<WebSocket>>"                 as AdEdit
   component "Scheduler adapter\n<<scheduled tasks>>"     as AdScheduler
 }
 
@@ -91,6 +92,7 @@ rectangle "Driving ports" <<domain>> {
   interface "IEventDispatch" as PIN_DISPATCH
   interface "IAuditTrail"    as PIN_AUDIT
   interface "ICatalogFeed"   as PIN_FEED
+  interface "ITextEditing"   as PIN_TEXT
   interface "IRuleManagement"   as PIN_RULES #FFFFFF;line.dashed;line:999999
 }
 
@@ -110,6 +112,7 @@ rectangle "Domain" <<domain>> {
     component "Classification service\n..\ncreateRule()\nreclassifyLibrary()"                      as SvClassification #FFFFFF;line.dashed;line:999999
     component "Audit service\n..\nhistory()"                                               as SvAudit
     component "Catalog feed service\n..\nfollow()"                                          as SvFeed
+    component "Text editing service\n..\nopen()\nsave()"                                     as SvText
     component "Audit decorators\n<<decorator>>\n..\nrecord each change"                    as DecAudit
   }
 
@@ -189,6 +192,7 @@ rectangle "Bootstrap" <<bootstrap>> {
 ' ============================================================
 CliWeb    --> AdWeb
 CliWeb    --> AdApi : HTTP/JSON
+CliWeb    --> AdEdit : WebSocket (Yjs)
 CliMobile ..> AdApi : HTTP/JSON
 CliCli    --> AdCli
 
@@ -203,6 +207,8 @@ AdApi    ..> PIN_SYNC
 AdApi    ..> PIN_RULES
 AdApi    ..> PIN_AUDIT
 AdApi    ..> PIN_FEED : live changes (SSE)
+AdEdit   ..> PIN_TEXT
+AdEdit   ..> PIN_ACC
 AdCli    ..> PIN_CAT
 AdScheduler   ..> PIN_CAT : reindex / back up
 AdScheduler   ..> PIN_DISPATCH : sync
@@ -219,6 +225,7 @@ SvDispatch -up- PIN_DISPATCH
 SvClassification -up- PIN_RULES
 SvAudit -up- PIN_AUDIT
 SvFeed -up- PIN_FEED
+SvText -up- PIN_TEXT
 
 ' ============================================================
 ' SERVICES -> DOMAIN MODEL
@@ -233,11 +240,13 @@ SvDispatch --> ModelEvents : publishes
 SvCatalog --> ModelRules : classifies on ingestion
 SvClassification --> ModelRules
 SvAudit --> ModelAudit
+SvText --> ModelCatalog : replaces content
 DecAudit --> ModelAudit : records
 DecAudit ..> SvAccess : wraps
 DecAudit ..> SvCatalog : wraps
 DecAudit ..> SvSearch : wraps
 DecAudit ..> SvSync : wraps
+DecAudit ..> SvText : wraps
 
 ' --- relations inside the model ---
 ModelCatalog *-- ModelFile
@@ -284,6 +293,9 @@ SvClassification ..> POUT_REPO
 SvAudit ..> POUT_AUDIT
 SvFeed ..> POUT_SUB
 SvFeed ..> POUT_REPO
+SvText ..> POUT_REPO
+SvText ..> POUT_FS
+SvText ..> POUT_UOW
 DecAudit ..> POUT_AUDIT
 DecAudit ..> POUT_UOW
 

@@ -103,3 +103,9 @@ nbproject/private/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# =====================================================================
+# Editor bundle (src/presentation/editor-bundle): its dependencies are
+# installed with npm ci; the built web/vendor/editor.js is committed.
+# =====================================================================
+src/presentation/editor-bundle/node_modules/

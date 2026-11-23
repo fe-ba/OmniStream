@@ -67,6 +67,7 @@ package "Content management" {
   usecase "Detect duplicates"               as UC5 <<optional>>
   usecase "Edit metadata\nmanually"         as UC6
   usecase "Delete file\nfrom the catalog"   as UC7
+  usecase "Edit text\ntogether"             as UC30
   usecase "Classify\nautomatically"          as UC25 <<included>>
 }
 
@@ -141,6 +142,7 @@ User --> UC18
 User --> UC20
 User --> UC28
 User --> UC29
+User --> UC30
 
 Guest --> UC10
 Guest --> UC12
@@ -185,6 +187,7 @@ UC16 ..> UC19 : <<include>>
 UC20 ..> UC19 : <<include>>
 UC28 ..> UC19 : <<include>>
 UC29 ..> UC19 : <<include>>
+UC30 ..> UC19 : <<include>>
 
 ' ============================================================
 ' EXTEND  (conditional, with its guard condition)

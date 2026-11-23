@@ -27,9 +27,19 @@
       <groupId>co.omnistream</groupId>
       <artifactId>omnistream-presentation</artifactId>
     </dependency>
+    <!-- The composition root creates and starts the HTTP server (ADR 0013) -->
+    <dependency>
+      <groupId>io.javalin</groupId>
+      <artifactId>javalin</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <!-- The composition root builds the Javalin server and registers the primary adapters -->
+    <dependency>
+      <groupId>io.javalin</groupId>
+      <artifactId>javalin</artifactId>
     </dependency>
     <!-- The only module that knows the logging provider (ADR 0021) -->
     <dependency>

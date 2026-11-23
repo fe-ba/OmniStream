@@ -21,9 +21,9 @@ import java.util.UUID;
 public final class MediaFile extends CatalogItem {
 
   private final Path path;
-  private final Fingerprint fingerprint;
+  private Fingerprint fingerprint;
   private final MediaType type;
-  private final long sizeBytes;
+  private long sizeBytes;
   private final Duration duration;
   private IndexingStatus status;
   private final Instant ingestedAt;
@@ -158,6 +158,25 @@ public final class MediaFile extends CatalogItem {
     }
     tags.removeIf(Tag::isAutomatic);
     newTags.forEach(this::tag);
+  }
+
+  /**
+   * The content of the file was replaced, for example by saving it from the text editor (ADR 0027):
+   * it now has this fingerprint and size. Name, metadata and tags stay as they are.
+   *
+   * @return whether anything changed; the same content again changes nothing
+   */
+  boolean replaceContent(Fingerprint newFingerprint, long newSizeBytes) {
+    Objects.requireNonNull(newFingerprint, "newFingerprint");
+    if (newSizeBytes < 0) {
+      throw new IllegalArgumentException("A file cannot have a negative size");
+    }
+    if (fingerprint.matches(newFingerprint) && sizeBytes == newSizeBytes) {
+      return false;
+    }
+    fingerprint = newFingerprint;
+    sizeBytes = newSizeBytes;
+    return true;
   }
 
   /** The file is processed and searchable. */

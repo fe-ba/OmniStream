@@ -75,6 +75,31 @@ Every error answers this body, with the status from the table:
 `ApiErrors` implements this table. A new domain exception needs a row here, and
 in `ApiErrors`, before it reaches the API; until then it answers 500.
 
+## Web UI
+
+`WebUiAdapter` serves the browser interface from the same server: `/` and the
+files next to it (`/app.js`, `/style.css`, `/fonts/`, `/vendor/`), and `/s/{token}` for
+shared links. The page uses this API like any other client. Every path under
+`/api/v1` that is not a route below is a JSON 404, never the page.
+
+What the page offers, and the routes behind it:
+
+- **Library:** browse, search, upload, collections, tags, play (`/library`,
+  `/collections`, `/files`, `/sessions`).
+- **Sharing and access:** a link per collection (`/collections/{id}/links`);
+  "Who has access" for whoever manages a collection (`/items/{id}/access`,
+  `/users/by-name/{username}`, `/users/{id}/permissions`).
+- **People** (administrators): users, roles, access and deactivation (`/users`).
+- **History:** the whole trail for administrators, and the history of each file
+  or collection for whoever can see it (`/audit`).
+- **Live:** what others change appears without reloading (`/events`).
+- **Editing together:** a text file opens in an editor shared with everyone who
+  has it open, with their names and cursors; it saves by itself a couple of
+  seconds after the last change (`/files/{id}/edit`). The editor (CodeMirror 6
+  and Yjs, about 800 KB minified, 280 KB compressed) is in `/vendor/editor.js`
+  and is only downloaded the first time someone opens a text file; its licenses
+  are in `/vendor/LICENSES.txt`.
+
 ## Routes
 
 ### Access (`IAccessControl`)
@@ -82,6 +107,7 @@ in `ApiErrors`, before it reaches the API; until then it answers 500.
 | Method and path | Port method | Who | Request | Response |
 |---|---|---|---|---|
 | `POST /auth/login` | `authenticateUser` | public | `{"provider"?, "username", "password"}`; `provider` is `"local"` when left out | 200 `SessionToken` and the cookie |
+| `GET /auth/session` | `validateToken` | user | | 200 `{"userId", "role", "expiresAt"}`: who is logged in, without the token, so the web UI can tell after a reload |
 | `POST /auth/logout` | `logout` | user | | 204, and the cookie is cleared |
 | `POST /links/{token}/access` | `accessWithLink` | public | | 200 `SessionToken` of the link's guest, and the cookie |
 | `POST /collections/{id}/links` | `shareCollection` | user | `{"level": "READ", "lifetime": 604800}` | 201 `SharedLinkSnapshot` |
@@ -102,8 +128,9 @@ item itself, not through a collection that contains it.
 
 A manager who is not an administrator may only give or take `READ` and `WRITE`,
 not change its own permissions, and not touch another manager of the same
-resource; otherwise 403 `AccessDenied`. The web UI opens a
-shared link as `/s/{token}`, a page that calls `POST /links/{token}/access`.
+resource; otherwise 403 `AccessDenied`. The web UI opens a shared link as
+`/s/{token}?collection={id}`, a page that calls `POST /links/{token}/access` and
+then shows that collection.
 
 ### Catalog (`ICatalogManagement`)
 
@@ -204,3 +231,45 @@ it. Removals reach everyone, with only the identifier. In the browser,
 connection drops it reconnects by itself and gets a new `ready`, which is the
 moment for the client to reload what it shows. Changes reach the stream when
 the outbox is published (`SyncTask`), within a couple of seconds.
+
+### Editing text together (`ITextEditing`, ADR 0027)
+
+| Method and path | Port method | Who | Request | Response |
+|---|---|---|---|---|
+| `GET /files/{id}/edit` (WebSocket) | `open`, `save` | read to watch, write to edit | session cookie or `Authorization` header; a browser's `Origin` must be this server | 101, a WebSocket; 401 without a session; 403 from another site |
+
+Everyone editing the same file is in one room. The server relays the edits
+without decoding them; the browsers merge them with Yjs. Only text files can be
+edited: plain text, Markdown, subtitles, configuration and source code, of at
+most 1 MiB, in UTF-8.
+
+If the file cannot be opened, the connection closes with 4000 plus the status
+the API would answer, and the message as the reason: 4400 (not an identifier),
+4403, 4404 or 4422 (not a text file).
+
+Edits are **binary frames**; the first byte says what follows:
+
+| Byte | From | Content |
+|---|---|---|
+| `0` | browser, relayed to the others | a Yjs update. Kept, so whoever joins later receives it. Dropped if the sender may only read. |
+| `1` | browser, relayed to the others | Yjs awareness: who is there and their cursor. Not kept. |
+| `2` | browser | the whole document as one update, in answer to `compact`. It replaces the updates kept so far. |
+| `3` | browser | the text to save, in UTF-8. |
+
+The server talks in **JSON text messages**, each with a `type`:
+
+| `type` | When | Other fields |
+|---|---|---|
+| `welcome` | on joining | `file`, `name`, `text`, `fingerprint`, `editable`, `seed`, `others` (how many were already there); then the kept updates follow as frames |
+| `seed` | the one who had to load the text left before doing it | none: load `text` from `welcome` now |
+| `saved` | someone saved, to everyone | `fingerprint`, `by` (user identifier) |
+| `compact` | many updates are kept | none: answer with frame `2` |
+| `error` | something the sender did failed | `error`, `message`, as in error responses |
+
+The first editor to join gets `seed: true` and loads `text` into the empty
+document; the others receive its update. Readers never seed: until an editor
+does, they show `text`. A save is based on the last fingerprint the room knows,
+so editors do not send one; saving the text already stored changes nothing,
+and a save after the file was changed outside the editor is an `error` with
+`VersionConflict`. A save before anything was loaded is refused (`NotReady`),
+so an empty document never overwrites the file.

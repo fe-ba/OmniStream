@@ -92,6 +92,7 @@ package "Base de autorizacion" {
     __
     # cargarUsuario(u : UsuarioId) : Usuario
     # verificarAcceso(u : UsuarioId, r : ElementoId, acc : TipoAcceso) : void
+    # verificarAcceso(u : UsuarioId, r : ElementoId, acc : TipoAcceso, catalogo : InstantaneaCatalogo) : void
     # exigirAdministrador(admin : UsuarioId) : void
   }
 
@@ -115,6 +116,7 @@ package "Acceso y seguridad" {
     - repositorioEnlaces : IRepositorioEnlaces
     - repositorioCatalogo : IRepositorioCatalogo
     - unidadDeTrabajo : IUnidadDeTrabajo
+    - vigenciaToken : Duration
     __
     + autenticarUsuario(c : Credenciales) : TokenSesion
     + validarToken(valor : String) : Optional<TokenSesion>
@@ -167,6 +169,7 @@ package "Catalogo e ingesta" {
     - respaldoDatos : IRespaldoDatos
     - repositorioConfiguracion : IRepositorioConfiguracion
     - politicaDeduplicacion : PoliticaDeduplicacion
+    - unidadDeTrabajo : IUnidadDeTrabajo
     __
     + ingestarArchivo(u : UsuarioId, ruta : Path) : ResultadoIngesta
     + subirArchivo(u : UsuarioId, nombreArchivo : String, datos : InputStream) : ResultadoIngesta
@@ -284,6 +287,7 @@ package "Busqueda y organizacion" {
 
   class ServicioBusqueda <<domain service>> {
     - repositorioCatalogo : IRepositorioCatalogo
+    - unidadDeTrabajo : IUnidadDeTrabajo
     __
     + buscarContenido(u : UsuarioId, txt : String) : List<InstantaneaElemento>
     + filtrarPorCriterios(u : UsuarioId, c : CriterioBusqueda) : List<InstantaneaArchivo>
@@ -405,6 +409,11 @@ package "Historial de auditoria" {
     - delegado : ISincronizacion
   }
 
+  class EdicionTextoAuditada <<decorator>> {
+    - delegado : IEdicionTexto
+    - repositorioCatalogo : IRepositorioCatalogo
+  }
+
   note bottom of DecoradorAuditoria
     **Patron Decorator (auditoria):** cada decorador
     implementa el mismo puerto de entrada que el servicio
@@ -420,6 +429,34 @@ package "Historial de auditoria" {
     Lee el historial. Los administradores lo leen
     completo; los demas, solo la historia de un archivo
     o coleccion que pueden ver.
+  end note
+}
+
+' ============================================================
+' EDICION DE TEXTO EN CONJUNTO (ADR 0027)
+' ============================================================
+package "Edicion de texto" {
+
+  class ServicioEdicionTexto <<domain service>> {
+    - repositorioCatalogo : IRepositorioCatalogo
+    - almacenamiento : IAlmacenamientoArchivos
+    - unidadDeTrabajo : IUnidadDeTrabajo
+    - politicaArchivoTexto : PoliticaArchivoTexto
+    __
+    + abrir(u : UsuarioId, archivo : ElementoId) : DocumentoTexto
+    + guardar(u : UsuarioId, archivo : ElementoId, texto : String, basadoEn : HuellaDigital) : DocumentoTexto
+    - usuarioActivo(u : UsuarioId) : Usuario
+    - archivoTexto(catalogo : InstantaneaCatalogo, archivo : ElementoId) : InstantaneaArchivo
+  }
+
+  note bottom of ServicioEdicionTexto
+    **Edicion en conjunto (ADR 0027):** la mezcla de
+    cambios ocurre en los navegadores; el servidor solo
+    lee y guarda el texto. Guardar escribe el archivo y
+    registra su nueva huella en el catalogo (FileModified);
+    si el catalogo no se guarda, reescribe lo anterior.
+    El mismo texto otra vez no cambia nada; otro texto
+    basado en una huella vieja es ConflictoDeVersion.
   end note
 }
 
@@ -475,6 +512,7 @@ package "Reproduccion" {
 package "Modelo (ver diagrama de dominio)" {
   class PoliticaAcceso <<policy>>
   class PoliticaDeduplicacion <<policy>>
+  class PoliticaArchivoTexto <<policy>>
   class Usuario <<aggregate root>>
   class CatalogoIndice <<aggregate root>>
   class Clasificacion <<value object>>
@@ -502,6 +540,14 @@ package "DTOs y comandos de los puertos" {
   class CredencialesOIDC <<dto>> #FCF4E0;line.dashed;line:999999 {
     + tokenExterno : String
     + emisor : URI
+  }
+
+  class DocumentoTexto <<dto>> {
+    + archivo : ElementoId
+    + nombre : String
+    + texto : String
+    + huella : HuellaDigital
+    + editable : boolean
   }
 
   class ConsultaAuditoria <<dto>> {
@@ -619,6 +665,7 @@ ServicioAutorizado <|-- ServicioReproduccion
 ServicioAutorizado <|-- ServicioClasificacion
 ServicioAutorizado <|-- ServicioAuditoria
 ServicioAutorizado <|-- ServicioFlujoCatalogo
+ServicioAutorizado <|-- ServicioEdicionTexto
 ServicioAutorizado --> "1" PoliticaAcceso : politicaAcceso
 ServicioAutorizado ..> Usuario : <<carga>>
 
@@ -645,6 +692,9 @@ PasoIndexacion ..> CatalogoIndice : <<ingestar>>
 ServicioCatalogo --> "1" PoliticaDeduplicacion : politicaDeduplicacion
 ServicioCatalogo ..> CatalogoIndice : <<modifica>>
 ServicioBusqueda ..> CatalogoIndice : <<consulta / modifica>>
+ServicioEdicionTexto --> "1" PoliticaArchivoTexto : politicaArchivoTexto
+ServicioEdicionTexto ..> CatalogoIndice : <<reemplaza contenido>>
+ServicioEdicionTexto ..> DocumentoTexto : <<entrega>>
 
 ' ============================================================
 ' RELACIONES - CLASIFICACION AUTOMATICA (Strategy)
@@ -684,6 +734,7 @@ DecoradorAuditoria <|-- ControlAccesoAuditado
 DecoradorAuditoria <|-- GestionCatalogoAuditada
 DecoradorAuditoria <|-- BusquedaAuditada
 DecoradorAuditoria <|-- SincronizacionAuditada
+DecoradorAuditoria <|-- EdicionTextoAuditada
 DecoradorAuditoria ..> EntradaAuditoria : <<registra>>
 ServicioAuditoria ..> ConsultaAuditoria : <<responde>>
 
@@ -705,6 +756,7 @@ note as NotaPuertos
   ServicioSincronizacion  -> ISincronizacion
   ServicioDespachoEventos -> IDespachoEventos
   ServicioFlujoCatalogo   -> IFlujoCatalogo
+  ServicioEdicionTexto    -> IEdicionTexto
   ServicioClasificacion   -> IGestionReglas (2.0)
   ServicioAuditoria       -> IHistorialAuditoria
   Cada decorador *Auditado/a implementa el puerto

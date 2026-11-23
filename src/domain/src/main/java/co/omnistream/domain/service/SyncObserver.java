@@ -14,9 +14,13 @@ public final class SyncObserver implements ICatalogObserver {
     this.changeLog = Objects.requireNonNull(changeLog, "changeLog");
   }
 
+  /**
+   * Copies a catalog event to the change log, which clients read to synchronize. Other domain
+   * events are not catalog changes and are ignored.
+   */
   @Override
   public void onCatalogChanged(DomainEvent e) {
-    Objects.requireNonNull(e, "event");
+    Objects.requireNonNull(e, "e");
     if (e instanceof CatalogEvent event) {
       changeLog.register(event);
     }

@@ -67,6 +67,7 @@ package "Gestion de contenido" {
   usecase "Detectar duplicados"                   as UC5 <<opcional>>
   usecase "Editar metadatos\nmanualmente"         as UC6
   usecase "Eliminar archivo\ndel catalogo"        as UC7
+  usecase "Editar texto\nen conjunto"             as UC30
   usecase "Clasificar\nautomaticamente"         as UC25 <<incluido>>
 }
 
@@ -141,6 +142,7 @@ Usuario --> UC18
 Usuario --> UC20
 Usuario --> UC28
 Usuario --> UC29
+Usuario --> UC30
 
 Invitado --> UC10
 Invitado --> UC12
@@ -185,6 +187,7 @@ UC16 ..> UC19 : <<include>>
 UC20 ..> UC19 : <<include>>
 UC28 ..> UC19 : <<include>>
 UC29 ..> UC19 : <<include>>
+UC30 ..> UC19 : <<include>>
 
 ' ============================================================
 ' EXTEND  (condicional, con su condicion de guarda)

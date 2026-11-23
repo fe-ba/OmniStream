@@ -93,7 +93,7 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
      - imprimirAyuda() : void
    }
    class AdaptadorWebUI <<primary adapter>> {
-     - directorioEstatico : Path
+     - carpetaRecursos : String
      + registrarRutas(cfg : JavalinConfig) : void
    }
    class AdaptadorApiRest <<primary adapter>> {
@@ -111,6 +111,26 @@ package "Adaptadores primarios (presentacion)" #EAF3F8 {
    class JsonApi <<adapter helper>> {
      + {static} mapeador() : JsonMapper
      + {static} paraJavalin() : JavalinJackson3
+   }
+   class RelayEdicionTexto <<primary adapter>> {
+     - controlAcceso : IControlAcceso
+     - salas : SalasEdicion
+     + registrarRutas(cfg : JavalinConfig) : void
+     - saludo(ctx : Context) : void
+     - conectar(ctx : WsConnectContext) : void
+     - desconectar(ctx : WsContext) : void
+   }
+   class SalasEdicion <<adapter helper>> {
+     - edicionTexto : IEdicionTexto
+     + unirse(archivo : ElementoId, p : Participante) : void
+     + recibir(p : Participante, trama : byte[]) : void
+     + salir(p : Participante) : void
+   }
+   interface Participante <<callback>> {
+     + titular() : UsuarioId
+     + enviar(mensaje : Map<String,Object>) : void
+     + enviar(trama : byte[]) : void
+     + cerrar(codigo : int, motivo : String) : void
    }
    class ErroresApi <<adapter helper>> {
      + {static} registrar(cfg : JavalinConfig) : void
@@ -224,6 +244,10 @@ package "Puertos de entrada (dominio)" #E8F5E9 {
    interface SuscripcionFlujo <<callback>> {
      + cerrar() : void
    }
+   interface IEdicionTexto <<driving port>> {
+     + abrir(u : UsuarioId, archivo : ElementoId) : DocumentoTexto
+     + guardar(u : UsuarioId, archivo : ElementoId, texto : String, basadoEn : HuellaDigital) : DocumentoTexto
+   }
    IFlujoCatalogo ..> OyenteCambiosCatalogo : avisa
    IFlujoCatalogo ..> SuscripcionFlujo : devuelve
    interface IGestionReglas <<driving port>> #E8F5E9;line.dashed;line:999999 {
@@ -252,11 +276,13 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
    class ObservadorSincronizacion <<observer>>
    class ServicioAuditoria <<domain service>>
    class ServicioFlujoCatalogo <<domain service>>
+   class ServicioEdicionTexto <<domain service>>
    abstract class DecoradorAuditoria <<decorator>>
    class ControlAccesoAuditado <<decorator>>
    class GestionCatalogoAuditada <<decorator>>
    class BusquedaAuditada <<decorator>>
    class SincronizacionAuditada <<decorator>>
+   class EdicionTextoAuditada <<decorator>>
    IObservadorCatalogo <|.. ObservadorSincronizacion
  }
 
@@ -269,6 +295,7 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  IGestionReglas <|.. ServicioClasificacion
  IHistorialAuditoria <|.. ServicioAuditoria
  IFlujoCatalogo <|.. ServicioFlujoCatalogo
+ IEdicionTexto <|.. ServicioEdicionTexto
  IControlAcceso <|.. ControlAccesoAuditado
  IGestionCatalogo <|.. GestionCatalogoAuditada
  IBusqueda <|.. BusquedaAuditada
@@ -277,6 +304,8 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  GestionCatalogoAuditada --> IGestionCatalogo : delegado (ServicioCatalogo)
  BusquedaAuditada --> IBusqueda : delegado (ServicioBusqueda)
  SincronizacionAuditada --> ISincronizacion : delegado (ServicioSincronizacion)
+ IEdicionTexto <|.. EdicionTextoAuditada
+ EdicionTextoAuditada --> IEdicionTexto : delegado (ServicioEdicionTexto)
 
  AdaptadorCLI --> IGestionCatalogo : invoca
  AdaptadorApiRest ..> JsonApi : configura el JSON
@@ -289,6 +318,18 @@ package "Servicios de dominio (ver diagrama de servicios)" #FFF8E1 {
  AdaptadorApiRest --> IHistorialAuditoria : invoca
  AdaptadorApiRest --> IFlujoCatalogo : sigue (eventos enviados por el servidor)
  AdaptadorApiRest ..> IGestionReglas : invoca (2.0)
+ RelayEdicionTexto --> IControlAcceso : valida la sesion
+ RelayEdicionTexto *-- SalasEdicion : salas
+ SalasEdicion --> IEdicionTexto : abre y guarda
+ SalasEdicion ..> Participante : reenvia a cada uno
+ note bottom of RelayEdicionTexto
+   WebSocket en /api/v1/files/{id}/edit (ADR 0027).
+   Rechaza el saludo sin sesion (401) o desde otro
+   sitio (403). Cada sala reenvia las ediciones Yjs
+   sin decodificarlas, las guarda en memoria para
+   quien llegue despues y guarda el texto con
+   IEdicionTexto, basado en la ultima huella que conoce.
+ end note
  AdaptadorProgramador ..> TareaProgramada : dispara
  TareaReindexar --> IGestionCatalogo : invoca
  TareaRespaldar --> IGestionCatalogo : invoca
@@ -423,6 +464,10 @@ ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredad
  ServicioAuditoria ..> IRegistroAuditoria : lee el historial
  ServicioFlujoCatalogo ..> ISuscriptorEventos : suscribe a cada seguidor
  ServicioFlujoCatalogo ..> IRepositorioCatalogo : revisa que puede ver cada seguidor
+ ServicioEdicionTexto ..> IAlmacenamientoArchivos : lee y escribe el texto
+ ServicioEdicionTexto ..> IRepositorioCatalogo : registra la nueva huella
+ ServicioEdicionTexto ..> IUnidadDeTrabajo : archivo y catalogo juntos
+ EdicionTextoAuditada ..> IRepositorioCatalogo : compara huellas
  DecoradorAuditoria ..> IRegistroAuditoria : anexa entradas
  DecoradorAuditoria ..> IUnidadDeTrabajo : cambio y entrada juntos
  ControlAccesoAuditado ..> IRepositorioUsuarios : nombra inicios fallidos
@@ -710,14 +755,19 @@ package "Composicion (arranque)" #FFFDE7 {
      - fabrica : FabricaInfraestructura
      + arrancar() : void
      + detener() : void
+     + ejecutarComando(args : List<String>) : int
+     + puerto() : int
      - seleccionarFabrica(cfg : ConfiguracionApp) : FabricaInfraestructura
      - decorarPuertos() : void
-     - auditarPuertosEntrada() : void
      - construirCadenaIngesta() : PasoIngesta
-     - crearServicios() : void
      - crearServidorHttp() : Javalin
-     - crearAdaptadoresPrimarios() : void
+     - crearPlanificador(sistema : UsuarioId) : AdaptadorProgramador
      - registrarObservadores() : void
+     - asegurarCuentaSistema() : UsuarioId
+     - asegurarPrimerAdministrador() : void
+   }
+   class Principal <<entry point>> {
+     + {static} main(args : String[]) : void
    }
    FabricaInfraestructura <|-- FabricaLocal
    FabricaInfraestructura <|-- FabricaServidor
@@ -726,6 +776,18 @@ package "Composicion (arranque)" #FFFDE7 {
    ComposicionRaiz --> FabricaInfraestructura : selecciona segun perfil
    ComposicionRaiz ..> ISuscriptorEventos : registra observadores
    ComposicionRaiz ..> ObservadorSincronizacion : crea y suscribe
+   Principal ..> CargadorConfiguracion : lee la configuracion
+   Principal ..> ComposicionRaiz : sirve o ejecuta un comando
+   note top of ComposicionRaiz
+     El constructor crea los servicios, los envuelve con
+     los decoradores de auditoria y los entrega a los
+     adaptadores primarios. Antes de servir asegura la
+     cuenta del sistema (la de la CLI y las tareas) y,
+     si nadie puede administrar, crea "admin" con una
+     clave aleatoria que muestra una sola vez en
+     consola (ADR 0029). decorarPuertos (cache) llega
+     con los adaptadores de infraestructura.
+   end note
 
    FabricaLocal ..> AdaptadorPersistenciaSQLite : crea
    FabricaLocal ..> AdaptadorArchivosLocal : crea
@@ -778,10 +840,12 @@ package "Composicion (arranque)" #FFFDE7 {
 
  note bottom of IUnidadDeTrabajo
    Se usa cuando una operacion toca dos agregados:
-   crear usuario (Usuario + credencial local) y compartir
-   coleccion (Usuario invitado + EnlaceCompartido); y en los
-   decoradores de auditoria, para guardar el cambio y su
-   EntradaAuditoria juntos. Una llamada anidada se une a la que corre.
+   crear usuario (Usuario + credencial local), compartir
+   coleccion (Usuario invitado + EnlaceCompartido),
+   ingestar un archivo o crear una coleccion (CatalogoIndice
+   + Usuario); y en los decoradores de auditoria, para
+   guardar el cambio y su EntradaAuditoria juntos. Una
+   llamada anidada se une a la que corre.
  end note
 
  note bottom of IBusEventos
