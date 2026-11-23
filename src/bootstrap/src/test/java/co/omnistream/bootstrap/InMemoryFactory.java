@@ -1,5 +1,6 @@
 package co.omnistream.bootstrap;
 
+import co.omnistream.bootstrap.config.AppConfiguration;
 import co.omnistream.bootstrap.factory.InfrastructureFactory;
 import co.omnistream.domain.event.DomainEvent;
 import co.omnistream.domain.event.ICatalogObserver;
@@ -26,6 +27,9 @@ import co.omnistream.domain.port.out.ITranscoder;
 import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
 import java.lang.reflect.Proxy;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +44,26 @@ import java.util.function.Supplier;
  * building the application must not call them.
  */
 final class InMemoryFactory extends InfrastructureFactory {
+
+  InMemoryFactory() {
+    super(demoConfiguration(), Clock.systemUTC());
+  }
+
+  /** The base factory keeps a configuration; these adapters never read it. */
+  private static AppConfiguration demoConfiguration() {
+    return new AppConfiguration(
+        AppConfiguration.LOCAL,
+        0,
+        Path.of("library"),
+        Path.of("omnistream.db"),
+        Optional.empty(),
+        Optional.empty(),
+        Path.of("ffmpeg"),
+        Path.of("exiftool"),
+        false,
+        5,
+        Duration.ofHours(8));
+  }
 
   final Users users = new Users();
   final Credentials credentials = new Credentials();
@@ -138,7 +162,7 @@ final class InMemoryFactory extends InfrastructureFactory {
   }
 
   @Override
-  public IFileStorage createStorage() {
+  public IFileStorage createFileStorage() {
     return unused(IFileStorage.class);
   }
 

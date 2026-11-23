@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import co.omnistream.bootstrap.config.AppConfiguration;
+import co.omnistream.bootstrap.factory.InfrastructureFactory;
+import co.omnistream.bootstrap.factory.LocalInfrastructureFactory;
 import co.omnistream.domain.model.access.LinkedIdentity;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.User;
@@ -236,10 +238,27 @@ class CompositionRootTest {
   }
 
   @Test
-  void theProfileFactoriesDoNotExistYet() {
-    assertThatThrownBy(() -> new CompositionRoot(config(0)))
+  void selectsTheFactoryOfTheProfile() {
+    InfrastructureFactory local = CompositionRoot.selectFactory(config(0), CLOCK);
+    assertThat(local).isInstanceOf(LocalInfrastructureFactory.class);
+    local.close();
+
+    AppConfiguration server =
+        new AppConfiguration(
+            AppConfiguration.SERVER,
+            0,
+            home.resolve("library"),
+            home.resolve("omnistream.db"),
+            Optional.empty(),
+            Optional.empty(),
+            Path.of("ffmpeg"),
+            Path.of("exiftool"),
+            true,
+            5,
+            Duration.ofHours(8));
+    assertThatThrownBy(() -> CompositionRoot.selectFactory(server, CLOCK))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("'local' profile");
+        .hasMessageContaining("database.url");
   }
 
   @Test

@@ -2,6 +2,8 @@ package co.omnistream.bootstrap;
 
 import co.omnistream.bootstrap.config.AppConfiguration;
 import co.omnistream.bootstrap.factory.InfrastructureFactory;
+import co.omnistream.bootstrap.factory.LocalInfrastructureFactory;
+import co.omnistream.bootstrap.factory.ServerInfrastructureFactory;
 import co.omnistream.domain.model.access.LinkedIdentity;
 import co.omnistream.domain.model.access.Role;
 import co.omnistream.domain.model.access.User;
@@ -111,6 +113,7 @@ public final class CompositionRoot implements AutoCloseable {
   private static final SecureRandom RANDOM = new SecureRandom();
 
   private final AppConfiguration config;
+  private final InfrastructureFactory factory;
   private final Clock clock;
   private final PrintStream console;
 
@@ -138,7 +141,14 @@ public final class CompositionRoot implements AutoCloseable {
 
   /** The application of {@code config}, built on the adapters of its profile. */
   public CompositionRoot(AppConfiguration config) {
-    this(config, selectFactory(config), Clock.systemUTC(), System.out);
+    this(config, Clock.systemUTC());
+  }
+
+  /**
+   * A composition root with the given clock and the factory of the configured profile; for tests.
+   */
+  CompositionRoot(AppConfiguration config, Clock clock) {
+    this(config, selectFactory(config, clock), clock, System.out);
   }
 
   /**
@@ -150,7 +160,7 @@ public final class CompositionRoot implements AutoCloseable {
   public CompositionRoot(
       AppConfiguration config, InfrastructureFactory factory, Clock clock, PrintStream console) {
     this.config = Objects.requireNonNull(config, "config");
-    Objects.requireNonNull(factory, "factory");
+    this.factory = Objects.requireNonNull(factory, "factory");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.console = Objects.requireNonNull(console, "console");
 
@@ -160,7 +170,7 @@ public final class CompositionRoot implements AutoCloseable {
     unitOfWork = factory.createUnitOfWork();
     eventBus = factory.createEventBus();
     ICatalogRepository catalogRepository = factory.createCatalogRepository();
-    IFileStorage storage = factory.createStorage();
+    IFileStorage storage = factory.createFileStorage();
     IAuditLog auditLog = factory.createAuditLog();
     var changeLog = factory.createChangeLog();
     var sessionRepository = factory.createSessionRepository();
@@ -233,18 +243,16 @@ public final class CompositionRoot implements AutoCloseable {
   }
 
   /**
-   * The factory of the profile (ADR 0010): {@code LocalFactory} for {@value AppConfiguration#LOCAL}
-   * and {@code ServerFactory} for {@value AppConfiguration#SERVER}. They create the infrastructure
-   * adapters, which do not exist yet; until they do, the application can only be built with a
-   * factory given to it (#19).
-   *
-   * @throws IllegalStateException always, for now
+   * The factory of the profile (ADR 0010): {@link LocalInfrastructureFactory} for {@value
+   * AppConfiguration#LOCAL} and {@link ServerInfrastructureFactory} for {@value
+   * AppConfiguration#SERVER}. Tests inject a factory instead.
    */
-  static InfrastructureFactory selectFactory(AppConfiguration config) {
-    throw new IllegalStateException(
-        "The infrastructure of the '"
-            + config.profile()
-            + "' profile is not available yet: its adapters are still being written (#19)");
+  static InfrastructureFactory selectFactory(AppConfiguration config, Clock clock) {
+    return switch (config.profile()) {
+      case AppConfiguration.LOCAL -> new LocalInfrastructureFactory(config, clock);
+      case AppConfiguration.SERVER -> new ServerInfrastructureFactory(config, clock);
+      default -> throw new IllegalArgumentException("Unknown profile: " + config.profile());
+    };
   }
 
   /**
@@ -307,6 +315,7 @@ public final class CompositionRoot implements AutoCloseable {
   @Override
   public void close() {
     stop();
+    factory.close();
   }
 
   /** The change log follows the catalog events while the server runs (Observer). */

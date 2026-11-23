@@ -1,5 +1,6 @@
 package co.omnistream.bootstrap.factory;
 
+import co.omnistream.bootstrap.config.AppConfiguration;
 import co.omnistream.domain.port.out.IAuditLog;
 import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.IChangeLog;
@@ -17,18 +18,29 @@ import co.omnistream.domain.port.out.ITokenRepository;
 import co.omnistream.domain.port.out.ITranscoder;
 import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
+import java.time.Clock;
 import java.util.List;
+import java.util.Objects;
 
 /**
- * Creates the adapters behind the driven ports, as one family (Abstract Factory, ADR 0010): the
- * local profile uses SQLite and the local disk, the server profile PostgreSQL. The composition root
- * asks for each port once, at start-up, and never knows which adapter it got.
+ * Abstract factory of the secondary adapters (Abstract Factory, ADR 0013).
  *
- * <p>The persistence ports come from the same adapter, so {@link #createUnitOfWork()} spans all of
- * them: a change and its audit entry are saved together (ADR 0025).
+ * <p>The composition root asks it for every port and never names a concrete adapter, so the local
+ * and the server profiles are chosen once, at startup, from the configuration. A factory hands out
+ * the same instance of each adapter every time: the persistence adapter, for example, implements
+ * ten ports at once and must be shared.
  */
-public abstract class InfrastructureFactory {
+public abstract class InfrastructureFactory implements AutoCloseable {
 
+  protected final AppConfiguration configuration;
+  protected final Clock clock;
+
+  protected InfrastructureFactory(AppConfiguration configuration, Clock clock) {
+    this.configuration = Objects.requireNonNull(configuration, "configuration");
+    this.clock = Objects.requireNonNull(clock, "clock");
+  }
+
+  /** The JDBC adapter that implements every persistence port. */
   public abstract ICatalogRepository createCatalogRepository();
 
   public abstract ISessionRepository createSessionRepository();
@@ -51,9 +63,9 @@ public abstract class InfrastructureFactory {
 
   public abstract ITokenRepository createTokenRepository();
 
-  public abstract IFileStorage createStorage();
+  public abstract IFileStorage createFileStorage();
 
-  /** The providers that recognize users, the local one first. */
+  /** The identity providers to try, in order (Strategy). */
   public abstract List<IIdentityProvider> createIdentityProviders();
 
   public abstract ICredentialRegistry createCredentialRegistry();
@@ -63,4 +75,8 @@ public abstract class InfrastructureFactory {
   public abstract ITranscoder createTranscoder();
 
   public abstract IEventBus createEventBus();
+
+  /** Nothing is kept open between calls, so closing a factory only releases what it owns. */
+  @Override
+  public void close() {}
 }

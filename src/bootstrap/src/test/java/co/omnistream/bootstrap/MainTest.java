@@ -86,7 +86,7 @@ class MainTest {
   }
 
   @Test
-  void aMissingInfrastructureFailsWithItsReason() {
+  void theLocalProfileRunsACommandOnItsRealInfrastructure() {
     int code =
         Main.run(
             List.of("help"),
@@ -94,7 +94,7 @@ class MainTest {
             CompositionRoot::new,
             new PrintStream(errors, true, StandardCharsets.UTF_8));
 
-    assertThat(code).isEqualTo(CliAdapter.FAILED);
-    assertThat(errors()).contains("not available yet");
+    assertThat(code).isEqualTo(CliAdapter.OK);
+    assertThat(errors()).isEmpty();
   }
 }

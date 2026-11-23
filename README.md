@@ -72,8 +72,9 @@ Requires JDK 25; Maven comes with the wrapper. From `src/`:
 the web UI and the REST API (port 8080 by default); with arguments it runs one
 command, such as `help`, `ingest <file>...` or `status`. On the first start it
 creates the administrator `admin` and prints its password on the console, once
-(ADR 0029). It needs the infrastructure adapters, which are still being
-written; until then, the web UI runs on an in-memory demo:
+(ADR 0029). The `local` profile keeps the catalog in SQLite next to the library
+and the files on disk; the `server` profile uses PostgreSQL (ADR 0009, ADR
+0015). The web UI can also run without any adapter on an in-memory demo:
 
 ```bash
 ./mvnw -pl presentation -am test -Ddemo=true -Dtest=DemoServer -Dsurefire.failIfNoSpecifiedTests=false
