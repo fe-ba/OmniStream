@@ -589,6 +589,7 @@ async function fileActions(file) {
       el(
         "div",
         { class: "actions-list" },
+        el("button", { type: "button", onclick: choose(download) }, "Download"),
         el("button", { type: "button", onclick: choose(addToCollection) }, "Add to a collection"),
         el("button", { type: "button", onclick: choose(addTag) }, "Add a tag"),
         el("button", { type: "button", onclick: choose(itemHistory) }, "History"),
@@ -599,6 +600,18 @@ async function fileActions(file) {
     cancel: null,
   });
   if (chosen) await chosen(file);
+}
+
+/**
+ * Saves the file on this device. The browser fetches it with the session cookie, so the server
+ * checks the download permission and records the download in the history.
+ */
+function download(file) {
+  const link = el("a", { href: `${API}/files/${file.id}/offline`, download: file.name, hidden: true });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  say(`Downloading ${file.name}`);
 }
 
 async function addToCollection(file) {
@@ -1253,7 +1266,7 @@ function sentence(entry) {
     case "COLLECTION_MODIFIED":
       return [who, " changed ", itemLink(entry.resource, detail.split(", ")[0]), detail.includes(", ") ? `: ${detail.split(", ").slice(1).join(", ")}` : ""];
     case "FILE_DOWNLOADED":
-      return [who, " downloaded ", itemLink(entry.resource), " to keep offline"];
+      return [who, " downloaded ", itemLink(entry.resource)];
     case "LIBRARY_REINDEXED":
       return [who, " indexed the library again (", detail, ")"];
     case "LIBRARY_PATH_CHANGED":
