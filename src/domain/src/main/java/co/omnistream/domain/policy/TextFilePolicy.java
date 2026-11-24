@@ -72,7 +72,10 @@ public final class TextFilePolicy {
           "sql",
           "sh",
           "bash",
-          "tex");
+          "tex",
+          // changes to code
+          "patch",
+          "diff");
 
   public TextFilePolicy() {}
 

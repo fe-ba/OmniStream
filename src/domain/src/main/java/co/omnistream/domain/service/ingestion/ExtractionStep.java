@@ -6,6 +6,7 @@ import co.omnistream.domain.model.catalog.Fingerprint;
 import co.omnistream.domain.model.catalog.MediaFile;
 import co.omnistream.domain.model.catalog.MediaType;
 import co.omnistream.domain.model.catalog.MetadataEntry;
+import co.omnistream.domain.policy.TextFilePolicy;
 import co.omnistream.domain.port.out.IFileStorage;
 import co.omnistream.domain.port.out.IMetadataExtractor;
 import java.io.IOException;
@@ -115,6 +116,10 @@ public final class ExtractionStep extends IngestionStep {
     }
     String extension = fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     MediaType type = EXTENSIONS.get(extension);
+    if (type == null && TextFilePolicy.EXTENSIONS.contains(extension)) {
+      // Every file the text editor opens can be uploaded: source code, patches, notes (ADR 0027).
+      type = MediaType.DOCUMENT;
+    }
     if (type == null) {
       throw new FileRejected("Unsupported file extension: ." + extension);
     }

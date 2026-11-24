@@ -217,6 +217,19 @@ class CatalogServiceTest {
   }
 
   @Test
+  void everyFileTheTextEditorOpensCanBeUploaded() {
+    for (String name : List.of("tone.py", "fix.patch", "changes.diff", "Main.java")) {
+      IngestionResult result =
+          service.uploadFile(
+              anaId, name, new ByteArrayInputStream(name.getBytes(StandardCharsets.UTF_8)));
+
+      assertThat(result.wasIndexed()).isTrue();
+      assertThat(catalogRepository.findFile(result.fileId()).orElseThrow().type())
+          .isEqualTo(MediaType.DOCUMENT);
+    }
+  }
+
+  @Test
   void reindexLibraryIndexesSupportedFilesSkipsUnsupportedAndRequiresAdmin() {
     Path root = Path.of("/library");
     put(root.resolve("a.mp4"), "video-1".getBytes(StandardCharsets.UTF_8));
