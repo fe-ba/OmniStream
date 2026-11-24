@@ -66,6 +66,28 @@ class CachedCatalogRepositoryTest {
     assertThat(delegate.reads()).isEqualTo(2);
   }
 
+  @Test
+  void eachReaderGetsACatalogOfItsOwn() {
+    CachedCatalogRepository repository =
+        new CachedCatalogRepository(
+            new CountingRepository(), Duration.ofSeconds(30), Clock.fixed(NOW, ZoneOffset.UTC));
+
+    assertThat(repository.getCatalog()).isNotSameAs(repository.getCatalog());
+  }
+
+  @Test
+  void aChangeThatIsNotSavedDoesNotReachTheNextReader() {
+    CountingRepository delegate = new CountingRepository();
+    CachedCatalogRepository repository =
+        new CachedCatalogRepository(
+            delegate, Duration.ofSeconds(30), Clock.fixed(NOW, ZoneOffset.UTC));
+
+    repository.getCatalog().createCollection("Never saved", NOW);
+
+    assertThat(repository.getCatalog().toSnapshot().collections()).isEmpty();
+    assertThat(delegate.reads()).isEqualTo(1);
+  }
+
   private static CatalogIndex catalog() {
     return CatalogIndex.fromSnapshot(
         new CatalogSnapshot(

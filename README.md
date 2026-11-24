@@ -20,7 +20,7 @@ architecture, to the implementation.
 |--------------------------|-------------|----------------------------------|
 | Enterprise architecture  | Done        | `docs/architecture/empresarial/` |
 | Software architecture    | Done        | `docs/architecture/software/`    |
-| Implementation (Java)    | In progress | `src/`                           |
+| Implementation (Java)    | Done        | `src/`                           |
 
 ## Repository structure
 
@@ -68,22 +68,60 @@ Requires JDK 25; Maven comes with the wrapper. From `src/`:
 ./mvnw spotless:apply    # format the code
 ```
 
-`co.omnistream.bootstrap.Main` starts OmniStream: with no arguments it serves
-the web UI and the REST API (port 8080 by default); with arguments it runs one
-command, such as `help`, `ingest <file>...` or `status`. On the first start it
-creates the administrator `admin` and prints its password on the console, once
-(ADR 0029). The `local` profile keeps the catalog in SQLite next to the library
-and the files on disk; the `server` profile uses PostgreSQL (ADR 0009, ADR
-0015). The web UI can also run without any adapter on an in-memory demo:
+The design behind the code is in the
+[software diagrams](docs/architecture/software/) and the
+[ADRs](docs/decisions/); the rules for writing it are in the
+[coding conventions](docs/reference/coding-conventions.md); the design patterns
+and where each one is are in [docs/patrones.md](docs/patrones.md).
+
+## Running OmniStream
+
+Build the application into one file, from `src/`:
+
+```bash
+./mvnw -DskipTests package
+java -jar bootstrap/target/omnistream.jar
+```
+
+It serves the web UI and the REST API on <http://localhost:8080>. On the first
+start it creates the administrator `admin` and prints its password on the
+console, only that once (ADR 0029): write it down, log in, and create the other
+accounts on the People screen. Ctrl+C stops it.
+
+Everything lives in the home folder, `~/.omnistream` (or `OMNISTREAM_HOME`):
+the library in `library/`, the SQLite database `omnistream.db`, the backups,
+the transcoding cache and the logs. To change a setting, write it in
+`~/.omnistream/omnistream.properties`, pass another file with `--config
+<file>`, or set the environment variable (`http.port` is
+`OMNISTREAM_HTTP_PORT`); the keys are in
+[ADR 0022](docs/decisions/0022-configuration-from-properties-and-environment.md):
+
+```properties
+http.port=9090
+library.path=/home/me/Media
+```
+
+With arguments, the same jar runs one command instead of the server:
+
+```bash
+java -jar bootstrap/target/omnistream.jar help
+java -jar bootstrap/target/omnistream.jar ingest ~/Music/song.mp3
+java -jar bootstrap/target/omnistream.jar status
+```
+
+FFmpeg and ExifTool are optional: without them files still enter the
+catalog and play when the browser can play them, but have no extracted
+metadata and are not transcoded. The `server` profile (`profile=server`) keeps
+the catalog in PostgreSQL instead of SQLite and needs `database.url`, plus
+`OMNISTREAM_DATABASE_USER` and `OMNISTREAM_DATABASE_PASSWORD` in the environment.
+
+To try the web UI with sample data and nothing installed, run the in-memory
+demo instead; its users are `admin`, `ana` and `luis`, with the username as
+password:
 
 ```bash
 ./mvnw -pl presentation -am test -Ddemo=true -Dtest=DemoServer -Dsurefire.failIfNoSpecifiedTests=false
 ```
-
-The design behind the code is in the
-[software diagrams](docs/architecture/software/) and the
-[ADRs](docs/decisions/); the rules for writing it are in the
-[coding conventions](docs/reference/coding-conventions.md).
 
 ## Getting started
 

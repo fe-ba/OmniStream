@@ -5,6 +5,7 @@ import co.omnistream.domain.model.catalog.Fingerprint;
 import co.omnistream.domain.model.catalog.ItemId;
 import co.omnistream.domain.port.dto.SearchCriteria;
 import co.omnistream.domain.port.out.ICatalogRepository;
+import co.omnistream.domain.snapshot.CatalogSnapshot;
 import co.omnistream.domain.snapshot.MediaFileSnapshot;
 import java.time.Clock;
 import java.time.Duration;
@@ -20,6 +21,10 @@ import java.util.Optional;
  * <p>Reading the whole catalog on every search is expensive; the catalog changes seldom and, when
  * it does, it is saved through this same decorator, which drops the cached copy. The time to live
  * is the second safeguard, for a change made by another process.
+ *
+ * <p>The cache keeps a snapshot, and every read rebuilds a catalog of its own from it. The
+ * aggregate is mutable: if two requests shared one, a change that fails before it is saved would
+ * stay in the cache, and two requests at once would change the same object.
  */
 public final class CachedCatalogRepository implements ICatalogRepository {
 
@@ -27,7 +32,7 @@ public final class CachedCatalogRepository implements ICatalogRepository {
   private final Duration ttl;
   private final Clock clock;
 
-  private CatalogIndex cached;
+  private CatalogSnapshot cached;
   private Instant loadedAt;
 
   public CachedCatalogRepository(ICatalogRepository delegate, Duration ttl, Clock clock) {
@@ -39,13 +44,14 @@ public final class CachedCatalogRepository implements ICatalogRepository {
     }
   }
 
+  /** A catalog of the caller's own, rebuilt from the cached snapshot. */
   @Override
   public synchronized CatalogIndex getCatalog() {
     if (cached == null || !fresh()) {
-      cached = delegate.getCatalog();
+      cached = delegate.getCatalog().toSnapshot();
       loadedAt = clock.instant();
     }
-    return cached;
+    return CatalogIndex.fromSnapshot(cached);
   }
 
   @Override

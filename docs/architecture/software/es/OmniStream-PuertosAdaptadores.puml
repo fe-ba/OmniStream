@@ -452,6 +452,8 @@ package "Puertos de salida (dominio)" #F3E5F5 {
  ServicioAcceso ..> IRepositorioTokens : guarda / valida tokens
  ServicioAcceso ..> IRepositorioEnlaces : guarda / busca enlaces
  ServicioAcceso ..> IUnidadDeTrabajo : delimita transaccion
+ ServicioCatalogo ..> IUnidadDeTrabajo : delimita transaccion
+ ServicioBusqueda ..> IUnidadDeTrabajo : delimita transaccion
 ServicioAcceso ..> IRepositorioCatalogo : lee colecciones para el acceso heredado
  ServicioSincronizacion ..> IRegistroCambios : lee cambios
  ServicioSincronizacion ..> IRepositorioCatalogo : arma paquetes
@@ -741,15 +743,16 @@ package "Composicion (arranque)" #FFFDE7 {
      + {abstract} crearRespaldoDatos() : IRespaldoDatos
      + {abstract} crearRepositorioConfiguracion() : IRepositorioConfiguracion
      + {abstract} crearRepositorioTokens() : IRepositorioTokens
-     + {abstract} crearAlmacenamiento() : IAlmacenamientoArchivos
+     + {abstract} crearAlmacenamientoArchivos() : IAlmacenamientoArchivos
      + {abstract} crearProveedoresIdentidad() : List<IProveedorIdentidad>
      + {abstract} crearRegistroCredenciales() : IRegistroCredenciales
      + {abstract} crearExtractorMetadatos() : IExtractorMetadatos
      + {abstract} crearTranscodificador() : ITranscodificador
      + {abstract} crearBusEventos() : IBusEventos
+     + cerrar() : void
    }
-   class FabricaLocal <<concrete factory>>
-   class FabricaServidor <<concrete factory>>
+   class FabricaInfraestructuraLocal <<concrete factory>>
+   class FabricaInfraestructuraServidor <<concrete factory>>
    class ComposicionRaiz <<composition root>> {
      - cfg : ConfiguracionApp
      - fabrica : FabricaInfraestructura
@@ -758,7 +761,8 @@ package "Composicion (arranque)" #FFFDE7 {
      + ejecutarComando(args : List<String>) : int
      + puerto() : int
      - seleccionarFabrica(cfg : ConfiguracionApp) : FabricaInfraestructura
-     - decorarPuertos() : void
+     - conCache(repositorio : IRepositorioCatalogo) : IRepositorioCatalogo
+     - conCache(transcodificador : ITranscodificador) : ITranscodificador
      - construirCadenaIngesta() : PasoIngesta
      - crearServidorHttp() : Javalin
      - crearPlanificador(sistema : UsuarioId) : AdaptadorProgramador
@@ -769,13 +773,15 @@ package "Composicion (arranque)" #FFFDE7 {
    class Principal <<entry point>> {
      + {static} main(args : String[]) : void
    }
-   FabricaInfraestructura <|-- FabricaLocal
-   FabricaInfraestructura <|-- FabricaServidor
+   FabricaInfraestructura <|-- FabricaInfraestructuraLocal
+   FabricaInfraestructura <|-- FabricaInfraestructuraServidor
    ComposicionRaiz --> ConfiguracionApp
    CargadorConfiguracion ..> ConfiguracionApp : lee de omnistream.properties y del entorno
    ComposicionRaiz --> FabricaInfraestructura : selecciona segun perfil
    ComposicionRaiz ..> ISuscriptorEventos : registra observadores
    ComposicionRaiz ..> ObservadorSincronizacion : crea y suscribe
+   ComposicionRaiz ..> RepositorioCatalogoConCache : envuelve (cache.enabled)
+   ComposicionRaiz ..> TranscodificadorConCache : envuelve (cache.enabled)
    Principal ..> CargadorConfiguracion : lee la configuracion
    Principal ..> ComposicionRaiz : sirve o ejecuta un comando
    note top of ComposicionRaiz
@@ -785,25 +791,25 @@ package "Composicion (arranque)" #FFFDE7 {
      cuenta del sistema (la de la CLI y las tareas) y,
      si nadie puede administrar, crea "admin" con una
      clave aleatoria que muestra una sola vez en
-     consola (ADR 0029). decorarPuertos (cache) llega
-     con los adaptadores de infraestructura.
+     consola (ADR 0029). Con cache.enabled, conCache
+     envuelve el catalogo y el transcodificador (ADR 0009).
    end note
 
-   FabricaLocal ..> AdaptadorPersistenciaSQLite : crea
-   FabricaLocal ..> AdaptadorArchivosLocal : crea
-   FabricaLocal ..> AdaptadorIdentidadLocal : crea
-   FabricaLocal ..> AdaptadorMetadatos : crea
-   FabricaLocal ..> AdaptadorTranscodificacion : crea
-   FabricaLocal ..> AdaptadorTokensEnMemoria : crea
-   FabricaLocal ..> AdaptadorBusEventos : crea
-   FabricaServidor ..> AdaptadorPersistenciaPostgreSQL : crea
-   FabricaServidor ..> AdaptadorArchivosRed : crea
-   FabricaServidor ..> AdaptadorIdentidadLocal : crea
-   FabricaServidor ..> AdaptadorIdentidadOIDC : crea
-   FabricaServidor ..> AdaptadorMetadatos : crea
-   FabricaServidor ..> AdaptadorTranscodificacion : crea
-   FabricaServidor ..> AdaptadorTokensEnMemoria : crea
-   FabricaServidor ..> AdaptadorBusEventos : crea
+   FabricaInfraestructuraLocal ..> AdaptadorPersistenciaSQLite : crea
+   FabricaInfraestructuraLocal ..> AdaptadorArchivosLocal : crea
+   FabricaInfraestructuraLocal ..> AdaptadorIdentidadLocal : crea
+   FabricaInfraestructuraLocal ..> AdaptadorMetadatos : crea
+   FabricaInfraestructuraLocal ..> AdaptadorTranscodificacion : crea
+   FabricaInfraestructuraLocal ..> AdaptadorTokensEnMemoria : crea
+   FabricaInfraestructuraLocal ..> AdaptadorBusEventos : crea
+   FabricaInfraestructuraServidor ..> AdaptadorPersistenciaPostgreSQL : crea
+   FabricaInfraestructuraServidor ..> AdaptadorArchivosRed : crea
+   FabricaInfraestructuraServidor ..> AdaptadorIdentidadLocal : crea
+   FabricaInfraestructuraServidor ..> AdaptadorIdentidadOIDC : crea
+   FabricaInfraestructuraServidor ..> AdaptadorMetadatos : crea
+   FabricaInfraestructuraServidor ..> AdaptadorTranscodificacion : crea
+   FabricaInfraestructuraServidor ..> AdaptadorTokensEnMemoria : crea
+   FabricaInfraestructuraServidor ..> AdaptadorBusEventos : crea
  }
 
 ' ============================================================
@@ -885,7 +891,7 @@ package "Composicion (arranque)" #FFFDE7 {
    atributos, no metodos estaticos.
  end note
 
- note bottom of FabricaServidor
+ note bottom of FabricaInfraestructuraServidor
    En la version 1.0 solo cambia la base de datos
    (PostgreSQL): usa AdaptadorArchivosLocal y la
    identidad local hasta que existan los adaptadores

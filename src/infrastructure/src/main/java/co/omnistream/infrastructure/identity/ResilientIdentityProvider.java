@@ -11,7 +11,7 @@ import java.util.Optional;
 
 /**
  * Decorator of an identity provider that stops calling it when it keeps failing (Circuit Breaker,
- * ADR 0020, version 2.0).
+ * ADR 0009, version 2.0).
  *
  * <p>An external OIDC provider that is down would otherwise make every login wait for its timeout.
  * After {@code threshold} failures the circuit opens and the provider is skipped, so the next

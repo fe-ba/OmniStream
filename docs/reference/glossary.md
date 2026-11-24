@@ -130,7 +130,7 @@ below.
 | `IdentidadVinculada` | `LinkedIdentity` | Domain model |
 | `MapeadorIdentidad` | `LinkedIdentityMapper` | Ports and adapters |
 | `CredencialesLocales` | `LocalCredentials` | Services |
-| `FabricaLocal` | `LocalFactory` | Ports and adapters |
+| `FabricaInfraestructuraLocal` | `LocalInfrastructureFactory` | Ports and adapters |
 | `AdaptadorArchivosLocal` | `LocalFileStorageAdapter` | Ports and adapters |
 | `AdaptadorIdentidadLocal` | `LocalIdentityAdapter` | Ports and adapters |
 | `ArchivoMultimedia` | `MediaFile` | Domain model |
@@ -153,7 +153,7 @@ below.
 | `ServicioReproduccion` | `PlaybackService` | Services |
 | `SesionReproduccion` | `PlaybackSession` | Domain model |
 | `InstantaneaSesion` | `PlaybackSessionSnapshot` | Domain model |
-| `AdaptadorPersistenciaPostgreSQL` | `PostgreSqlPersistenceAdapter` | Ports and adapters |
+| `AdaptadorPersistenciaPostgreSQL` | `PostgresPersistenceAdapter` | Ports and adapters |
 | `TareaReindexar` | `ReindexTask` | Ports and adapters |
 | `ProveedorIdentidadResiliente` | `ResilientIdentityProvider` | Ports and adapters |
 | `RecursoNoEncontrado` | `ResourceNotFound` | Domain model |
@@ -164,7 +164,7 @@ below.
 | `AdaptadorProgramador` | `SchedulerAdapter` | Ports and adapters |
 | `CriterioBusqueda` | `SearchCriteria` | Services |
 | `ServicioBusqueda` | `SearchService` | Services |
-| `FabricaServidor` | `ServerFactory` | Ports and adapters |
+| `FabricaInfraestructuraServidor` | `ServerInfrastructureFactory` | Ports and adapters |
 | `EstadoServidor` | `ServerStatus` | Services |
 | `SesionId` | `SessionId` | Domain model |
 | `MapeadorSesion` | `SessionMapper` | Ports and adapters |

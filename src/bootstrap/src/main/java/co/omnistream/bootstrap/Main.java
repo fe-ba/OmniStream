@@ -56,18 +56,37 @@ public final class Main {
     CompositionRoot root;
     try {
       root = compose.apply(config);
-    } catch (IllegalStateException e) {
-      errors.println("omnistream: " + e.getMessage());
+    } catch (RuntimeException e) {
+      // The database cannot be opened, the server profile has no database URL...
+      errors.println("omnistream: " + reason(e));
       return CliAdapter.FAILED;
     }
     if (command.isEmpty()) {
-      root.start();
-      Runtime.getRuntime().addShutdownHook(new Thread(root::stop, "omnistream-shutdown"));
+      try {
+        root.start();
+      } catch (RuntimeException e) {
+        // The port is taken, for example
+        errors.println("omnistream: the server could not start: " + reason(e));
+        root.close();
+        return CliAdapter.FAILED;
+      }
+      // Ctrl+C or a stop of the service: stop serving and close the database
+      Runtime.getRuntime().addShutdownHook(new Thread(root::close, "omnistream-shutdown"));
       return SERVING;
     }
     try (root) {
       return root.runCommand(command);
     }
+  }
+
+  /** What went wrong, in one line: the message, or the cause's if it has none. */
+  static String reason(Throwable e) {
+    for (Throwable t = e; t != null; t = t.getCause()) {
+      if (t.getMessage() != null && !t.getMessage().isBlank()) {
+        return t.getMessage();
+      }
+    }
+    return e.getClass().getSimpleName();
   }
 
   /** The arguments without {@code --config <file>} or {@code --config=<file>}. */

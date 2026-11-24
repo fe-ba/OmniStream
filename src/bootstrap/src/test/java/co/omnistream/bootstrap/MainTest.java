@@ -79,6 +79,29 @@ class MainTest {
   }
 
   @Test
+  void aFailureToBuildTheApplicationIsReportedInOneLine() {
+    int code =
+        Main.run(
+            List.of("help"),
+            new ConfigurationLoader(Map.of(), home),
+            config -> {
+              throw new IllegalArgumentException(
+                  "wrapper", new RuntimeException("The database is locked"));
+            },
+            new PrintStream(errors, true, StandardCharsets.UTF_8));
+
+    assertThat(code).isEqualTo(CliAdapter.FAILED);
+    assertThat(errors()).isEqualTo("omnistream: wrapper" + System.lineSeparator());
+  }
+
+  @Test
+  void theReasonIsTheFirstMessageInTheChain() {
+    assertThat(Main.reason(new RuntimeException(null, new IllegalStateException("port taken"))))
+        .isEqualTo("port taken");
+    assertThat(Main.reason(new NullPointerException())).isEqualTo("NullPointerException");
+  }
+
+  @Test
   void aWrongConfigurationIsAUsageError() {
     assertThat(run("--config", home.resolve("missing.properties").toString()))
         .isEqualTo(CliAdapter.USAGE);

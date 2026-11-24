@@ -452,6 +452,8 @@ package "Driven ports (domain)" #F3E5F5 {
  AccessService ..> ITokenRepository : saves / validates tokens
  AccessService ..> ISharedLinkRepository : saves / finds links
  AccessService ..> IUnitOfWork : wraps transaction
+ CatalogService ..> IUnitOfWork : wraps transaction
+ SearchService ..> IUnitOfWork : wraps transaction
 AccessService ..> ICatalogRepository : reads collections for inherited access
  SyncService ..> IChangeLog : reads changes
  SyncService ..> ICatalogRepository : builds packages
@@ -500,7 +502,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
      # connection() : Connection
      # dumpDatabase(destination : Path) : Path
    }
-   class PostgreSqlPersistenceAdapter <<secondary adapter>> {
+   class PostgresPersistenceAdapter <<secondary adapter>> {
      - url : URI
      - pool : DataSource
      # connection() : Connection
@@ -664,7 +666,7 @@ package "Secondary adapters (infrastructure)" #FCE4D6 {
    }
 
    JdbcPersistenceAdapter <|-- SqlitePersistenceAdapter
-   JdbcPersistenceAdapter <|-- PostgreSqlPersistenceAdapter
+   JdbcPersistenceAdapter <|-- PostgresPersistenceAdapter
  }
 
  ICatalogRepository <|.. JdbcPersistenceAdapter
@@ -741,15 +743,16 @@ package "Composition (bootstrap)" #FFFDE7 {
      + {abstract} createDataBackup() : IDataBackup
      + {abstract} createConfigurationRepository() : IConfigurationRepository
      + {abstract} createTokenRepository() : ITokenRepository
-     + {abstract} createStorage() : IFileStorage
+     + {abstract} createFileStorage() : IFileStorage
      + {abstract} createIdentityProviders() : List<IIdentityProvider>
      + {abstract} createCredentialRegistry() : ICredentialRegistry
      + {abstract} createMetadataExtractor() : IMetadataExtractor
      + {abstract} createTranscoder() : ITranscoder
      + {abstract} createEventBus() : IEventBus
+     + close() : void
    }
-   class LocalFactory <<concrete factory>>
-   class ServerFactory <<concrete factory>>
+   class LocalInfrastructureFactory <<concrete factory>>
+   class ServerInfrastructureFactory <<concrete factory>>
    class CompositionRoot <<composition root>> {
      - config : AppConfiguration
      - factory : InfrastructureFactory
@@ -758,7 +761,8 @@ package "Composition (bootstrap)" #FFFDE7 {
      + runCommand(args : List<String>) : int
      + port() : int
      - selectFactory(config : AppConfiguration) : InfrastructureFactory
-     - decoratePorts() : void
+     - cached(repository : ICatalogRepository) : ICatalogRepository
+     - cached(transcoder : ITranscoder) : ITranscoder
      - buildIngestionChain() : IngestionStep
      - createHttpServer() : Javalin
      - createScheduler(system : UserId) : SchedulerAdapter
@@ -769,13 +773,15 @@ package "Composition (bootstrap)" #FFFDE7 {
    class Main <<entry point>> {
      + {static} main(args : String[]) : void
    }
-   InfrastructureFactory <|-- LocalFactory
-   InfrastructureFactory <|-- ServerFactory
+   InfrastructureFactory <|-- LocalInfrastructureFactory
+   InfrastructureFactory <|-- ServerInfrastructureFactory
    CompositionRoot --> AppConfiguration
    ConfigurationLoader ..> AppConfiguration : reads from omnistream.properties and the environment
    CompositionRoot --> InfrastructureFactory : selects by profile
    CompositionRoot ..> IEventSubscriber : registers observers
    CompositionRoot ..> SyncObserver : creates and subscribes
+   CompositionRoot ..> CachedCatalogRepository : wraps (cache.enabled)
+   CompositionRoot ..> CachedTranscoder : wraps (cache.enabled)
    Main ..> ConfigurationLoader : reads the configuration
    Main ..> CompositionRoot : serves or runs a command
    note top of CompositionRoot
@@ -785,25 +791,25 @@ package "Composition (bootstrap)" #FFFDE7 {
      system account (used by the CLI and the tasks) and,
      if nobody can administer, creates "admin" with a
      random password shown only once on the
-     console (ADR 0029). decoratePorts (cache) comes
-     with the infrastructure adapters.
+     console (ADR 0029). With cache.enabled, cached wraps
+     the catalog and the transcoder (ADR 0009).
    end note
 
-   LocalFactory ..> SqlitePersistenceAdapter : creates
-   LocalFactory ..> LocalFileStorageAdapter : creates
-   LocalFactory ..> LocalIdentityAdapter : creates
-   LocalFactory ..> MetadataAdapter : creates
-   LocalFactory ..> TranscodingAdapter : creates
-   LocalFactory ..> InMemoryTokenAdapter : creates
-   LocalFactory ..> EventBusAdapter : creates
-   ServerFactory ..> PostgreSqlPersistenceAdapter : creates
-   ServerFactory ..> NetworkFileStorageAdapter : creates
-   ServerFactory ..> LocalIdentityAdapter : creates
-   ServerFactory ..> OidcIdentityAdapter : creates
-   ServerFactory ..> MetadataAdapter : creates
-   ServerFactory ..> TranscodingAdapter : creates
-   ServerFactory ..> InMemoryTokenAdapter : creates
-   ServerFactory ..> EventBusAdapter : creates
+   LocalInfrastructureFactory ..> SqlitePersistenceAdapter : creates
+   LocalInfrastructureFactory ..> LocalFileStorageAdapter : creates
+   LocalInfrastructureFactory ..> LocalIdentityAdapter : creates
+   LocalInfrastructureFactory ..> MetadataAdapter : creates
+   LocalInfrastructureFactory ..> TranscodingAdapter : creates
+   LocalInfrastructureFactory ..> InMemoryTokenAdapter : creates
+   LocalInfrastructureFactory ..> EventBusAdapter : creates
+   ServerInfrastructureFactory ..> PostgresPersistenceAdapter : creates
+   ServerInfrastructureFactory ..> NetworkFileStorageAdapter : creates
+   ServerInfrastructureFactory ..> LocalIdentityAdapter : creates
+   ServerInfrastructureFactory ..> OidcIdentityAdapter : creates
+   ServerInfrastructureFactory ..> MetadataAdapter : creates
+   ServerInfrastructureFactory ..> TranscodingAdapter : creates
+   ServerInfrastructureFactory ..> InMemoryTokenAdapter : creates
+   ServerInfrastructureFactory ..> EventBusAdapter : creates
  }
 
 ' ============================================================
@@ -885,7 +891,7 @@ package "Composition (bootstrap)" #FFFDE7 {
    attributes, not static methods.
  end note
 
- note bottom of ServerFactory
+ note bottom of ServerInfrastructureFactory
    In version 1.0 only the database changes
    (PostgreSQL): it uses LocalFileStorageAdapter and
    local identity until the network and OIDC

@@ -281,6 +281,8 @@ SvAccess ..> POUT_CRED
 SvAccess ..> POUT_TOK
 SvAccess ..> POUT_LINK
 SvAccess ..> POUT_UOW
+SvCatalog ..> POUT_UOW
+SvSearch ..> POUT_UOW
 SvAccess ..> POUT_REPO
 SvSync ..> POUT_CHANGES
 SvSync ..> POUT_REPO

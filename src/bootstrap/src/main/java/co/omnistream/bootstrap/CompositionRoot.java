@@ -25,6 +25,7 @@ import co.omnistream.domain.port.out.ICatalogRepository;
 import co.omnistream.domain.port.out.ICredentialRegistry;
 import co.omnistream.domain.port.out.IEventBus;
 import co.omnistream.domain.port.out.IFileStorage;
+import co.omnistream.domain.port.out.ITranscoder;
 import co.omnistream.domain.port.out.IUnitOfWork;
 import co.omnistream.domain.port.out.IUserRepository;
 import co.omnistream.domain.service.AccessService;
@@ -51,6 +52,8 @@ import co.omnistream.domain.service.ingestion.IndexingStep;
 import co.omnistream.domain.service.ingestion.IngestionStep;
 import co.omnistream.domain.service.stream.DirectStream;
 import co.omnistream.domain.service.stream.TranscodedStream;
+import co.omnistream.infrastructure.media.CachedTranscoder;
+import co.omnistream.infrastructure.persistence.CachedCatalogRepository;
 import co.omnistream.presentation.cli.CliAdapter;
 import co.omnistream.presentation.rest.RestApiAdapter;
 import co.omnistream.presentation.rest.TextEditingRelay;
@@ -77,9 +80,10 @@ import org.slf4j.LoggerFactory;
  * an adapter.
  *
  * <p>The order follows the dependencies: the adapters of the driven ports come from the factory of
- * the profile; the domain services receive them; the audit decorators wrap the services (ADR 0025);
- * the primary adapters receive the decorated ports. {@link #start()} then serves HTTP and runs the
- * scheduled tasks; {@link #runCommand} runs one command of the command line instead.
+ * the profile, wrapped in their caches when {@code cache.enabled} is on (ADR 0009); the domain
+ * services receive them; the audit decorators wrap the services (ADR 0025); the primary adapters
+ * receive the decorated ports. {@link #start()} then serves HTTP and runs the scheduled tasks;
+ * {@link #runCommand} runs one command of the command line instead.
  *
  * <p>Both make sure that two accounts exist: the system account, which the command line and the
  * scheduler act as, and a first administrator, so that someone can log in the first time (ADR
@@ -92,6 +96,15 @@ public final class CompositionRoot implements AutoCloseable {
 
   /** How many pending events one run of the sync task publishes at most. */
   static final int SYNC_BATCH = 100;
+
+  /**
+   * How long the catalog is read from memory: at most this late, the server sees a change another
+   * process made, such as the command line. Its own changes drop the cache at once.
+   */
+  static final Duration CATALOG_CACHE_TTL = Duration.ofSeconds(30);
+
+  /** Disk space for transcoded media; the least recently used files go first. */
+  static final long TRANSCODE_CACHE_BYTES = 2L * 1024 * 1024 * 1024;
 
   static final Duration REINDEX_EVERY = Duration.ofDays(1);
   static final Duration BACKUP_EVERY = Duration.ofDays(1);
@@ -169,7 +182,7 @@ public final class CompositionRoot implements AutoCloseable {
     credentialRegistry = factory.createCredentialRegistry();
     unitOfWork = factory.createUnitOfWork();
     eventBus = factory.createEventBus();
-    ICatalogRepository catalogRepository = factory.createCatalogRepository();
+    ICatalogRepository catalogRepository = cached(factory.createCatalogRepository());
     IFileStorage storage = factory.createFileStorage();
     IAuditLog auditLog = factory.createAuditLog();
     var changeLog = factory.createChangeLog();
@@ -212,7 +225,9 @@ public final class CompositionRoot implements AutoCloseable {
             clock,
             sessionRepository,
             catalogRepository,
-            List.of(new DirectStream(storage), new TranscodedStream(factory.createTranscoder())));
+            List.of(
+                new DirectStream(storage),
+                new TranscodedStream(cached(factory.createTranscoder()))));
     ISearch searchService =
         new SearchService(userRepository, accessPolicy, clock, catalogRepository, unitOfWork);
     ISync syncService =
@@ -255,6 +270,25 @@ public final class CompositionRoot implements AutoCloseable {
       case AppConfiguration.SERVER -> new ServerInfrastructureFactory(config, clock);
       default -> throw new IllegalArgumentException("Unknown profile: " + config.profile());
     };
+  }
+
+  /** The catalog repository, kept in memory if the configuration says so (Decorator, ADR 0009). */
+  private ICatalogRepository cached(ICatalogRepository repository) {
+    return config.cacheEnabled()
+        ? new CachedCatalogRepository(repository, CATALOG_CACHE_TTL, clock)
+        : repository;
+  }
+
+  /** The transcoder, keeping what it converts on disk if the configuration says so (ADR 0009). */
+  private ITranscoder cached(ITranscoder transcoder) {
+    return config.cacheEnabled()
+        ? new CachedTranscoder(transcoder, transcodeCacheFolder(), TRANSCODE_CACHE_BYTES)
+        : transcoder;
+  }
+
+  /** Next to the database: {@code ~/.omnistream/transcoded} with the default configuration. */
+  private Path transcodeCacheFolder() {
+    return config.databasePath().toAbsolutePath().resolveSibling("transcoded");
   }
 
   /**
